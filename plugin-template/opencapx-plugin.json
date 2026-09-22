@@ -1,0 +1,146 @@
+{
+  "id": "com.example.my-plugin",
+  "name": "My Plugin",
+  "description": "OpenCapX plugin template: change the id to your reverse-DNS domain, and implement your capability logic in bin/plugin.py.",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "type": "capability",
+  "runtime": {
+    "type": "process",
+    "command": "python3",
+    "args": [
+      "bin/plugin.py"
+    ]
+  },
+  "capabilities": [
+    "image.analyze"
+  ],
+  "permissions": [
+    "image.read"
+  ],
+  "settings": [
+    {
+      "key": "response_prefix",
+      "type": "text",
+      "label": {
+        "en": "Response prefix",
+        "zh-Hans": "响应前缀",
+        "vi": "Tiền tố phản hồi"
+      },
+      "description": {
+        "en": "Prepended to the capability result's description.",
+        "zh-Hans": "加在能力结果 description 前的前缀。",
+        "vi": "Thêm vào trước description của kết quả."
+      },
+      "default": "template",
+      "validate": [
+        {
+          "type": "required",
+          "message": {
+            "en": "Response prefix is required",
+            "zh-Hans": "响应前缀必填",
+            "vi": "Không được để trống tiền tố"
+          }
+        },
+        {
+          "type": "maxLength",
+          "value": 40,
+          "message": {
+            "en": "Response prefix must be at most 40 characters",
+            "zh-Hans": "响应前缀最多 40 个字符",
+            "vi": "Tiền tố tối đa 40 ký tự"
+          }
+        }
+      ],
+      "order": 1
+    },
+    {
+      "key": "detail_level",
+      "type": "dropdown",
+      "label": {
+        "en": "Detail level",
+        "zh-Hans": "详细程度",
+        "vi": "Mức chi tiết"
+      },
+      "description": {
+        "en": "brief keeps the result minimal; detailed fills in text.",
+        "zh-Hans": "brief 保持结果最小;detailed 会填充 text。",
+        "vi": "brief giữ kết quả tối giản; detailed điền vào text."
+      },
+      "options": [
+        {
+          "value": "brief",
+          "label": {
+            "en": "Brief (minimal result)",
+            "zh-Hans": "简短(结果最小)",
+            "vi": "Ngắn (tối giản)"
+          }
+        },
+        {
+          "value": "detailed",
+          "label": {
+            "en": "Detailed (fills text)",
+            "zh-Hans": "详细(填充文本)",
+            "vi": "Chi tiết (điền text)"
+          }
+        }
+      ],
+      "default": "brief",
+      "order": 2
+    },
+    {
+      "key": "include_notice",
+      "type": "toggle",
+      "label": {
+        "en": "Include notice",
+        "zh-Hans": "附加说明",
+        "vi": "Kèm ghi chú"
+      },
+      "default": true,
+      "order": 3
+    },
+    {
+      "key": "notice",
+      "type": "text",
+      "label": {
+        "en": "Notice",
+        "zh-Hans": "说明文案",
+        "vi": "Nội dung ghi chú"
+      },
+      "description": {
+        "en": "Appended to the result while 'Include notice' is on.",
+        "zh-Hans": "「附加说明」打开时追加到结果。",
+        "vi": "Được thêm vào kết quả khi 'Kèm ghi chú' bật."
+      },
+      "aliases": [
+        "note",
+        "说明",
+        "ghi chú"
+      ],
+      "visible": {
+        "op": "equals",
+        "key": "include_notice",
+        "value": true
+      },
+      "default": "Processed by OpenCapX plugin template",
+      "order": 4
+    },
+    {
+      "key": "api_token",
+      "type": "secret",
+      "label": {
+        "en": "API token",
+        "zh-Hans": "API 令牌",
+        "vi": "Mã API"
+      },
+      "description": {
+        "en": "Read at runtime via config_get(\"secret:api_token\"); never echoed back.",
+        "zh-Hans": "运行时用 config_get(\"secret:api_token\") 读;永不回显。",
+        "vi": "Đọc lúc chạy bằng config_get(\"secret:api_token\"); không bao giờ hiển thị lại."
+      },
+      "order": 10
+    }
+  ],
+  "author": "your-name",
+  "license": "MIT"
+}

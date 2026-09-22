@@ -1,0 +1,33 @@
+# Git hooks via lefthook — installed by `pnpm install` (the prepare script runs `lefthook install`).
+#
+# The commands mirror the verification gate in CONTRIBUTING.md, scoped to what you staged:
+# Rust changes get clippy + the bin test suite, TypeScript changes get tsc, catalog changes get
+# i18n:check. pre-push runs the full five-set gate, serial end-to-end tests included.
+#
+# One-commit bypass: `git commit --no-verify` / `git push --no-verify`. Use sparingly.
+# rustfmt is deliberately not here: the tree predates it; a dedicated formatting pass will add it.
+
+pre-commit:
+  commands:
+    rust:
+      glob: "*.rs"
+      run: |
+        cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets &&
+        cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx
+    typescript:
+      glob: "*.{ts,tsx}"
+      run: npx tsc --noEmit
+    i18n:
+      glob: "*.{ts,tsx,json}"
+      run: pnpm run i18n:check
+
+pre-push:
+  commands:
+    gate:
+      run: |
+        (cd src-tauri && cargo test --bin opencapx && cargo clippy --all-targets) &&
+        npx tsc --noEmit &&
+        pnpm run i18n:check &&
+        (cd packages/ts-sdk && npm test) &&
+        PYTHONPATH=packages/plugin-sdk python3 -m pytest packages/plugin-sdk/tests plugins/*/tests -q &&
+        (cd src-tauri && cargo test --bin opencapx install_grant_execute -- --ignored --test-threads=1)

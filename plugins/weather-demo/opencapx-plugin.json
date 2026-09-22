@@ -1,0 +1,69 @@
+{
+  "id": "com.example.weather-demo",
+  "name": "Weather Demo",
+  "description": "Third-party demo for docs/permission-domains.md: declares its own weather.* domain (capabilities + permissions) instead of riding a built-in one. Offline — synthesizes conditions from a local store, no network.",
+  "version": "0.1.1",
+  "apiVersion": "1",
+  "type": "capability",
+  "runtime": {
+    "type": "process",
+    "command": "python3",
+    "args": [
+      "bin/weather_demo.py"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "weather.current",
+      "permission": "weather.read",
+      "default": "ask"
+    },
+    {
+      "id": "weather.set_home",
+      "permission": "weather.write",
+      "default": "denied"
+    }
+  ],
+  "permissions": [
+    "weather.read",
+    "weather.write"
+  ],
+  "sandbox": {
+    "network": "none",
+    "fs": {
+      "write": [
+        "plugin-data"
+      ]
+    }
+  },
+  "settings": [
+    {
+      "key": "home_city",
+      "type": "dropdown",
+      "label": {
+        "en": "Home city",
+        "zh-Hans": "默认城市",
+        "vi": "Thành phố mặc định"
+      },
+      "description": {
+        "en": "City used by weather.current when no explicit city is given.",
+        "zh-Hans": "weather.current 未指定城市时使用的默认城市。",
+        "vi": "Thành phố được weather.current dùng khi không chỉ định thành phố."
+      },
+      "aliases": [
+        "city",
+        "home",
+        "默认城市",
+        "thành phố"
+      ],
+      "default": "Beijing",
+      "options": [
+        "Beijing",
+        "Shanghai",
+        "Shenzhen"
+      ]
+    }
+  ],
+  "author": "OpenCapX",
+  "license": "MIT"
+}

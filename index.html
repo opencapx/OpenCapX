@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>OpenCapX</title>
+    <link rel="stylesheet" href="/src/overlay.css" />
+    <link rel="stylesheet" href="/src/bubble-themes.css" />
+    <style>
+      html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+      #pet, #pet3d { position: absolute; }
+      #pet3d { display: none; }
+      body.is3d #pet { display: none; }
+      body.is3d #pet3d { display: block; }
+    </style>
+  </head>
+  <body data-bpos="right">
+    <canvas id="pet" width="120" height="120"></canvas>
+    <canvas id="pet3d" width="120" height="120"></canvas>
+    <div id="state-badge"><span id="state-label"></span></div>
+    <div id="bubble"></div>
+    <script type="module" src="/src/overlay.ts"></script>
+  </body>
+</html>

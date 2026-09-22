@@ -1,0 +1,504 @@
+/* Color + shape variables all live in bubble-themes.css (the settings-page preview block shares
+   the same set). This file only consumes them: outline/cut corners/border/facing edge/padding/
+   texture/blur/shadow all come from the theme. */
+#bubble {
+  box-sizing: border-box;
+  overflow: hidden;
+  position: absolute;
+  font-family: var(--bubble-font);
+  font-size: 12px;
+  color: var(--bubble-fg);
+  background-color: var(--bubble-bg);
+  background-image: var(--bubble-bg-image);
+  backdrop-filter: var(--bubble-blur);
+  -webkit-backdrop-filter: var(--bubble-blur);
+  border-width: var(--bubble-border-w);
+  border-style: var(--bubble-border-style);
+  border-color: var(--bubble-border);
+  border-radius: var(--bubble-radius);
+  /* Cut-corner shapes (cyber/pixel/engineer/explorer) */
+  clip-path: var(--bubble-clip);
+  box-shadow: var(--bubble-shadow);
+  /* Clipped shapes would have their shadow clipped away, so use filter (which follows the silhouette) for stroke/glow/offset shadow instead */
+  filter: var(--bubble-filter);
+  padding: var(--bubble-pad-y) var(--bubble-pad-x);
+  user-select: none;
+}
+
+/* Which side of the pet the bubble sits on: the pet frame is pinned to one corner of the
+   window, and the bubble takes the remaining space beside it.
+   The edge facing the pet is thickened into the accent color — that is the "speaking direction"
+   cue, using a border rather than a triangular tail: when stacked vertically the bubble needs to
+   scroll (overflow would clip a tail off). */
+body[data-bpos="right"] #bubble {
+  left: var(--pet-w, 120px);
+  top: 0;
+  min-width: min(140px, calc(100vw - var(--pet-w, 120px) - 8px));
+  max-width: min(320px, calc(100vw - var(--pet-w, 120px) - 8px));
+  max-height: calc(100vh - 8px);
+  border-left: var(--bubble-edge-w) solid var(--bubble-accent);
+}
+
+body[data-bpos="left"] #bubble {
+  right: var(--pet-w, 120px);
+  top: 0;
+  min-width: min(140px, calc(100vw - var(--pet-w, 120px) - 8px));
+  max-width: min(320px, calc(100vw - var(--pet-w, 120px) - 8px));
+  max-height: calc(100vh - 8px);
+  border-right: var(--bubble-edge-w) solid var(--bubble-accent);
+}
+
+body[data-bpos="bottom"] #bubble {
+  left: 0;
+  top: var(--pet-w, 120px);
+  min-width: min(180px, calc(100vw - 8px));
+  max-width: calc(100vw - 8px);
+  /* In the vertical layouts the pet frame eats into the height, so content scrolls when it overflows (max 10 rows) */
+  max-height: calc(100vh - var(--pet-w, 120px) - 8px);
+  overflow-y: auto;
+  border-top: var(--bubble-edge-w) solid var(--bubble-accent);
+}
+
+body[data-bpos="top"] #bubble {
+  left: 0;
+  bottom: var(--pet-w, 120px);
+  min-width: min(180px, calc(100vw - 8px));
+  max-width: calc(100vw - 8px);
+  max-height: calc(100vh - var(--pet-w, 120px) - 8px);
+  overflow-y: auto;
+  border-bottom: var(--bubble-edge-w) solid var(--bubble-accent);
+}
+
+/* The pet canvas moves to a different corner with the position */
+body[data-bpos="right"] #pet,
+body[data-bpos="right"] #pet3d,
+body[data-bpos="bottom"] #pet,
+body[data-bpos="bottom"] #pet3d {
+  left: 0;
+  top: 0;
+}
+
+body[data-bpos="left"] #pet,
+body[data-bpos="left"] #pet3d {
+  right: 0;
+  top: 0;
+}
+
+body[data-bpos="top"] #pet,
+body[data-bpos="top"] #pet3d {
+  left: 0;
+  bottom: 0;
+}
+
+/* The state badge follows the pet (it labels the pet's state) */
+body[data-bpos="left"] #state-badge {
+  left: auto;
+  right: 4px;
+}
+
+body[data-bpos="top"] #state-badge {
+  top: auto;
+  bottom: calc(var(--pet-w, 120px) - 20px);
+}
+
+/* The theme (color + shape) lives in bubble-themes.css. This note stays here so nobody later
+   writes a second copy of the colors in overlay.css — two definitions will always drift. */
+
+#bubble:empty {
+  display: none;
+}
+
+/* A row = a vertical stack: the first line is "who · doing what" (kept to one line with an
+   ellipsis), the second line is the agent's body text, and the choice buttons take another line.
+   That way the main line is never pushed into wrapping by an extra line of content. */
+#bubble .row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 3px 0;
+  min-width: 0;
+}
+
+#bubble .row .line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* Agent body text (what it says) — the second line, one step weaker than "doing what" */
+#bubble .speech {
+  min-width: 0;
+  margin-left: 14px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  opacity: 0.62;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Expanded state: the body text wraps to show in full */
+#bubble .row.expanded .speech {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+#bubble .row + .row {
+  border-top: 1px solid var(--bubble-sep);
+}
+
+/* One-line summary + click to expand: only rows that are actually truncated get .expandable added by the overlay. */
+#bubble .row.expandable {
+  cursor: pointer;
+}
+
+#bubble .row.expanded .line {
+  align-items: flex-start;
+}
+
+#bubble .row.expanded .msg {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+#bubble .row.expanded .dot {
+  margin-top: 4px;
+}
+
+#bubble .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bubble-accent);
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+#bubble .row.working .dot {
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.8);
+}
+
+#bubble .row.waiting {
+  color: var(--bubble-warn-fg);
+}
+
+#bubble .row.waiting .dot {
+  background: #fb923c;
+  box-shadow: 0 0 6px rgba(251, 146, 60, 0.8);
+  animation: bubble-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes bubble-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+#bubble .row.done .dot {
+  background: #60a5fa;
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.9);
+}
+
+/* Wow 4 — completion celebration: the row background becomes a festive gradient, the emoji is bigger, and the hint text is a lightweight cue. */
+#bubble .row.done {
+  background: linear-gradient(
+    90deg,
+    rgba(250, 204, 21, 0.18) 0%,
+    rgba(244, 114, 182, 0.14) 50%,
+    rgba(96, 165, 250, 0.16) 100%
+  );
+  border-radius: var(--bubble-chip-radius);
+  margin: 2px -6px;
+  padding: 3px 6px;
+  animation: celebrate-flash 1.4s ease-out 1;
+}
+
+#bubble .row.done .msg {
+  opacity: 1;
+  font-weight: 600;
+}
+
+#bubble .done-sub {
+  font-size: 10px;
+  opacity: 0.55;
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+@keyframes celebrate-flash {
+  0% {
+    background: rgba(250, 204, 21, 0.45);
+    transform: scale(1.04);
+  }
+  60% {
+    background: rgba(250, 204, 21, 0.22);
+    transform: scale(1);
+  }
+  100% {
+    background: rgba(250, 204, 21, 0);
+    transform: scale(1);
+  }
+}
+
+#bubble .agent {
+  /* Allow shrinking + ellipsis: otherwise a long agent name pushes the whole line out the right side of the bubble */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: var(--bubble-accent);
+}
+
+#bubble .sep {
+  flex: 0 0 auto;
+  opacity: 0.4;
+}
+
+#bubble .msg {
+  /* Flex children default to min-width:auto; without this line the content will not actually shrink */
+  flex: 1 1 auto;
+  min-width: 0;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Model badge: shrinkable + ellipsis; the first to be sacrificed when the bubble gets tight */
+#bubble .model {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 0 6px;
+  border-radius: var(--bubble-chip-radius);
+  background: var(--bubble-chip-bg);
+  border: 1px solid var(--bubble-border);
+  color: var(--bubble-dim);
+}
+
+#bubble .elapsed {
+  opacity: 0.45;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+#bubble .dots {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+#bubble .dot-nav {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--bubble-nav);
+}
+
+#bubble .dot-nav.on {
+  background: var(--bubble-nav-on);
+}
+
+#bubble .choices {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  width: 100%;
+}
+#bubble .choice-btn {
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: var(--bubble-chip-radius);
+  border: 1px solid var(--bubble-border);
+  background: var(--bubble-chip-bg);
+  color: var(--bubble-fg);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+#bubble .choice-btn:hover {
+  background: rgba(0, 102, 255, 0.35);
+  border-color: rgba(0, 102, 255, 0.6);
+}
+#bubble .choice-btn:active {
+  background: rgba(0, 102, 255, 0.55);
+}
+#bubble .choice-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+#bubble .answer-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: var(--bubble-chip-radius);
+  background: rgba(52, 199, 89, 0.25);
+  color: #86efac;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+#bubble .compact {
+  font-weight: 600;
+  text-align: center;
+}
+
+#bubble .group {
+  padding: 2px 0;
+}
+
+/* Group header: project · branch · count. A small one-liner, not collapsible (avoids adding a click interaction). */
+#bubble .group-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  opacity: 0.55;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+#bubble .group-header .group-stat {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.85;
+}
+
+#bubble .group + .group {
+  margin-top: 4px;
+}
+
+/* The short path in detailed density (end of line) — shrinkable, sacrificed before the message */
+#bubble .path {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 38%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  opacity: 0.45;
+}
+
+/* The part cut off by maxRows: one gray line at the bottom, so "a few rows are missing" does not become silent behavior */
+#bubble .more {
+  padding-top: 3px;
+  font-size: 10px;
+  opacity: 0.45;
+  text-align: center;
+}
+
+/* Pet state badge — aligns with i1.md §15 (Core maps agent.* to pet.state, the UI renders the state) */
+#state-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(40, 40, 48, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  user-select: none;
+  pointer-events: none;
+  transition: background-color 240ms ease, border-color 240ms ease, opacity 240ms ease;
+}
+
+#state-badge.visible {
+  display: inline-flex;
+}
+
+#state-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 4px currentColor;
+}
+
+#state-badge.state-idle {
+  background: rgba(80, 80, 90, 0.78);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+#state-badge.state-working {
+  background: rgba(34, 120, 60, 0.78);
+  border-color: rgba(74, 222, 128, 0.45);
+  color: #d6ffe2;
+}
+
+#state-badge.state-waiting {
+  background: rgba(150, 70, 20, 0.78);
+  border-color: rgba(251, 146, 60, 0.5);
+  color: #ffe1c2;
+  animation: state-pulse 1.2s ease-in-out infinite;
+}
+
+#state-badge.state-success {
+  background: rgba(30, 80, 150, 0.78);
+  border-color: rgba(96, 165, 250, 0.5);
+  color: #d3e6ff;
+}
+
+#state-badge.state-error {
+  background: rgba(140, 30, 40, 0.78);
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #ffd6d6;
+}
+
+/* Agent State Protocol (i2 §12): thinking / permission / sleeping */
+#state-badge.state-thinking {
+  background: rgba(90, 50, 140, 0.78);
+  border-color: rgba(167, 139, 250, 0.5);
+  color: #ece4ff;
+}
+
+#state-badge.state-permission {
+  background: rgba(160, 45, 105, 0.78);
+  border-color: rgba(244, 114, 182, 0.55);
+  color: #ffd9ec;
+  animation: state-pulse 1.2s ease-in-out infinite;
+}
+
+#state-badge.state-sleeping {
+  background: rgba(50, 50, 60, 0.7);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: rgba(226, 232, 240, 0.75);
+}
+
+@keyframes state-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}

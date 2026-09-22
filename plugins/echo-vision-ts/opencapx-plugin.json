@@ -1,0 +1,29 @@
+{
+  "id": "com.opencapx.echo-vision-ts",
+  "name": "Echo Vision (TypeScript)",
+  "description": "Example capability plugin in TypeScript via @opencapx/sdk: echoes image.analyze input, with the response prefix read through a real reverse config.get. Also serves as the node fixture for the cargo e2e test.",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "type": "capability",
+  "runtime": {
+    "type": "process",
+    "command": "node",
+    "args": [
+      "bin/plugin.cjs"
+    ]
+  },
+  "capabilities": [
+    "image.analyze"
+  ],
+  "permissions": [
+    "image.read"
+  ],
+  "sandbox": {
+    "network": "none",
+    "fs": {
+      "write": [
+        "plugin-data"
+      ]
+    }
+  }
+}

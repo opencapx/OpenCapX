@@ -1,0 +1,37 @@
+name: validate-registry
+
+on:
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install OpenCapX verify tool
+        run: |
+          # 拆分为独立 registry 仓库后,改用 OpenCapX release 产物;
+          # 当前脚手架阶段按源码构建(ubuntu runner 自带 Rust 工具链)。
+          git clone --depth 1 https://github.com/opencapx/OpenCapX.git /tmp/opencapx
+          cargo build --release --manifest-path /tmp/opencapx/src-tauri/Cargo.toml --bin opencapx
+          echo "/tmp/opencapx/src-tauri/target/release" >> "$GITHUB_PATH"
+      - name: Verify index signature + schema
+        env:
+          OFFICIAL_PUBKEY: ${{ secrets.REGISTRY_OFFICIAL_PUBKEY }}
+        run: |
+          if [ -z "$OFFICIAL_PUBKEY" ]; then
+            echo "缺 REGISTRY_OFFICIAL_PUBKEY secret(官方公钥 hex)"
+            exit 1
+          fi
+          OPENCAPX_REGISTRY_OFFICIAL_KEYS="com.opencapx.official=$OFFICIAL_PUBKEY" \
+            ./scripts/validate-index.sh index.json
+      - name: generatedAt monotonic(防回退)
+        run: |
+          git show "origin/${GITHUB_BASE_REF}:index.json" > /tmp/base-index.json 2>/dev/null || { echo "首次发布,跳过单调性检查"; exit 0; }
+          python3 -c 'import json; n=json.load(open("index.json"))["generatedAt"]; o=json.load(open("/tmp/base-index.json"))["generatedAt"]; assert n>=o, f"generatedAt 回退: {o} -> {n}"; print(f"generatedAt ok: {o} -> {n}")'
+      - name: Entry gate reminder
+        run: |
+          echo "每条新增/更新 entry 的 .ocplugin 必须过: opencapx verify-package <file> --index index.json"
+          echo "攻击样例拒绝矩阵由主仓 cargo test core::verify::tests 持续保证(10 类)。"

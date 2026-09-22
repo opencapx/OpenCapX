@@ -1,0 +1,21 @@
+{
+  "name": "__PKG_NAME__",
+  "version": "0.1.0",
+  "description": "OpenCapX plugin written in TypeScript",
+  "license": "__LICENSE__",
+  "author": "__AUTHOR__",
+  "type": "module",
+  "main": "./dist/src/plugin.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"dist/test/**/*.test.js\"",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@opencapx/sdk": "__SDK_REF__"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

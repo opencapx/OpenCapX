@@ -1,0 +1,108 @@
+{
+  "id": "com.opencapx.things-demo",
+  "name": "Things Demo",
+  "description": "Demo capability plugin: Things3-style todo CRUD (add/update/list/show/search). Works without Things3 installed — defaults to a local JSON store; live mode builds things:/// URLs and reads via JXA.",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "type": "capability",
+  "runtime": {
+    "type": "process",
+    "command": "python3",
+    "args": [
+      "bin/things_demo.py"
+    ]
+  },
+  "capabilities": [
+    "things.add",
+    "things.update",
+    "things.list",
+    "things.show",
+    "things.search",
+    "things.delete"
+  ],
+  "permissions": [
+    "url.scheme.open",
+    "things.read",
+    "things.write"
+  ],
+  "sandbox": {
+    "network": "none",
+    "fs": {
+      "write": [
+        "plugin-data"
+      ]
+    }
+  },
+  "settings": [
+    {
+      "key": "mode",
+      "type": "dropdown",
+      "label": {
+        "en": "Backend mode",
+        "zh-Hans": "后端模式",
+        "vi": "Chế độ backend"
+      },
+      "description": {
+        "en": "demo uses a local JSON store with no setup; live drives Things3 on macOS and mirrors every change to the local store.",
+        "zh-Hans": "demo 使用本地 JSON 存储、零配置;live 在 macOS 上驱动 Things3,并把每次改动镜像回本地存储。",
+        "vi": "demo dùng kho JSON cục bộ, không cần cấu hình; live điều khiển Things3 trên macOS và phản chiếu mọi thay đổi về kho cục bộ."
+      },
+      "aliases": [
+        "backend",
+        "运行模式",
+        "chế độ"
+      ],
+      "default": "demo",
+      "options": [
+        "demo",
+        "live"
+      ]
+    },
+    {
+      "key": "store_path",
+      "type": "path",
+      "label": {
+        "en": "Store path",
+        "zh-Hans": "存储路径",
+        "vi": "Đường dẫn kho"
+      },
+      "description": {
+        "en": "JSON file holding the local todo store. Leave empty to use the built-in plugin-data location.",
+        "zh-Hans": "存放本地待办存储的 JSON 文件。留空则使用内置的 plugin-data 位置。",
+        "vi": "Tệp JSON chứa kho việc cần làm cục bộ. Để trống sẽ dùng vị trí plugin-data mặc định."
+      },
+      "validate": [
+        {
+          "type": "pattern",
+          "regex": "\\.json$",
+          "message": {
+            "en": "Store path must end in .json",
+            "zh-Hans": "存储路径必须以 .json 结尾",
+            "vi": "Đường dẫn kho phải kết thúc bằng .json"
+          }
+        }
+      ]
+    },
+    {
+      "key": "auth_token",
+      "type": "secret",
+      "label": {
+        "en": "Things3 auth token",
+        "zh-Hans": "Things3 授权令牌",
+        "vi": "Mã xác thực Things3"
+      },
+      "description": {
+        "en": "Required by Things3 for things:///update. Without it, live updates are skipped and only the local mirror is updated.",
+        "zh-Hans": "Things3 的 things:///update 需要它。没有它时 live 更新会被跳过,只更新本地镜像。",
+        "vi": "Things3 yêu cầu cho things:///update. Nếu thiếu, bản cập nhật live sẽ bị bỏ qua và chỉ kho cục bộ được cập nhật."
+      },
+      "visible": {
+        "op": "equals",
+        "key": "mode",
+        "value": "live"
+      }
+    }
+  ],
+  "author": "OpenCapX",
+  "license": "MIT"
+}

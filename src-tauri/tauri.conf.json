@@ -1,0 +1,91 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OpenCapX",
+  "version": "0.1.0",
+  "identifier": "com.opencapx.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "pet",
+        "title": "OpenCapX",
+        "url": "index.html",
+        "width": 440,
+        "height": 320,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "focus": false
+      },
+      {
+        "label": "settings",
+        "title": "Settings",
+        "url": "settings.html",
+        "width": 700,
+        "height": 520,
+        "minWidth": 600,
+        "minHeight": 400,
+        "center": true,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "visible": false
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/32x32.png",
+      "tooltip": "OpenCapX"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "category": "Utility",
+    "license": "MIT",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "hardenedRuntime": true
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1"
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/opencapx/OpenCapX/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg5NTQwRjE0MjZGMUNCOApSV1M0SEc5QzhVQ1ZDQjhyWlJOSXNuK0xIS0hka0w3ZmhQL3YyVUtJRTdZMXRpZWtidTFReWM3UQo="
+    }
+  }
+}

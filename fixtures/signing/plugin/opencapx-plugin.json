@@ -1,0 +1,13 @@
+{
+  "id": "com.opencapx.test-signing",
+  "name": "Signing Test Fixture",
+  "version": "1.0.0",
+  "apiVersion": "1",
+  "type": "capability",
+  "runtime": {
+    "type": "process",
+    "command": "python3"
+  },
+  "capabilities": ["image.analyze"],
+  "permissions": ["image.read"]
+}

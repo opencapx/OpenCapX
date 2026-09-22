@@ -1,0 +1,33 @@
+name: release-plugin
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OpenCapX signing tool
+        run: |
+          # 拆分为独立模板仓库后,可改为下载 OpenCapX 的 release 二进制;
+          # 当前按源码构建(需要 Rust 工具链,ubuntu runner 自带)。
+          git clone --depth 1 https://github.com/opencapx/OpenCapX.git /tmp/opencapx
+          cargo build --release --manifest-path /tmp/opencapx/src-tauri/Cargo.toml --bin opencapx
+          echo "/tmp/opencapx/src-tauri/target/release" >> "$GITHUB_PATH"
+      - name: Pack & sign
+        env:
+          OCX_SIGNING_KEY: ${{ secrets.OCX_SIGNING_KEY }} # 64-hex seed(opencapx keygen)
+          OCX_KEY_ID: ${{ secrets.OCX_KEY_ID }} # 你的发布者 keyId
+        run: |
+          mkdir -p dist
+          ID=$(python3 -c 'import json;print(json.load(open("opencapx-plugin.json"))["id"])')
+          VER=$(python3 -c 'import json;print(json.load(open("opencapx-plugin.json"))["version"])')
+          opencapx pack . --key "$OCX_SIGNING_KEY" --key-id "$OCX_KEY_ID" --out "dist/${ID}-${VER}.ocplugin"
+      - name: Self gate (F10 自动门预跑)
+        run: opencapx verify-package dist/*.ocplugin
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.ocplugin

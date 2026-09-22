@@ -1,0 +1,7 @@
+# Changes to the index, seed, and validation scripts must be approved by the official publishers and security review.
+# Team slugs are placeholders: replace them with the real GitHub teams when the hosting repo is set up.
+
+/index.json          @opencapx/official-publishers @opencapx/security
+/index.unsigned.json @opencapx/official-publishers @opencapx/security
+/seed.json           @opencapx/official-publishers @opencapx/security
+/scripts/            @opencapx/security

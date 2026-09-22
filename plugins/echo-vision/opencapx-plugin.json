@@ -1,0 +1,47 @@
+{
+  "id": "com.opencapx.echo-vision",
+  "name": "Echo Vision",
+  "description": "Example capability plugin: implements image.analyze by echoing input back. Validates the full MCP → Core → Plugin pipeline without any API key.",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "type": "capability",
+  "runtime": {
+    "type": "process",
+    "command": "python3",
+    "args": [
+      "bin/echo_vision.py"
+    ]
+  },
+  "capabilities": [
+    "image.analyze"
+  ],
+  "permissions": [
+    "image.read"
+  ],
+  "sandbox": {
+    "network": "none",
+    "fs": {
+      "write": [
+        "plugin-data"
+      ]
+    }
+  },
+  "settings": [
+    {
+      "key": "tags",
+      "type": "list",
+      "label": {
+        "en": "Tags",
+        "zh-Hans": "标签",
+        "vi": "Thẻ"
+      },
+      "description": {
+        "en": "Demo list items owned by the plugin: add / reorder / delete round-trips through settings.tags.",
+        "zh-Hans": "演示插件持有的列表项:增删改排序都经 settings.tags 往返。",
+        "vi": "Demo mục danh sách do plugin nắm giữ: thêm/xóa/đổi thứ tự qua settings.tags."
+      }
+    }
+  ],
+  "author": "OpenCapX",
+  "license": "MIT"
+}

@@ -1,0 +1,266 @@
+/* Bubble themes — the single source of color + shape.
+   index.html (desktop bubble) and settings.html (settings-page preview) both link this file,
+   so the outline seen on the settings page and the real desktop bubble share the same set of
+   variables and can never drift apart.
+
+   A theme swaps not just color but also **shape**:
+     --bubble-radius       outline corner radius
+     --bubble-clip         cut corner / bevel (clip-path)
+     --bubble-border-w     border thickness  + --bubble-border-style line style
+     --bubble-edge-w       thickness of the edge facing the pet (the speaking-direction cue)
+     --bubble-pad-y/-x     padding (tight or loose — also part of the outline)
+     --bubble-bg-image     texture / gradient overlay
+     --bubble-blur         backdrop blur (themes with a clipped shape must turn this off, or it
+                           fights with filter)
+     --bubble-shadow       outer shadow (for un-clipped shapes)
+     --bubble-filter       stroke/glow/offset shadow for clipped shapes — follows the silhouette
+                           and will not be clipped away
+     --bubble-chip-radius  corner radius of inner small controls (badges/buttons/done row)
+   State semantic colors (working green / waiting orange / done blue) are not affected by the
+   theme, so switching themes never confuses a state. */
+
+[data-bubble-theme] {
+  /* Colors */
+  --bubble-bg: rgba(20, 20, 24, 0.78);
+  --bubble-border: rgba(255, 255, 255, 0.1);
+  --bubble-accent: #93c5fd;
+  --bubble-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  --bubble-fg: rgba(255, 255, 255, 0.92);
+  --bubble-dim: rgba(255, 255, 255, 0.7);
+  --bubble-sep: rgba(255, 255, 255, 0.07);
+  --bubble-chip-bg: rgba(255, 255, 255, 0.08);
+  --bubble-nav: rgba(255, 255, 255, 0.25);
+  --bubble-nav-on: rgba(255, 255, 255, 0.85);
+  --bubble-warn-fg: #fdba74;
+  /* Shape */
+  --bubble-radius: 10px;
+  --bubble-clip: none;
+  --bubble-border-w: 1px;
+  --bubble-border-style: solid;
+  --bubble-edge-w: 3px;
+  --bubble-pad-y: 8px;
+  --bubble-pad-x: 10px;
+  --bubble-bg-image: none;
+  --bubble-blur: blur(12px);
+  --bubble-shadow: none;
+  --bubble-filter: none;
+  --bubble-chip-radius: 999px;
+}
+
+/* Chef — soft and plump: large radius + warm glow + a diagonal highlight */
+[data-bubble-theme="chef"] {
+  --bubble-bg: rgba(46, 26, 12, 0.84);
+  --bubble-border: rgba(251, 146, 60, 0.28);
+  --bubble-accent: #fdba74;
+  --bubble-radius: 18px;
+  --bubble-edge-w: 4px;
+  --bubble-pad-y: 9px;
+  --bubble-pad-x: 11px;
+  --bubble-bg-image: linear-gradient(160deg, rgba(253, 186, 116, 0.12), rgba(253, 186, 116, 0) 62%);
+  --bubble-blur: blur(14px);
+  --bubble-shadow: 0 6px 22px rgba(251, 146, 60, 0.2);
+}
+
+/* Engineer — blueprint card: top-right cut corner + dashed border + horizontal grid lines + monospace type */
+[data-bubble-theme="engineer"] {
+  --bubble-bg: rgba(12, 19, 28, 0.86);
+  --bubble-border: rgba(56, 189, 248, 0.26);
+  --bubble-accent: #38bdf8;
+  --bubble-font: ui-monospace, "SF Mono", Menlo, monospace;
+  --bubble-radius: 5px;
+  --bubble-clip: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+  --bubble-border-style: dashed;
+  --bubble-pad-y: 8px;
+  --bubble-pad-x: 10px;
+  --bubble-bg-image: repeating-linear-gradient(
+    0deg,
+    rgba(56, 189, 248, 0.07) 0 1px,
+    transparent 1px 8px
+  );
+  --bubble-filter: drop-shadow(0 4px 12px rgba(56, 189, 248, 0.3));
+  --bubble-chip-radius: 3px;
+  /* Clipped shapes that use filter always turn off backdrop blur: there is precedent for WebKit rendering glitches when both live on the same element */
+  --bubble-blur: none;
+}
+
+/* Wizard — scroll: near-capsule large radius + inner stroke + top radial light */
+[data-bubble-theme="wizard"] {
+  --bubble-bg: rgba(28, 18, 46, 0.86);
+  --bubble-border: rgba(167, 139, 250, 0.3);
+  --bubble-accent: #c4b5fd;
+  --bubble-radius: 22px;
+  --bubble-edge-w: 4px;
+  --bubble-pad-y: 10px;
+  --bubble-pad-x: 13px;
+  --bubble-bg-image: radial-gradient(120% 90% at 20% 0%, rgba(196, 181, 253, 0.18), transparent 66%);
+  --bubble-shadow:
+    inset 0 0 0 1px rgba(196, 181, 253, 0.16),
+    0 6px 24px rgba(139, 92, 246, 0.26);
+}
+
+/* Explorer — field card: 2px solid border + bottom-right cut corner + a stronger facing edge */
+[data-bubble-theme="explorer"] {
+  --bubble-bg: rgba(16, 30, 20, 0.86);
+  --bubble-border: rgba(74, 222, 128, 0.26);
+  --bubble-accent: #86efac;
+  --bubble-radius: 9px;
+  --bubble-clip: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%);
+  --bubble-border-w: 2px;
+  --bubble-edge-w: 4px;
+  --bubble-pad-y: 9px;
+  --bubble-pad-x: 11px;
+  --bubble-bg-image: linear-gradient(180deg, rgba(134, 239, 172, 0.1), transparent 58%);
+  --bubble-filter: drop-shadow(0 3px 12px rgba(74, 222, 128, 0.26));
+  --bubble-blur: none;
+}
+
+/* Scientist — petri dish: very large radius + top radial gradient + the softest blur */
+[data-bubble-theme="scientist"] {
+  --bubble-bg: rgba(10, 26, 30, 0.86);
+  --bubble-border: rgba(34, 211, 238, 0.28);
+  --bubble-accent: #67e8f9;
+  --bubble-font: "SF Mono", Menlo, monospace;
+  --bubble-radius: 26px;
+  --bubble-edge-w: 3px;
+  --bubble-pad-y: 10px;
+  --bubble-pad-x: 12px;
+  --bubble-bg-image: radial-gradient(100% 120% at 50% 0%, rgba(103, 232, 249, 0.15), transparent 70%);
+  --bubble-blur: blur(16px);
+  --bubble-shadow: 0 6px 20px rgba(34, 211, 238, 0.18);
+}
+
+/* Minimal — for realistic 3D models: thin border, thin facing edge, no colored blocks, does its best not to compete with the model for attention */
+[data-bubble-theme="minimal"] {
+  --bubble-bg: rgba(18, 18, 20, 0.72);
+  --bubble-border: rgba(255, 255, 255, 0.14);
+  --bubble-accent: rgba(255, 255, 255, 0.55);
+  --bubble-radius: 12px;
+  --bubble-edge-w: 2px;
+  --bubble-pad-y: 8px;
+  --bubble-pad-x: 11px;
+  --bubble-blur: blur(10px);
+  --bubble-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
+  --bubble-sep: rgba(255, 255, 255, 0.06);
+}
+
+/* Paper — light background: near right angles + ink-colored solid border + hard offset shadow + ruled lines, opaque (blur turned off) */
+[data-bubble-theme="paper"] {
+  --bubble-bg: rgba(250, 248, 243, 0.96);
+  --bubble-border: rgba(120, 100, 70, 0.22);
+  --bubble-accent: #b45309;
+  --bubble-radius: 2px;
+  --bubble-edge-w: 3px;
+  --bubble-pad-y: 9px;
+  --bubble-pad-x: 12px;
+  --bubble-bg-image: repeating-linear-gradient(
+    180deg,
+    transparent 0 25px,
+    rgba(90, 70, 40, 0.12) 25px 26px
+  );
+  --bubble-blur: none;
+  --bubble-shadow: 2px 2px 0 rgba(60, 45, 20, 0.22), 0 8px 20px rgba(60, 45, 20, 0.12);
+  --bubble-chip-radius: 3px;
+  --bubble-fg: #2a2118;
+  --bubble-dim: rgba(42, 33, 24, 0.7);
+  --bubble-sep: rgba(90, 70, 40, 0.16);
+  --bubble-chip-bg: rgba(90, 70, 40, 0.08);
+  --bubble-nav: rgba(42, 33, 24, 0.25);
+  --bubble-nav-on: rgba(42, 33, 24, 0.8);
+  --bubble-warn-fg: #9a3412;
+}
+
+/* Cyber — neon: beveled corners + no border (stroke glow comes from drop-shadow) + two-color gradient */
+[data-bubble-theme="cyber"] {
+  --bubble-bg: rgba(10, 6, 24, 0.9);
+  --bubble-border: rgba(236, 72, 153, 0.45);
+  --bubble-accent: #22d3ee;
+  --bubble-radius: 0;
+  --bubble-clip: polygon(
+    12px 0,
+    calc(100% - 12px) 0,
+    100% 12px,
+    100% calc(100% - 12px),
+    calc(100% - 12px) 100%,
+    12px 100%,
+    0 calc(100% - 12px),
+    0 12px
+  );
+  --bubble-border-w: 0;
+  --bubble-edge-w: 5px;
+  --bubble-pad-y: 9px;
+  --bubble-pad-x: 11px;
+  --bubble-bg-image: linear-gradient(135deg, rgba(236, 72, 153, 0.18), rgba(34, 211, 238, 0.14));
+  --bubble-blur: none;
+  --bubble-shadow: none;
+  --bubble-filter: drop-shadow(0 0 1px rgba(236, 72, 153, 0.95))
+    drop-shadow(0 0 10px rgba(236, 72, 153, 0.45));
+  --bubble-chip-radius: 0;
+  --bubble-sep: rgba(34, 211, 238, 0.16);
+  --bubble-chip-bg: rgba(34, 211, 238, 0.12);
+}
+
+/* Terminal — green on black: square corners + thick facing edge (like a cursor block) + scanlines + monospace type */
+[data-bubble-theme="terminal"] {
+  --bubble-bg: rgba(6, 10, 6, 0.93);
+  --bubble-border: rgba(74, 222, 128, 0.38);
+  --bubble-accent: #4ade80;
+  --bubble-radius: 0;
+  --bubble-edge-w: 6px;
+  --bubble-font: ui-monospace, "SF Mono", Menlo, monospace;
+  --bubble-pad-y: 8px;
+  --bubble-pad-x: 10px;
+  --bubble-bg-image: repeating-linear-gradient(
+    0deg,
+    rgba(74, 222, 128, 0.06) 0 2px,
+    transparent 2px 4px
+  );
+  --bubble-blur: none;
+  --bubble-shadow: 0 0 0 1px rgba(74, 222, 128, 0.08);
+  --bubble-chip-radius: 0;
+  --bubble-fg: #a7f3c0;
+  --bubble-dim: rgba(167, 243, 192, 0.72);
+  --bubble-sep: rgba(74, 222, 128, 0.18);
+  --bubble-chip-bg: rgba(74, 222, 128, 0.12);
+  --bubble-nav: rgba(74, 222, 128, 0.3);
+  --bubble-nav-on: rgba(74, 222, 128, 0.9);
+  --bubble-warn-fg: #fbbf24;
+}
+
+/* Pixel — pixel-pet companion: 4px stepped cut corners + 2px bright border + hard offset shadow + diagonal dither texture */
+[data-bubble-theme="pixel"] {
+  --bubble-bg: #1b1b2f;
+  --bubble-border: #f8f8f2;
+  --bubble-accent: #ffd166;
+  --bubble-radius: 0;
+  --bubble-clip: polygon(
+    0 4px,
+    4px 4px,
+    4px 0,
+    calc(100% - 4px) 0,
+    calc(100% - 4px) 4px,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    4px calc(100% - 4px),
+    0 calc(100% - 4px)
+  );
+  --bubble-border-w: 2px;
+  --bubble-edge-w: 4px;
+  --bubble-pad-y: 9px;
+  --bubble-pad-x: 10px;
+  --bubble-bg-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 209, 102, 0.05) 0 2px,
+    transparent 2px 4px
+  );
+  --bubble-blur: none;
+  --bubble-shadow: none;
+  --bubble-filter: drop-shadow(4px 4px 0 rgba(0, 0, 0, 0.55));
+  --bubble-chip-radius: 0;
+  --bubble-sep: rgba(248, 248, 242, 0.16);
+  --bubble-chip-bg: rgba(255, 209, 102, 0.16);
+  --bubble-nav: rgba(248, 248, 242, 0.3);
+  --bubble-nav-on: #ffd166;
+}

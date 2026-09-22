@@ -1,0 +1,28 @@
+{
+  "name": "create-opencapx-plugin",
+  "version": "0.1.1",
+  "description": "Scaffold an OpenCapX plugin written in TypeScript (npm create opencapx-plugin)",
+  "license": "Apache-2.0",
+  "author": "OpenCapX",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/opencapx/OpenCapX.git",
+    "directory": "packages/create-opencapx-plugin"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "type": "module",
+  "bin": {
+    "create-opencapx-plugin": "bin/create.mjs"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "prepublishOnly": "npm test"
+  },
+  "files": [
+    "bin",
+    "template",
+    "README.md"
+  ]
+}

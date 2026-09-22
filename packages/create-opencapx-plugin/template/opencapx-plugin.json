@@ -1,0 +1,51 @@
+{
+  "id": "__ID__",
+  "name": "__NAME__",
+  "description": "OpenCapX plugin written in TypeScript: edit src/plugin.ts for your capability logic.",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "type": "capability",
+  "runtime": {
+    "type": "process",
+    "command": "node",
+    "args": [
+      "dist/src/plugin.js"
+    ]
+  },
+  "capabilities": [
+    "image.analyze"
+  ],
+  "permissions": [
+    "image.read"
+  ],
+  "settings": [
+    {
+      "key": "response_prefix",
+      "type": "text",
+      "label": {
+        "en": "Response prefix",
+        "zh-Hans": "响应前缀",
+        "vi": "Tiền tố phản hồi"
+      },
+      "default": "template",
+      "order": 1
+    },
+    {
+      "key": "api_token",
+      "type": "secret",
+      "label": {
+        "en": "API token",
+        "zh-Hans": "API 令牌",
+        "vi": "Mã API"
+      },
+      "description": {
+        "en": "Read at runtime via configGet(\"secret:api_token\"); never echoed back.",
+        "zh-Hans": "运行时用 configGet(\"secret:api_token\") 读;永不回显。",
+        "vi": "Đọc lúc chạy bằng configGet(\"secret:api_token\"); không bao giờ hiển thị lại."
+      },
+      "order": 10
+    }
+  ],
+  "author": "__AUTHOR__",
+  "license": "__LICENSE__"
+}

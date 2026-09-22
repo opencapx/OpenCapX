@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": 1757846400,
+  "publishers": [
+    {
+      "keyId": "com.opencapx.test-signing",
+      "publicKey": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+      "verified": true,
+      "since": "2026-09-14"
+    }
+  ],
+  "revokedKeys": [],
+  "entries": [
+    {
+      "id": "com.example.weather-demo",
+      "name": "Weather Demo",
+      "summary": "离线示例插件(夹具,由 M2 黄金包充当发布物)",
+      "author": { "keyId": "com.opencapx.test-signing" },
+      "repo": "opencapx/weather-demo",
+      "categories": ["demo"],
+      "versions": [
+        {
+          "version": "0.1.0",
+          "minCoreVersion": "0.4.0",
+          "channel": "stable",
+          "downloadUrl": "https://registry.example.invalid/com.example.weather-demo-0.1.0.ocplugin",
+          "sha256": "bf30d4d1a3bf41e9d4e774ec00414def509b2106cb8152a155367136892cfb2f",
+          "signature": {
+            "alg": "ed25519",
+            "keyId": "com.opencapx.test-signing",
+            "sig": "dffdd281c469430f54fb08aa031a5741b39a0e28fb7cae5a740275a30f297f62548d89238f7fe1f031dd96646e450dd0ab8ad82b09055bf28c50167762051207"
+          },
+          "releasedAt": 1757846400,
+          "sizeBytes": 890
+        }
+      ]
+    }
+  ],
+  "indexSignature": { "alg": "ed25519", "keyId": "com.opencapx.test-official", "sig": "00" }
+}

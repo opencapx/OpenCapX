@@ -1,0 +1,74 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: frontend deps (tauri build script expects dist/)
+        run: pnpm install --frozen-lockfile && pnpm exec vite build
+      - name: install Linux deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets
+      - name: Python signing deps (cross-language SDK test)
+        run: pip install cryptography
+      - name: test
+        env:
+          PYTHONPATH: packages/plugin-sdk
+        run: cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx
+      - name: node plugin e2e (ts-sdk fixture)
+        run: cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx install_grant_execute_ts_e2e -- --ignored --test-threads=1
+  frontend:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: npx tsc --noEmit
+      - run: pnpm run i18n:check
+      - run: node scripts/bump-version.mjs --check
+  python:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest cryptography
+      - run: PYTHONPATH=packages/plugin-sdk python -m pytest packages/plugin-sdk/tests plugins/*/tests -q
+  ts:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: sdk unit tests
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+        working-directory: packages/ts-sdk
+      - name: scaffold smoke test
+        run: |
+          node packages/create-opencapx-plugin/bin/create.mjs --id com.acme.ci --name "CI" --dir "$RUNNER_TEMP/ci-plugin"
+          cd "$RUNNER_TEMP/ci-plugin" && npm install --no-audit --no-fund && npm test

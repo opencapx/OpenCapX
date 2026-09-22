@@ -1,0 +1,57 @@
+[package]
+name = "opencapx"
+version = "0.1.0"
+description = "Desktop body for AI agents: intercepts their requests, keeps system permissions safe and controllable, gives any model the multimodal abilities it lacks, and extends with plugins and rules"
+authors = ["OpenCapX"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# image-png: the tray icon composites a status dot dynamically (Image::from_bytes decodes our bundled 32x32.png)
+tauri = { version = "2", features = ["tray-icon", "macos-private-api", "image-png"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tiny_http = "0.12"
+dirs = "5"
+rusqlite = { version = "0.32", features = ["bundled"] }
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "default-tls", "blocking"] }
+serde_yaml = "0.9.34"
+uuid = { version = "1.26.1", features = ["v4"] }
+semver = "1"
+# P1 declarative settings: pattern validation rules are compiled at install time with Rust regex syntax (JS-only
+# constructs such as lookahead are rejected rather than silently ignored).
+regex = "1"
+hmac = "0.12"
+sha2 = "0.10"
+# M2 v2 distribution channel: Ed25519 signature verification (publisher identity distinguishable from v1 local HMAC)
+ed25519-dalek = "2"
+aes-gcm = "0.10"
+pbkdf2 = { version = "0.12", features = ["simple"] }
+base64 = "0.22"
+getrandom = "0.2"
+keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
+# v1.2 system-layer capabilities: arboard clipboard (clipboard.read/write + context snippets),
+# image PNG encoding (clipboard images + Windows screenshots), scraper browser.read body extraction
+arboard = "3"
+image = { version = "0.25", default-features = false, features = ["png"] }
+scraper = "0.27"
+
+[target.'cfg(windows)'.dependencies]
+# v1.2 screen.capture built into Windows (compiled on Windows only; macOS/Linux keep the platform command path)
+xcap = "0.9"
+
+[target.'cfg(unix)'.dependencies]
+# S1 process group: on shutdown timeout, kill the whole group (kill(-pgid, SIGKILL)), sweeping up grandchildren too
+libc = "0.2"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

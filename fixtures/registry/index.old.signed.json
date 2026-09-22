@@ -1,0 +1,19 @@
+{
+  "entries": [],
+  "generatedAt": 1700000000,
+  "indexSignature": {
+    "alg": "ed25519",
+    "keyId": "com.opencapx.test-official",
+    "sig": "31854554db0a996e0c1767d2cf3ea09fb518cb7e02aa053586931a56e24fca629a894e180bf16cc6739f8b9753bb8a2fd4cdcb635b1c2ce5efc5c3c865b4ae02"
+  },
+  "publishers": [
+    {
+      "keyId": "com.opencapx.test-signing",
+      "publicKey": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+      "since": "2026-09-14",
+      "verified": true
+    }
+  ],
+  "revokedKeys": [],
+  "schemaVersion": 2
+}

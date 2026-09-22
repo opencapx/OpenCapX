@@ -1,0 +1,32 @@
+{
+  "name": "@opencapx/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for writing OpenCapX plugins (JSON-RPC 2.0 over stdio)",
+  "license": "Apache-2.0",
+  "author": "OpenCapX",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/opencapx/OpenCapX.git",
+    "directory": "packages/ts-sdk"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "type": "commonjs",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "files": [
+    "dist/src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

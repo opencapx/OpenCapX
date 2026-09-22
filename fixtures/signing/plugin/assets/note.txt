@@ -1,0 +1,4 @@
+Fixture asset for the M2 signing golden vectors.
+
+Its exact bytes are part of the committed digest_v2 golden.
+Do not edit without regenerating the goldens (see README.md).

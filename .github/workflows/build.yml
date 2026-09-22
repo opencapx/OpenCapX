@@ -1,0 +1,156 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            args: ""
+          - os: windows-latest
+            args: ""
+          - os: ubuntu-22.04
+            args: ""
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: install Linux dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev
+
+      - name: install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: export code-signing env only when secrets present
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+                    APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -n "${!v}" ]; then
+              printf '%s=%s\n' "$v" "${!v}" >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: build
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          args: ${{ matrix.args }}
+          tagName: v__VERSION__
+          releaseName: "OpenCapX v__VERSION__"
+          releaseBody: "See the assets to download and install this version."
+          releaseDraft: "true"
+          prerelease: "false"
+          includeUpdaterJson: "true"
+
+  updater-manifest:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: validate latest.json on the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          URL=""
+          for i in 1 2 3 4 5 6 7 8 9; do
+            URL=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+              --jq ".[] | select(.tag_name == \"$TAG\") | .assets[] | select(.name == \"latest.json\") | .url" | head -1)
+            [ -n "$URL" ] && break
+            sleep 20
+          done
+          test -n "$URL" || { echo "latest.json not found on draft release $TAG"; exit 1; }
+          gh api "$URL" -H "Accept: application/octet-stream" > latest.json
+          node scripts/verify-latest-json.mjs latest.json --expect-version "${GITHUB_REF_NAME#v}"
+          node -e '
+            const d = JSON.parse(require("fs").readFileSync("latest.json", "utf8"));
+            const have = Object.keys(d.platforms || {});
+            const want = ["darwin-aarch64", "linux-x86_64", "windows-x86_64"];
+            const missing = want.filter((k) => !have.includes(k));
+            if (missing.length) { console.error("missing platforms: " + missing.join(", ")); process.exit(1); }
+            console.log("platforms ok:", have.join(", "));
+          '
+
+  npm-publish:
+    needs: [build, updater-manifest]
+    if: always() && (github.event_name == 'workflow_dispatch' || (needs.build.result == 'success' && startsWith(github.ref, 'refs/tags/v') && needs.updater-manifest.result == 'success'))
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: publish @opencapx/sdk
+        working-directory: packages/ts-sdk
+        run: |
+          npm ci
+          V=$(node -p "require('./package.json').version")
+          if npm view "@opencapx/sdk@$V" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "@opencapx/sdk@$V already on the registry, skipping"
+          else
+            npm publish --access public
+          fi
+
+      - name: publish create-opencapx-plugin
+        working-directory: packages/create-opencapx-plugin
+        run: |
+          V=$(node -p "require('./package.json').version")
+          if npm view "create-opencapx-plugin@$V" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "create-opencapx-plugin@$V already on the registry, skipping"
+          else
+            npm publish --access public
+          fi
