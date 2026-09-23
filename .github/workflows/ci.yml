@@ -34,6 +34,18 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx
       - name: node plugin e2e (ts-sdk fixture)
         run: cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx install_grant_execute_ts_e2e -- --ignored --test-threads=1
+
+  # The core ships on Windows, but its tests have only ever run on Linux. This job surfaces
+  # path-separator, registry, and filesystem-assumption failures without blocking PRs;
+  # once it is reliably green, drop continue-on-error.
+  rust-windows:
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: test (best effort)
+        run: cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx
   frontend:
     runs-on: ubuntu-22.04
     steps:
@@ -46,6 +58,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: npx tsc --noEmit
       - run: pnpm run i18n:check
+      - run: pnpm test
       - run: node scripts/bump-version.mjs --check
   python:
     runs-on: ubuntu-22.04
