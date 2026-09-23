@@ -12,8 +12,16 @@ use std::sync::Arc;
 pub const LISTEN_ADDR: &str = "127.0.0.1:47628";
 
 /// dev skips auth (local development only, docs/permissions.md "Request Authentication").
+/// Compile-time gated: the env lookup only exists in debug builds, so no runtime
+/// environment can re-enable the bypass in a release binary.
+#[cfg(debug_assertions)]
 fn dev_mode() -> bool {
     std::env::var("OPEN_CAPX_DEV").map(|v| v == "1").unwrap_or(false)
+}
+
+#[cfg(not(debug_assertions))]
+fn dev_mode() -> bool {
+    false
 }
 
 fn pick_str(v: &serde_json::Value, keys: &[&str]) -> Option<String> {

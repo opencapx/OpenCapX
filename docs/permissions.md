@@ -72,7 +72,7 @@ The Core looks up the table by agent_id → compares the token hash in constant 
 
 - Anonymous requests (no header): always rejected, no fallback channel
 - The `/admin` page and SSE `/events` are local read-only observation; v1 keeps the status quo and does not include them in this model
-- Dev mode `OPEN_CAPX_DEV=1` skips authentication, local development only
+- Dev mode skips authentication, local development only: `OPEN_CAPX_DEV=1` **and** a debug build (`debug_assertions`) — the env lookup does not exist in release binaries, so no runtime environment can re-enable the bypass there
 
 ### Revocation and Recovery
 
