@@ -62,3 +62,7 @@ On plugin upgrade, the host tells the plugin the "last successfully run version"
 Uninstalling: stops the process → deletes the managed plugin files (the copy dropped by the `.ocplugin` install) → deletes configuration and secret fallback files → clears database records.
 
 > Plugins installed via "directory install" (developer mode) keep their source directory as your own; uninstalling does **not** delete it.
+
+## The opencapx command
+
+The app ships a CLI (agent setup, sandbox, rules, plugin signing). It is not on `PATH` by default: the **tray menu** shows an **Install opencapx Command** item while it is missing (one click; macOS may ask for your password), and **Settings → General → Command line** installs or removes the symlink at `/usr/local/bin/opencapx` at any time. Agent integrations do not depend on it — hooks and MCP entries already use the stable copy at `~/.opencapx/bin/opencapx`.

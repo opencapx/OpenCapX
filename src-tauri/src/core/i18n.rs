@@ -46,6 +46,8 @@ pub struct Strings {
     pub notify_waiting: &'static str,
     /// `{}` = agent
     pub notify_done: &'static str,
+    /// Tray item: install the `opencapx` command into PATH (shown only while it is missing).
+    pub install_cli: &'static str,
 }
 
 pub const EN: Strings = Strings {
@@ -65,6 +67,7 @@ pub const EN: Strings = Strings {
     state_idle: "Idle",
     notify_waiting: "{} needs input — {}",
     notify_done: "{} finished",
+    install_cli: "Install opencapx Command",
 };
 
 pub const ZH_HANS: Strings = Strings {
@@ -84,6 +87,7 @@ pub const ZH_HANS: Strings = Strings {
     state_idle: "空闲",
     notify_waiting: "{} 需要你输入 — {}",
     notify_done: "{} 已完成",
+    install_cli: "安装 opencapx 命令",
 };
 
 pub const VI: Strings = Strings {
@@ -103,6 +107,7 @@ pub const VI: Strings = Strings {
     state_idle: "Rảnh",
     notify_waiting: "{} cần bạn nhập — {}",
     notify_done: "{} đã xong",
+    install_cli: "Cài lệnh opencapx",
 };
 
 pub fn strings(lang: Lang) -> &'static Strings {

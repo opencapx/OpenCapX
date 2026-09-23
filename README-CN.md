@@ -38,7 +38,7 @@ Claude Code、Codex 与 OpenCode 早已懂得如何写代码。可它们看不�
 
 **智能体接口面**
 - **MCP 网关**：六个工具（`say`、`notify`、`set_state`、`ask`、`list_capabilities`、`execute`）外加事件订阅，任何 MCP 宿主都能借此驱动桌面。
-- **一条命令接入**：`opencapx connect claude|codex|opencode` 幂等地接好智能体的钩子与 MCP 条目。
+- **一条命令接入**：`opencapx connect claude|codex|opencode|omp` 幂等地接好智能体的钩子与 MCP 条目。
 - **通知**：智能体完成或等待输入时弹出系统通知，并汇集到通知中心。
 
 **插件**
@@ -116,10 +116,10 @@ OpenCapX 也挡在智能体自身 shell 命令的前面。`PreToolUse` 钩子会
 
 ### 接入你的智能体
 
-一条命令即可接好智能体的钩子与 MCP 服务器条目（幂等操作，智能体配置中不会落入任何凭据，令牌流程在启动时由 `opencapx mcp` 与核心之间处理）：
+一条命令即可接好智能体的钩子与 MCP 服务器条目（幂等操作，智能体配置中不会落入任何凭据，令牌流程在启动时由 `opencapx mcp` 与核心之间处理）。若终端里没有 `opencapx` 命令，先安装：**设置 → 通用 → 命令行**（[INSTALL.md](INSTALL.md#the-opencapx-command)）：
 
 ```bash
-opencapx connect claude   # or: codex | opencode
+opencapx connect claude   # or: codex | opencode | omp
 ```
 
 重启智能体，然后让它调用 `opencapx.list_capabilities` 来验证。各宿主的手动配置形式参见 [docs/mcp.md](docs/mcp.md)。

@@ -493,10 +493,26 @@ function render(): void {
         row("breakMinutes", null, `<input type="number" id="bmins" min="5" max="480" value="${settings.breakMinutes}" />`) +
         row("sessionContext", "sessionContextHint", toggle("sessionContextInject", settings.sessionContextInject !== false)) +
         row("channelDefault", "channelDefaultHint", `<select id="default-channel"><option value="stable">${esc(t("channelStable"))}</option><option value="beta">${esc(t("channelBeta"))}</option><option value="dev">${esc(t("channelDev"))}</option></select><span class="setting-hint" id="channel-msg"></span>`)) +
+      group("cliCommand", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("cliCommandHint"))}</span><div class="ks-status" id="cli-status"></div><div><button class="btn ghost" id="cli-toggle" type="button"></button><span class="setting-hint" id="cli-msg"></span></div></div>`) +
       group("killSwitch", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("killSwitchHint"))}</span><div class="ks-status" id="ks-status"></div><div class="ks-controls"><input type="text" id="ks-reason" placeholder="${esc(t("killSwitchReasonPlaceholder"))}" maxlength="120"/><button class="btn danger" id="ks-enable" type="button">${esc(t("killSwitchEnable"))}</button><button class="btn ghost" id="ks-disable" type="button">${esc(t("killSwitchDisable"))}</button></div></div>`) +
       group("safeMode", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("safeModeHint"))}</span><div class="ks-status" id="sm-status"></div></div>`);
     paintSessions();
     void refreshAgents();
+    void refreshCliCommand();
+    document.getElementById("cli-toggle")?.addEventListener("click", async () => {
+      const btn = document.getElementById("cli-toggle") as HTMLButtonElement;
+      const msg = document.getElementById("cli-msg");
+      btn.disabled = true;
+      try {
+        const out = await invoke<string>(btn.dataset.mode === "uninstall" ? "cli_command_uninstall" : "cli_command_install");
+        if (msg) msg.textContent = out;
+      } catch (err) {
+        if (msg) msg.textContent = `✗ ${String(err)}`;
+      } finally {
+        btn.disabled = false;
+        void refreshCliCommand();
+      }
+    });
     document.getElementById("clear")?.addEventListener("click", async () => {
       await invoke("clear_sessions");
       await refreshSessions();
@@ -2869,6 +2885,38 @@ interface LogEntry {
 let logsStreamOnEvent: (() => void) | null = null;
 
 // Phase 44 — Kill switch global disable toggle.
+interface CliCommandStatus {
+  supported: boolean;
+  installed: boolean;
+  foreign: boolean;
+  target: string;
+  shim: string;
+}
+
+/// Settings → General: the global `opencapx` command — a symlink into PATH installed on demand.
+async function refreshCliCommand(): Promise<void> {
+  const status = document.getElementById("cli-status");
+  const btn = document.getElementById("cli-toggle") as HTMLButtonElement | null;
+  if (!status || !btn) return;
+  try {
+    const s = await invoke<CliCommandStatus>("cli_command_status");
+    if (!s.supported) {
+      status.className = "ks-status ks-off";
+      status.textContent = t("cliCommandUnsupported");
+      btn.style.display = "none";
+      return;
+    }
+    btn.style.display = "";
+    btn.dataset.mode = s.installed ? "uninstall" : "install";
+    btn.textContent = s.installed ? t("cliCommandUninstall") : t("cliCommandInstall");
+    status.className = `ks-status ${s.installed ? "ks-on" : "ks-off"}`;
+    status.textContent = s.installed ? `${t("cliCommandInstalled")} ${s.target}` : t("cliCommandNotInstalled");
+  } catch (err) {
+    status.className = "ks-status ks-err";
+    status.textContent = `✗ ${String(err)}`;
+  }
+}
+
 interface KillSwitchState {
   enabled: boolean;
   reason: string;

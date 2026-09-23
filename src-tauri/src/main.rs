@@ -8,7 +8,9 @@ mod mcp;
 mod notify;
 mod queue;
 mod admin;
+mod cli_install;
 
+use clap::Parser;
 use core::agent::{session_to_dto, SessionDto, SessionSink};
 use core::storage::{self, SharedStore};
 
@@ -2271,14 +2273,20 @@ fn refresh_tray_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
         .map(|s| format!("[{}] {}", s.header, s.rows.join(" | ")))
         .chain(ungrouped.iter().cloned())
         .collect();
+    // the CLI item exists only while the command is missing: no symlink at /usr/local/bin, nothing
+    // foreign occupying it, and nothing named opencapx resolving on PATH. Installing from the menu
+    // (or from Settings) flips this, and the next rebuild drops the item.
+    let cli = cli_install::status();
+    let install_cli_item = cli.supported && !cli.installed && !cli.foreign && !cli_install::on_path();
     // locale goes into the signature: switching language must rebuild the menu
     let signature = format!(
-        "{}|{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}|{}",
         locale,
         pet_visible,
         bubble_enabled,
         clearable,
         summary,
+        install_cli_item,
         structure.join("\n")
     );
     if let Some(state) = app.try_state::<TrayState>() {
@@ -2355,6 +2363,9 @@ fn refresh_tray_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
         clearable,
         None::<&str>,
     )?;
+    let install_cli = install_cli_item
+        .then(|| tauri::menu::MenuItem::with_id(app, "install-cli", strs.install_cli, true, None::<&str>))
+        .transpose()?;
     let toggle = tauri::menu::CheckMenuItem::with_id(
         app,
         "toggle-pet",
@@ -2390,6 +2401,9 @@ fn refresh_tray_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     refs.push(&clear);
     refs.push(&toggle);
     refs.push(&bubble_toggle);
+    if let Some(item) = &install_cli {
+        refs.push(item);
+    }
     refs.push(&open_settings_item);
     refs.push(&quit);
     let menu = tauri::menu::Menu::with_items(app, &refs)?;
@@ -2633,14 +2647,64 @@ fn deliver_event(payload: &str, creds: Option<&core::identity::Credentials>, kin
 
 /// `opencapx connect <claude|codex|opencode>`: installs hooks + writes `opencapx mcp`
 /// into that agent's MCP config (idempotent; no credentials in the config, mcp handles TOFU itself at startup).
-fn run_connect(args: &[String]) -> ! {
-    let Some(kind) = args.get(1) else {
-        eprintln!("usage: opencapx connect <agent>");
-        eprintln!("  write this agent's hook and MCP server config (idempotent, safe to re-run)");
-        std::process::exit(2);
-    };
+/// Settings → General: the global `opencapx` command state.
+#[tauri::command]
+fn cli_command_status() -> cli_install::Status {
+    cli_install::status()
+}
+
+/// Settings → General: install the global command (macOS: authorization dialog when needed).
+/// Rebuilds the tray menu so its install item appears/disappears with the state.
+#[tauri::command]
+fn cli_command_install(app: tauri::AppHandle) -> Result<String, String> {
+    let out = cli_install::install(true);
+    let _ = refresh_tray_menu(&app);
+    out
+}
+
+/// Settings → General: remove the global command.
+#[tauri::command]
+fn cli_command_uninstall(app: tauri::AppHandle) -> Result<String, String> {
+    let out = cli_install::uninstall(true);
+    let _ = refresh_tray_menu(&app);
+    out
+}
+
+/// `opencapx install-cli` — symlink the stable shim into PATH so `opencapx` resolves from any
+/// terminal. The Settings row calls `cli_install::install(true)` directly.
+fn run_install_cli(elevate: bool) -> ! {
+    match cli_install::install(elevate) {
+        Ok(msg) => {
+            eprintln!("install-cli: {msg}");
+            if !cli_install::on_path() {
+                eprintln!("install-cli: note: /usr/local/bin is not on this shell's PATH — add it to use the command by name");
+            }
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("install-cli: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// `opencapx uninstall-cli` — remove the symlink (only if it is ours).
+fn run_uninstall_cli(elevate: bool) -> ! {
+    match cli_install::uninstall(elevate) {
+        Ok(msg) => {
+            eprintln!("uninstall-cli: {msg}");
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("uninstall-cli: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn run_connect(kind: &str) -> ! {
     let catalog = hooks::catalog();
-    if !catalog.iter().any(|a| a.kind == *kind) {
+    if !catalog.iter().any(|a| a.kind == kind) {
         eprintln!("connect: unknown agent: {} (options: {})", kind,
             catalog.iter().map(|a| a.kind.as_str()).collect::<Vec<_>>().join(", "));
         std::process::exit(2);
@@ -2676,6 +2740,9 @@ fn run_connect(args: &[String]) -> ! {
         eprintln!("connect: auth is auto-registered at opencapx mcp startup; the config file contains no credentials.");
     } else {
         eprintln!("connect: done. Restart {} — the hooks report session state and apply command-rule rewrites by rule.", hooks::display_name(kind));
+    }
+    if !cli_install::on_path() {
+        eprintln!("connect: tip: `opencapx` is not on PATH — run `opencapx install-cli` (or install it from Settings → General) to use the command by name");
     }
     std::process::exit(0);
 }
@@ -3049,6 +3116,11 @@ fn run_wrap(args: &[String]) -> ! {
 /// Print usage of the signing toolchain subcommands.
 fn signing_usage() {
     eprintln!("OpenCapX signing CLI");
+    signing_lines();
+}
+
+/// The signing block, shared by `--help` and each signing subcommand's bad-input fallback.
+fn signing_lines() {
     eprintln!("  opencapx keygen [--out <path.hex>]");
     eprintln!("  opencapx pack <plugin-dir> --key <seed-hex|@file> --key-id <id> [--out <file.ocplugin>]");
     eprintln!("  opencapx verify <file> [--trusted-keys <path>]");
@@ -3407,69 +3479,115 @@ fn run_verify_index(args: &[String]) -> ! {
     }
 }
 
+/// Human-facing CLI. Host-spawned entry points (`hook` / `mcp` / `run`) are dispatched before this
+/// parse and keep lenient argument handling — see `main`.
+#[derive(clap::Parser)]
+#[command(name = "opencapx", version, about = "OpenCapX — the desktop body for AI agents (GUI + CLI)")]
+struct Cli {
+    /// Start with third-party plugins disabled (see Settings → General → Safe mode)
+    #[arg(long)]
+    safe_mode: bool,
+    #[command(subcommand)]
+    command: Option<Cmd>,
+}
+
+/// One variant per user-facing subcommand. Commands whose detailed parsing still lives in their
+/// `run_cli` take the remaining tokens verbatim, and `disable_help_flag` keeps their own `--help`
+/// behavior unchanged until they are migrated.
+#[derive(clap::Subcommand)]
+enum Cmd {
+    /// Write the agent's hook + MCP config (an unknown name lists the hosts)
+    Connect { agent: String },
+    /// Run a command behind the OS guard (seatbelt / bwrap)
+    #[command(disable_help_flag = true)]
+    Sandbox { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    /// Print the rewritten form of a command (does not execute it)
+    #[command(disable_help_flag = true)]
+    Rewrite { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    /// Command rules: list / explain / trust / untrust
+    #[command(disable_help_flag = true)]
+    Rules { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    /// Danger-guard installer domains: trust / untrust / list / mode / env
+    #[command(disable_help_flag = true)]
+    Guard { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    /// Automation rules: list / add / remove
+    #[command(disable_help_flag = true)]
+    Automation { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    /// Install the `opencapx` command into PATH
+    InstallCli {
+        /// macOS: use the system authorization dialog when /usr/local/bin is not writable
+        #[arg(long)]
+        elevate: bool,
+    },
+    /// Remove the `opencapx` command from PATH
+    UninstallCli {
+        /// macOS: use the system authorization dialog when /usr/local/bin is not writable
+        #[arg(long)]
+        elevate: bool,
+    },
+    /// Generate a plugin signing key
+    #[command(disable_help_flag = true)]
+    Keygen { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    /// Package and sign a plugin directory
+    #[command(disable_help_flag = true)]
+    Pack { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    /// Verify a signed plugin file
+    #[command(disable_help_flag = true)]
+    Verify { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    /// Verify a packed `.ocplugin` against trusted keys / the registry index
+    #[command(disable_help_flag = true)]
+    VerifyPackage { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    /// Sign a plugin registry index
+    #[command(disable_help_flag = true)]
+    SignIndex { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    /// Verify a plugin registry index
+    #[command(disable_help_flag = true)]
+    VerifyIndex { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+}
+
+/// Rebuild the argv shape the signing entry points expect (`args[0]` = the command name).
+fn with_cmd(name: &str, mut tail: Vec<String>) -> Vec<String> {
+    tail.insert(0, name.to_string());
+    tail
+}
+
 fn main() {
     install_panic_hook();
-    let args: Vec<String> = std::env::args().collect();
-    // --safe-mode: startup diagnostic mode; Core runs normally, third-party plugins never start (see core::safe_mode).
-    if args.iter().any(|a| a == "--safe-mode") {
+    let raw: Vec<String> = std::env::args().collect();
+    // host-spawned entry points keep lenient parsing (checked before clap): their configs are
+    // written by other versions, and a strict parse error here would break the agent integration.
+    if raw.len() > 1 {
+        match raw[1].as_str() {
+            "hook" => run_hook(&raw[1..]),
+            "run" => run_wrap(&raw[1..]),
+            "mcp" => mcp::run(),
+            _ => {}
+        }
+    }
+    // LaunchServices can hand the app legacy `-psn_0_…` arguments when it is opened from Finder;
+    // clap would reject them and the GUI would never start.
+    let argv: Vec<String> = raw.into_iter().filter(|a| !a.starts_with("-psn_")).collect();
+    let cli = Cli::parse_from(argv);
+    if cli.safe_mode {
         core::safe_mode::set_active(true);
         eprintln!("[core] safe mode active: third-party plugins will not start");
     }
-    if args.len() > 1 && args[1] == "hook" {
-        run_hook(&args[1..]);
-    }
-    if args.len() > 1 && args[1] == "run" {
-        run_wrap(&args[1..]);
-    }
-    // platform sandbox: run a command behind the OS guard (seatbelt / bwrap; fail-open by design)
-    if args.len() > 1 && args[1] == "sandbox" {
-        std::process::exit(core::sandbox::run_cli(&args[2..]));
-    }
-    if args.len() > 1 && args[1] == "mcp" {
-        mcp::run();
-    }
-    // one-command setup: write hook + MCP config in one go (claude/codex/opencode)
-    if args.len() > 1 && args[1] == "connect" {
-        run_connect(&args[1..]);
-    }
-    // Automation (§15) rule management: user-facing CLI, independent of MCP/UI
-    if args.len() > 1 && args[1] == "automation" {
-        std::process::exit(core::automation::run_cli(&args[2..]));
-    }
-    // command rules: map a command to its rewritten form (purely local, does not execute the command)
-    if args.len() > 1 && args[1] == "rewrite" {
-        run_rewrite(&args[2..]);
-    }
-    // command rule management: list / explain / trust / untrust
-    if args.len() > 1 && args[1] == "rules" {
-        std::process::exit(core::rules::run_cli(&args[2..]));
-    }
-    // danger-guard trusted installer domains: trust / untrust / list
-    if args.len() > 1 && args[1] == "guard" {
-        std::process::exit(core::sandbox::run_guard_cli(&args[2..]));
-    }
-    // M2 signing toolchain: author-facing CLI, early-dispatched without starting the UI
-    if args.len() > 1 && args[1] == "--help" {
-        signing_usage();
-        std::process::exit(0);
-    }
-    if args.len() > 1 && args[1] == "keygen" {
-        run_keygen(&args[1..]);
-    }
-    if args.len() > 1 && args[1] == "pack" {
-        run_pack(&args[1..]);
-    }
-    if args.len() > 1 && args[1] == "verify" {
-        run_verify(&args[1..]);
-    }
-    if args.len() > 1 && args[1] == "sign-index" {
-        run_sign_index(&args[1..]);
-    }
-    if args.len() > 1 && args[1] == "verify-index" {
-        run_verify_index(&args[1..]);
-    }
-    if args.len() > 1 && args[1] == "verify-package" {
-        run_verify_package(&args[1..]);
+    match cli.command {
+        Some(Cmd::Connect { agent }) => run_connect(&agent),
+        Some(Cmd::Sandbox { args }) => std::process::exit(core::sandbox::run_cli(&args)),
+        Some(Cmd::Rewrite { args }) => run_rewrite(&args),
+        Some(Cmd::Rules { args }) => std::process::exit(core::rules::run_cli(&args)),
+        Some(Cmd::Guard { args }) => std::process::exit(core::sandbox::run_guard_cli(&args)),
+        Some(Cmd::Automation { args }) => std::process::exit(core::automation::run_cli(&args)),
+        Some(Cmd::InstallCli { elevate }) => run_install_cli(elevate),
+        Some(Cmd::UninstallCli { elevate }) => run_uninstall_cli(elevate),
+        Some(Cmd::Keygen { args }) => run_keygen(&with_cmd("keygen", args)),
+        Some(Cmd::Pack { args }) => run_pack(&with_cmd("pack", args)),
+        Some(Cmd::Verify { args }) => run_verify(&with_cmd("verify", args)),
+        Some(Cmd::VerifyPackage { args }) => run_verify_package(&with_cmd("verify-package", args)),
+        Some(Cmd::SignIndex { args }) => run_sign_index(&with_cmd("sign-index", args)),
+        Some(Cmd::VerifyIndex { args }) => run_verify_index(&with_cmd("verify-index", args)),
+        None => {}
     }
 
     // Phase 46 — profile startup flow: migrate the old flat DB → read the active profile → open the corresponding store.
@@ -3557,6 +3675,18 @@ fn main() {
                             .and_then(|v| v.as_bool())
                             .unwrap_or(true);
                         set_bubble_visible(app_handle, next);
+                    }
+                    "install-cli" => {
+                        // the authorization dialog blocks — run it off the main thread, then rebuild
+                        // the menu so a successful install drops the item on the next signature check.
+                        let handle = app_handle.clone();
+                        std::thread::spawn(move || {
+                            match cli_install::install(true) {
+                                Ok(msg) => eprintln!("[tray] {msg}"),
+                                Err(e) => eprintln!("[tray] install-cli failed: {e}"),
+                            }
+                            let _ = refresh_tray_menu(&handle);
+                        });
                     }
                     "open-settings" => show_settings(app_handle),
                     "quit" => app_handle.exit(0),
@@ -3752,6 +3882,9 @@ fn main() {
             disable_kill_switch,
             get_kill_switch_state,
             get_safe_mode_state,
+            cli_command_status,
+            cli_command_install,
+            cli_command_uninstall,
             get_plugin_metrics,
             get_plugin_metrics_history,
             get_metrics_config,

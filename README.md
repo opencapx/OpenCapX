@@ -117,7 +117,7 @@ Build from source, the prerequisites, and the live development window are in [IN
 
 ### Connect your agent
 
-One command wires the agent's hooks and MCP server entry (idempotent, no credentials land in the agent's config — the token flow is handled between `opencapx mcp` and the core at startup):
+One command wires the agent's hooks and MCP server entry (idempotent, no credentials land in the agent's config — the token flow is handled between `opencapx mcp` and the core at startup). Install the CLI first if `opencapx` is not on your `PATH` — **Settings → General → Command line** ([INSTALL.md](INSTALL.md#the-opencapx-command)):
 
 ```bash
 opencapx connect claude   # or: codex | opencode | omp

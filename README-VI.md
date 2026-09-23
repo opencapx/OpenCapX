@@ -38,7 +38,7 @@ Claude Code, Codex và OpenCode đã biết cách viết code. Nhưng chúng kh�
 
 **Bề mặt agent**
 - **Cổng MCP**: sáu công cụ (`say`, `notify`, `set_state`, `ask`, `list_capabilities`, `execute`) cùng các đăng ký sự kiện, để bất kỳ MCP host nào cũng có thể điều khiển desktop.
-- **Kết nối bằng một lệnh**: `opencapx connect claude|codex|opencode` nối các hook và mục MCP của agent, theo cách idempotent.
+- **Kết nối bằng một lệnh**: `opencapx connect claude|codex|opencode|omp` nối các hook và mục MCP của agent, theo cách idempotent.
 - **Thông báo**: toast của hệ điều hành khi agent hoàn tất hoặc chờ nhập liệu, được tập hợp trong Trung tâm thông báo.
 
 **Plugin**
@@ -116,10 +116,10 @@ Cách build từ mã nguồn, các yêu cầu tiên quyết, và cửa sổ phá
 
 ### Kết nối agent của bạn
 
-Một lệnh duy nhất thiết lập hooks và mục MCP server của agent (idempotent, không có thông tin xác thực nào lọt vào cấu hình của agent; luồng token được xử lý giữa `opencapx mcp` và lõi lúc khởi động):
+Một lệnh duy nhất thiết lập hooks và mục MCP server của agent (idempotent, không có thông tin xác thực nào lọt vào cấu hình của agent; luồng token được xử lý giữa `opencapx mcp` và lõi lúc khởi động). Nếu `opencapx` chưa có trên `PATH`, hãy cài trước từ **Settings → General → Command line** ([INSTALL.md](INSTALL.md#the-opencapx-command)):
 
 ```bash
-opencapx connect claude   # or: codex | opencode
+opencapx connect claude   # or: codex | opencode | omp
 ```
 
 Khởi động lại agent, sau đó yêu cầu nó gọi `opencapx.list_capabilities` để kiểm tra. Các dạng cấu hình thủ công cho từng host nằm trong [docs/mcp.md](docs/mcp.md).

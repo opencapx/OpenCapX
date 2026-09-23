@@ -279,7 +279,9 @@ itself via TOFU at startup, and the host configuration contains no credentials. 
 copy of the running binary — never at the binary's current location. A dev checkout that
 moves or gets `cargo clean`ed, or an app reinstall, therefore never leaves agents firing a
 dead path: the shim is refreshed at app start, at `connect`, and on every hook invocation,
-and any config still referencing an older binary path is rewritten in place.
+and any config still referencing an older binary path is rewritten in place. To use
+`opencapx` yourself from a terminal, install the same shim into `PATH` once — `opencapx
+install-cli`, or **Settings → General → Command line** (see [INSTALL.md](../INSTALL.md#the-opencapx-command)).
 
 Claude Code (`mcpServers` in `~/.claude.json`, or a project `.mcp.json`):
 
