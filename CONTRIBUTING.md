@@ -55,7 +55,8 @@ pass is a change of its own.
 ## Commit style
 
 [Conventional Commits](https://www.conventionalcommits.org) — enforced by the `commit-msg` lefthook
-(`scripts/check-commit-msg.mjs`); the hook rejects the commit with the expected shape on failure.
+(`pnpm exec commitlint --edit`, rules in `commitlint.config.mjs`); a rejected commit prints the
+failing rule.
 
 ```text
 feat(bubble): add a focus mode that promotes the most urgent session
@@ -77,7 +78,11 @@ Rules:
 - One logical change per commit. Do not mix a refactor with a behavior change.
 - Use the body to explain why, not what. Focus on the constraint or failure the change addresses.
 - Keep the diff focused. Revert unrelated formatting churn.
-- Merge and auto-revert commits are exempt (git writes those subjects, not the author).
+- Merge commits, reverts, and rebase fixups are exempt — commitlint's default ignore list, which
+  recognizes the subjects git and the hosting platform write: `Merge branch …`, `Merge … into …`,
+  `Merge pull request …`, `Merge remote-tracking branch …`, `Merged PR …`, `Automatic merge`,
+  `Revert …`, `fixup!`/`squash!`/`amend!`. A hand-written `Merge …` subject matching none of those
+  shapes is rejected.
 
 History note: commits before this rule (and the v0.1.1 tag) predate it and were not rewritten.
 
