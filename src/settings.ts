@@ -442,12 +442,15 @@ function render(): void {
   }
 
   if (tab === "general") {
-    const obCard = !settings.onboarded
-      ? `<div class="settings-list"><div class="setting-row vertical"><span class="setting-label">${esc(t("obTitle"))}</span><span class="setting-hint">${esc(t("ob1"))}</span><span class="setting-hint">${esc(t("ob2"))}</span><span class="setting-hint">${esc(t("ob3"))}</span><div><button class="btn" id="ob-done" type="button">${esc(t("obDone"))}</button></div></div></div>`
-      : "";
-    body.innerHTML = obCard +
-      group("sessions", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("sessionsHint"))}</span><div id="session-list"></div><div><button class="btn ghost" id="clear" type="button">${esc(t("clearAll"))}</button></div></div>`) +
+    // The welcome card used to clear this flag; keep clearing it here so the first-run auto-open (overlay.ts) stays one-time
+    if (!settings.onboarded) {
+      settings = { ...settings, onboarded: true };
+      void save();
+    }
+    body.innerHTML =
+      `<div class="settings-list"><div class="about-card"><div class="logo">${ICON_PET}</div><div><b>OpenCapX</b></div><div class="ver">${esc(t("version"))} ${esc(appVersion)}</div><p>${esc(t("aboutText"))}</p></div></div>` +
       group("agents", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("agentsHint"))}</span><div id="agent-list"></div></div>`) +
+      group("sessions", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("sessionsHint"))}</span><div id="session-list"></div><div><button class="btn ghost" id="clear" type="button">${esc(t("clearAll"))}</button></div></div>`) +
       group("sounds",
         row("soundDone", "soundDoneHint", toggle("soundDone", isSoundEnabled("done"))) +
         row("soundWaiting", "soundWaitingHint", toggle("soundWaiting", isSoundEnabled("waiting"))) +
@@ -466,16 +469,11 @@ function render(): void {
         row("breakReminder", "breakReminderHint", toggle("breakEnabled", settings.breakEnabled)) +
         row("breakMinutes", null, `<input type="number" id="bmins" min="5" max="480" value="${settings.breakMinutes}" />`) +
         row("sessionContext", "sessionContextHint", toggle("sessionContextInject", settings.sessionContextInject !== false)) +
-        row("channelDefault", "channelDefaultHint", `<select id="default-channel"><option value="stable">${esc(t("channelStable"))}</option><option value="beta">${esc(t("channelBeta"))}</option><option value="dev">${esc(t("channelDev"))}</option></select><span class="setting-hint" id="channel-msg"></span>`) +
+        row("channelDefault", "channelDefaultHint", `<select id="default-channel"><option value="stable">${esc(t("channelStable"))}</option><option value="beta">${esc(t("channelBeta"))}</option><option value="dev">${esc(t("channelDev"))}</option></select><span class="setting-hint" id="channel-msg"></span>`)) +
       group("killSwitch", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("killSwitchHint"))}</span><div class="ks-status" id="ks-status"></div><div class="ks-controls"><input type="text" id="ks-reason" placeholder="${esc(t("killSwitchReasonPlaceholder"))}" maxlength="120"/><button class="btn danger" id="ks-enable" type="button">${esc(t("killSwitchEnable"))}</button><button class="btn ghost" id="ks-disable" type="button">${esc(t("killSwitchDisable"))}</button></div></div>`) +
-      group("safeMode", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("safeModeHint"))}</span><div class="ks-status" id="sm-status"></div></div>`) +
-      `<div class="settings-list"><div class="about-card"><div class="logo">${ICON_PET}</div><div><b>OpenCapX</b></div><div class="ver">${esc(t("version"))} ${esc(appVersion)}</div><p>${esc(t("aboutText"))}</p></div></div>`);
+      group("safeMode", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("safeModeHint"))}</span><div class="ks-status" id="sm-status"></div></div>`);
     paintSessions();
     void refreshAgents();
-    document.getElementById("ob-done")?.addEventListener("click", () => {
-      settings = { ...settings, onboarded: true };
-      void save().then(() => render());
-    });
     document.getElementById("clear")?.addEventListener("click", async () => {
       await invoke("clear_sessions");
       await refreshSessions();
