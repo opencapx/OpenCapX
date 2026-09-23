@@ -13,6 +13,7 @@ mod cli_install;
 use clap::Parser;
 use core::agent::{session_to_dto, SessionDto, SessionSink};
 use core::storage::{self, SharedStore};
+use std::path::PathBuf;
 
 fn now_secs() -> u64 {
     std::time::SystemTime::now()
@@ -3056,14 +3057,9 @@ fn combined_rewrite(cmd: &str, set: &core::rules::RuleSet) -> core::rules::Rewri
 /// `opencapx rewrite <command...>`: map a single command to its rule-rewritten form.
 /// Match → print to stdout + `exit 0`; no match → `exit 1` (no output).
 /// **Pure computation, does not execute the command** — execution is the caller's (agent's) responsibility.
-fn run_rewrite(args: &[String]) -> ! {
-    if args.is_empty() {
-        eprintln!("usage: opencapx rewrite <command...>");
-        std::process::exit(2);
-    }
-    let cmd = args.join(" ");
+fn run_rewrite(cmd: &str) -> ! {
     let set = core::rules::load(std::env::current_dir().ok().as_deref());
-    match combined_rewrite(&cmd, &set) {
+    match combined_rewrite(cmd, &set) {
         core::rules::RewriteOutcome::Rewritten { command, .. } => {
             println!("{command}");
             std::process::exit(0);
@@ -3113,33 +3109,6 @@ fn run_wrap(args: &[String]) -> ! {
 // human explanations and errors always go to stderr to avoid polluting the pipe; keygen is interactive and appends one
 // suggested trusted-keys entry after the JSON line (same stdout, easy for authors to copy).
 
-/// Print usage of the signing toolchain subcommands.
-fn signing_usage() {
-    eprintln!("OpenCapX signing CLI");
-    signing_lines();
-}
-
-/// The signing block, shared by `--help` and each signing subcommand's bad-input fallback.
-fn signing_lines() {
-    eprintln!("  opencapx keygen [--out <path.hex>]");
-    eprintln!("  opencapx pack <plugin-dir> --key <seed-hex|@file> --key-id <id> [--out <file.ocplugin>]");
-    eprintln!("  opencapx verify <file> [--trusted-keys <path>]");
-    eprintln!("  opencapx verify-package <file.ocplugin> [--keys <trusted-keys.json>] [--index <index.json>]");
-    eprintln!("  opencapx sign-index <unsigned.json> --key <seed-hex|@file> --key-id <id> [--out <index.json>]");
-    eprintln!("  opencapx verify-index <index.json>");
-}
-
-/// Get an optional `--flag value` argument value (None if absent; no cross-argument disambiguation).
-fn signing_opt(args: &[String], name: &str) -> Option<String> {
-    let mut it = args.iter();
-    while let Some(a) = it.next() {
-        if a == name {
-            return it.next().cloned();
-        }
-    }
-    None
-}
-
 fn hex_encode_lower(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
@@ -3163,13 +3132,8 @@ fn read_seed_arg(arg: &str) -> Result<[u8; 32], String> {
     Ok(seed)
 }
 
-fn run_keygen(args: &[String]) -> ! {
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        signing_usage();
-        std::process::exit(0);
-    }
-    let out = signing_opt(args, "--out").unwrap_or_else(|| "opencapx-signing.key.hex".to_string());
-    let out_path = std::path::PathBuf::from(&out);
+fn run_keygen(out: &str) -> ! {
+    let out_path = PathBuf::from(out);
     // WHY: the seed is the identity root; silently overwriting it would permanently lose the mapping between the old private key and published signed packages;
     // better to error and make the author explicitly rename/delete than to overwrite destructively.
     if out_path.exists() {
@@ -3196,24 +3160,7 @@ fn run_keygen(args: &[String]) -> ! {
     std::process::exit(0);
 }
 
-fn run_pack(args: &[String]) -> ! {
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        signing_usage();
-        std::process::exit(0);
-    }
-    let Some(dir_arg) = args.get(1).filter(|d| !d.starts_with("--")) else {
-        signing_usage();
-        std::process::exit(1);
-    };
-    let Some(key_arg) = signing_opt(args, "--key") else {
-        eprintln!("pack: missing --key <seed-hex|@file>");
-        std::process::exit(1);
-    };
-    let Some(key_id) = signing_opt(args, "--key-id") else {
-        eprintln!("pack: missing --key-id <id>");
-        std::process::exit(1);
-    };
-    let dir = std::path::Path::new(dir_arg);
+fn run_pack(dir: &std::path::Path, key_arg: &str, key_id: &str, out: Option<&str>) -> ! {
     let manifest_path = dir.join("opencapx-plugin.json");
     let manifest_text = match std::fs::read_to_string(&manifest_path) {
         Ok(t) => t,
@@ -3244,7 +3191,7 @@ fn run_pack(args: &[String]) -> ! {
         .and_then(|v| v.as_str())
         .unwrap_or("0.0.0")
         .to_string();
-    let out = signing_opt(args, "--out").unwrap_or_else(|| format!("{}-{}.ocplugin", id, version));
+    let out = out.map(str::to_string).unwrap_or_else(|| format!("{}-{}.ocplugin", id, version));
 
     let seed = match read_seed_arg(&key_arg) {
         Ok(s) => s,
@@ -3268,16 +3215,8 @@ fn run_pack(args: &[String]) -> ! {
     }
 }
 
-fn run_verify(args: &[String]) -> ! {
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        signing_usage();
-        std::process::exit(0);
-    }
-    let Some(file) = args.get(1).filter(|d| !d.starts_with("--")) else {
-        signing_usage();
-        std::process::exit(1);
-    };
-    if let Some(tk) = signing_opt(args, "--trusted-keys") {
+fn run_verify(file: &str, trusted_keys: Option<&str>) -> ! {
+    if let Some(tk) = trusted_keys {
         std::env::set_var("OPENCAPX_TRUSTED_KEYS", tk);
     }
     let path = std::path::Path::new(file);
@@ -3327,23 +3266,7 @@ fn run_verify(args: &[String]) -> ! {
 
 /// M3 — sign the registry index with the official signer: inject/overwrite `indexSignature`.
 /// Default output = index.json in the same directory as the input (hosting convention).
-fn run_sign_index(args: &[String]) -> ! {
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        signing_usage();
-        std::process::exit(0);
-    }
-    let Some(input) = args.get(1).filter(|d| !d.starts_with("--")) else {
-        signing_usage();
-        std::process::exit(1);
-    };
-    let Some(key_arg) = signing_opt(args, "--key") else {
-        eprintln!("sign-index: missing --key <seed-hex|@file>");
-        std::process::exit(1);
-    };
-    let Some(key_id) = signing_opt(args, "--key-id") else {
-        eprintln!("sign-index: missing --key-id <id>");
-        std::process::exit(1);
-    };
+fn run_sign_index(input: &str, key_arg: &str, key_id: &str, out: Option<&str>) -> ! {
     let seed = match read_seed_arg(&key_arg) {
         Ok(s) => s,
         Err(e) => {
@@ -3365,7 +3288,7 @@ fn run_sign_index(args: &[String]) -> ! {
             std::process::exit(1);
         }
     };
-    let out = signing_opt(args, "--out").unwrap_or_else(|| {
+    let out = out.map(str::to_string).unwrap_or_else(|| {
         std::path::Path::new(input)
             .with_file_name("index.json")
             .display()
@@ -3381,16 +3304,8 @@ fn run_sign_index(args: &[String]) -> ! {
 
 /// M3 — verify the registry index: official public keys = source constants ∪ `OPENCAPX_REGISTRY_OFFICIAL_KEYS`.
 /// M6 — F10 automated gate (registry CI / local pre-run): full verification + JSON report + exit code.
-fn run_verify_package(args: &[String]) -> ! {
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        signing_usage();
-        std::process::exit(0);
-    }
-    let Some(file) = args.get(1).filter(|d| !d.starts_with("--")) else {
-        signing_usage();
-        std::process::exit(1);
-    };
-    let keys_path = signing_opt(args, "--keys")
+fn run_verify_package(file: &str, keys: Option<&str>, index: Option<&str>) -> ! {
+    let keys_path = keys
         .map(std::path::PathBuf::from)
         .unwrap_or_else(core::plugin_sig::trusted_keys_path);
     let keys = core::plugin_sig::load_trusted_keys_from(&keys_path);
@@ -3400,7 +3315,7 @@ fn run_verify_package(args: &[String]) -> ! {
             keys_path.display()
         );
     }
-    let index = match signing_opt(args, "--index") {
+    let index = match index {
         Some(p) => {
             let raw = match std::fs::read(&p) {
                 Ok(b) => b,
@@ -3439,15 +3354,7 @@ fn run_verify_package(args: &[String]) -> ! {
     std::process::exit(if report.ok { 0 } else { 1 });
 }
 
-fn run_verify_index(args: &[String]) -> ! {
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        signing_usage();
-        std::process::exit(0);
-    }
-    let Some(input) = args.get(1).filter(|d| !d.starts_with("--")) else {
-        signing_usage();
-        std::process::exit(1);
-    };
+fn run_verify_index(input: &str) -> ! {
     let raw = match std::fs::read(input) {
         Ok(b) => b,
         Err(e) => {
@@ -3502,8 +3409,10 @@ enum Cmd {
     #[command(disable_help_flag = true)]
     Sandbox { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
     /// Print the rewritten form of a command (does not execute it)
-    #[command(disable_help_flag = true)]
-    Rewrite { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    Rewrite {
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
     /// Command rules: list / explain / trust / untrust
     #[command(disable_help_flag = true)]
     Rules { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
@@ -3526,29 +3435,63 @@ enum Cmd {
         elevate: bool,
     },
     /// Generate a plugin signing key
-    #[command(disable_help_flag = true)]
-    Keygen { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    Keygen {
+        /// Output path for the seed file
+        #[arg(long, default_value = "opencapx-signing.key.hex")]
+        out: String,
+    },
     /// Package and sign a plugin directory
-    #[command(disable_help_flag = true)]
-    Pack { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    Pack {
+        /// Plugin directory to package
+        dir: PathBuf,
+        /// Signing seed: 64 hex chars, or @path to a file containing hex
+        #[arg(long, value_name = "SEED|@FILE")]
+        key: String,
+        /// Publisher key id (goes into the signature)
+        #[arg(long)]
+        key_id: String,
+        /// Output path (default: <id>-<version>.ocplugin)
+        #[arg(long)]
+        out: Option<String>,
+    },
     /// Verify a signed plugin file
-    #[command(disable_help_flag = true)]
-    Verify { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    Verify {
+        /// The signed plugin file (.ocplugin)
+        file: String,
+        /// trusted-keys.json to verify against (default: the installed one)
+        #[arg(long)]
+        trusted_keys: Option<String>,
+    },
     /// Verify a packed `.ocplugin` against trusted keys / the registry index
-    #[command(disable_help_flag = true)]
-    VerifyPackage { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    VerifyPackage {
+        /// The packed .ocplugin to verify
+        file: String,
+        /// trusted-keys.json (default: the installed one)
+        #[arg(long)]
+        keys: Option<String>,
+        /// Registry index to consult
+        #[arg(long)]
+        index: Option<String>,
+    },
     /// Sign a plugin registry index
-    #[command(disable_help_flag = true)]
-    SignIndex { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
+    SignIndex {
+        /// Unsigned index JSON
+        input: String,
+        /// Signing seed: 64 hex chars, or @path to a file containing hex
+        #[arg(long, value_name = "SEED|@FILE")]
+        key: String,
+        /// Publisher key id (goes into the signature)
+        #[arg(long)]
+        key_id: String,
+        /// Output path (default: index.json next to the input)
+        #[arg(long)]
+        out: Option<String>,
+    },
     /// Verify a plugin registry index
-    #[command(disable_help_flag = true)]
-    VerifyIndex { #[arg(trailing_var_arg = true, allow_hyphen_values = true)] args: Vec<String> },
-}
-
-/// Rebuild the argv shape the signing entry points expect (`args[0]` = the command name).
-fn with_cmd(name: &str, mut tail: Vec<String>) -> Vec<String> {
-    tail.insert(0, name.to_string());
-    tail
+    VerifyIndex {
+        /// The index.json to verify
+        input: String,
+    },
 }
 
 fn main() {
@@ -3575,18 +3518,18 @@ fn main() {
     match cli.command {
         Some(Cmd::Connect { agent }) => run_connect(&agent),
         Some(Cmd::Sandbox { args }) => std::process::exit(core::sandbox::run_cli(&args)),
-        Some(Cmd::Rewrite { args }) => run_rewrite(&args),
+        Some(Cmd::Rewrite { command }) => run_rewrite(&command.join(" ")),
         Some(Cmd::Rules { args }) => std::process::exit(core::rules::run_cli(&args)),
         Some(Cmd::Guard { args }) => std::process::exit(core::sandbox::run_guard_cli(&args)),
         Some(Cmd::Automation { args }) => std::process::exit(core::automation::run_cli(&args)),
         Some(Cmd::InstallCli { elevate }) => run_install_cli(elevate),
         Some(Cmd::UninstallCli { elevate }) => run_uninstall_cli(elevate),
-        Some(Cmd::Keygen { args }) => run_keygen(&with_cmd("keygen", args)),
-        Some(Cmd::Pack { args }) => run_pack(&with_cmd("pack", args)),
-        Some(Cmd::Verify { args }) => run_verify(&with_cmd("verify", args)),
-        Some(Cmd::VerifyPackage { args }) => run_verify_package(&with_cmd("verify-package", args)),
-        Some(Cmd::SignIndex { args }) => run_sign_index(&with_cmd("sign-index", args)),
-        Some(Cmd::VerifyIndex { args }) => run_verify_index(&with_cmd("verify-index", args)),
+        Some(Cmd::Keygen { out }) => run_keygen(&out),
+        Some(Cmd::Pack { dir, key, key_id, out }) => run_pack(&dir, &key, &key_id, out.as_deref()),
+        Some(Cmd::Verify { file, trusted_keys }) => run_verify(&file, trusted_keys.as_deref()),
+        Some(Cmd::VerifyPackage { file, keys, index }) => run_verify_package(&file, keys.as_deref(), index.as_deref()),
+        Some(Cmd::SignIndex { input, key, key_id, out }) => run_sign_index(&input, &key, &key_id, out.as_deref()),
+        Some(Cmd::VerifyIndex { input }) => run_verify_index(&input),
         None => {}
     }
 

@@ -410,9 +410,41 @@ fn save_trusted(domains: &[String]) -> Result<(), String> {
 
 /// `opencapx guard trust|untrust|list|mode` — manage the trusted-domain table and the
 /// danger-guard stance.
+/// `opencapx guard` — clap owns the parsing and the generated help.
+#[derive(clap::Parser)]
+#[command(name = "opencapx guard", about = "Danger-guard installer domains: trust / untrust / list / mode / env")]
+struct GuardCli {
+    #[command(subcommand)]
+    cmd: GuardCmd,
+}
+
+#[derive(clap::Subcommand)]
+enum GuardCmd {
+    /// List the guard mode and the trusted domains
+    List,
+    /// Print or set the environment policy
+    Env {
+        #[arg(value_parser = ["strip", "keep", "clear"])]
+        policy: Option<String>,
+    },
+    /// Print or set the guard mode
+    Mode {
+        #[arg(value_parser = ["installer", "strict", "off"])]
+        mode: Option<String>,
+    },
+    /// Trust a download host (download-and-run from it passes through, audited)
+    Trust { domain: String },
+    /// Stop trusting a download host
+    Untrust { domain: String },
+}
+
 pub fn run_guard_cli(args: &[String]) -> i32 {
-    match args.first().map(String::as_str) {
-        Some("list") => {
+    let cli = match super::cli::parse::<GuardCli>("opencapx guard", args) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    match cli.cmd {
+        GuardCmd::List => {
             let g = load_guard_file();
             let s = resolve_guard_settings();
             println!(
@@ -430,17 +462,12 @@ pub fn run_guard_cli(args: &[String]) -> i32 {
             }
             0
         }
-        Some("env") => {
-            let Some(policy) = args.get(1) else {
+        GuardCmd::Env { policy } => {
+            let Some(policy) = policy else {
                 let s = resolve_guard_settings();
                 println!("guard env: {}", s.env);
-                eprintln!("usage: opencapx guard env <strip|keep|clear>");
                 return 0;
             };
-            if !matches!(policy.as_str(), "strip" | "keep" | "clear") {
-                eprintln!("guard env: expected strip|keep|clear, got {policy}");
-                return 2;
-            }
             let mut f = load_guard_file();
             f.env = Some(policy.clone());
             match save_guard_file(&f) {
@@ -454,20 +481,15 @@ pub fn run_guard_cli(args: &[String]) -> i32 {
                 }
             }
         }
-        Some("mode") => {
-            let Some(mode) = args.get(1) else {
+        GuardCmd::Mode { mode } => {
+            let Some(mode) = mode else {
                 let s = resolve_guard_settings();
                 println!(
                     "danger guard: {}",
                     if s.enabled { s.profile } else { "off" }
                 );
-                eprintln!("usage: opencapx guard mode <installer|strict|off>");
                 return 0;
             };
-            if !matches!(mode.as_str(), "installer" | "strict" | "off") {
-                eprintln!("guard mode: expected installer|strict|off, got {mode}");
-                return 2;
-            }
             let mut f = load_guard_file();
             f.danger_guard = Some(mode.clone());
             match save_guard_file(&f) {
@@ -481,11 +503,8 @@ pub fn run_guard_cli(args: &[String]) -> i32 {
                 }
             }
         }
-        Some("trust") => {
-            let Some(domain) = args.get(1).map(|d| d.trim().to_lowercase()) else {
-                eprintln!("usage: opencapx guard trust <domain>");
-                return 2;
-            };
+        GuardCmd::Trust { domain } => {
+            let domain = domain.trim().to_lowercase();
             if domain.is_empty() || domain.contains('/') || domain.contains(' ') {
                 eprintln!("guard trust: not a hostname: {domain}");
                 return 2;
@@ -507,11 +526,8 @@ pub fn run_guard_cli(args: &[String]) -> i32 {
                 }
             }
         }
-        Some("untrust") => {
-            let Some(domain) = args.get(1).map(|d| d.trim().to_lowercase()) else {
-                eprintln!("usage: opencapx guard untrust <domain>");
-                return 2;
-            };
+        GuardCmd::Untrust { domain } => {
+            let domain = domain.trim().to_lowercase();
             let mut domains = load_trusted();
             let before = domains.len();
             domains.retain(|d| d != &domain);
@@ -529,10 +545,6 @@ pub fn run_guard_cli(args: &[String]) -> i32 {
                     1
                 }
             }
-        }
-        _ => {
-            eprintln!("usage: opencapx guard <trust <domain>|untrust <domain>|mode <installer|strict|off>|env <strip|keep|clear>|list>");
-            2
         }
     }
 }
@@ -982,15 +994,68 @@ enum Backend {
 }
 
 /// Entry point (`opencapx sandbox ...`); returns the exit code for main() to forward.
+/// `opencapx sandbox` — clap owns the parsing and the generated help.
+#[derive(clap::Parser)]
+#[command(
+    name = "opencapx sandbox",
+    about = "Run a command behind the OS guard (macOS seatbelt / Linux bwrap; other platforms warn and run)"
+)]
+struct SandboxCli {
+    /// strict (default) = network denied, writes fenced to scratch; installer = network open + $HOME writable, minus the secrets/persistence deny list
+    #[arg(long, value_parser = ["strict", "installer"])]
+    profile: Option<String>,
+    /// Allow network access
+    #[arg(long)]
+    allow_net: bool,
+    /// Extra writable directory (repeatable)
+    #[arg(long = "rw", value_name = "DIR")]
+    rw: Vec<PathBuf>,
+    /// strip (default) drops secret-looking variables; clear keeps the bare minimum; keep passes everything through
+    #[arg(long, value_parser = ["strip", "keep", "clear"])]
+    env: Option<String>,
+    /// Timeout in seconds (kills the whole process group)
+    #[arg(long)]
+    timeout: Option<u64>,
+    /// Check the sandbox backend and exit
+    #[arg(long)]
+    check: bool,
+    /// Print the generated seatbelt profile (diagnostics) and exit
+    #[arg(long = "print-profile")]
+    print_profile: bool,
+    /// The command to run
+    #[arg(trailing_var_arg = true)]
+    command: Vec<String>,
+}
+
+fn parsed_from(cli: SandboxCli) -> Parsed {
+    Parsed {
+        profile: if cli.profile.as_deref() == Some("installer") {
+            Mode::Installer
+        } else {
+            Mode::Strict
+        },
+        policy: Policy {
+            allow_net: cli.allow_net,
+            rw: cli.rw,
+            env: match cli.env.as_deref() {
+                Some("keep") => EnvPolicy::Keep,
+                Some("clear") => EnvPolicy::Clear,
+                _ => EnvPolicy::Strip,
+            },
+        },
+        timeout_secs: cli.timeout,
+        check_only: cli.check,
+        print_profile: cli.print_profile,
+        command: cli.command,
+    }
+}
+
 pub fn run_cli(args: &[String]) -> i32 {
-    let parsed = match parse_args(args) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("opencapx sandbox: {e}");
-            usage();
-            return 2;
-        }
+    let cli = match super::cli::parse::<SandboxCli>("opencapx sandbox", args) {
+        Ok(c) => c,
+        Err(code) => return code,
     };
+    let parsed = parsed_from(cli);
     if parsed.check_only {
         return match backend() {
             #[cfg(target_os = "macos")]
@@ -1013,8 +1078,7 @@ pub fn run_cli(args: &[String]) -> i32 {
         return print_profile(&parsed);
     }
     if parsed.command.is_empty() {
-        eprintln!("opencapx sandbox: missing command");
-        usage();
+        eprintln!("opencapx sandbox: missing command (opencapx sandbox --help)");
         return 2;
     }
     let scratch = match make_scratch() {
@@ -1054,15 +1118,6 @@ pub fn run_cli(args: &[String]) -> i32 {
     code
 }
 
-fn usage() {
-    eprintln!("usage: opencapx sandbox [--profile strict|installer] [--allow-net] [--rw <dir>]... [--env keep|strip|clear] [--timeout <secs>] [--check] [--print-profile] -- <command...>");
-    eprintln!("  run a command behind the OS guard (macOS seatbelt / Linux bwrap; other platforms: warn + run)");
-    eprintln!("  profiles: strict = network denied, writes fenced to scratch (default);");
-    eprintln!("            installer = network open + $HOME writable, minus a secrets/persistence deny list");
-    eprintln!("  env: strip (default) drops secret-looking variables (TOKEN/SECRET/KEY/…); clear keeps only the");
-    eprintln!("       bare minimum; keep passes everything through");
-}
-
 /// `--print-profile`: show the generated seatbelt profile (diagnostics + review of the deny list).
 fn print_profile(parsed: &Parsed) -> i32 {
     #[cfg(target_os = "macos")]
@@ -1097,78 +1152,12 @@ fn print_profile(parsed: &Parsed) -> i32 {
 /// Flags are consumed until `--`; without `--`, the first token that is not a `--flag` starts
 /// the command (so `sandbox sh -c '...'` works, while a command literally starting with `-`
 /// still needs the explicit separator).
+/// Same parse as `run_cli`, error as text for tests (they assert is_err, not messages).
+#[cfg(test)]
 fn parse_args(args: &[String]) -> Result<Parsed, String> {
-    let mut policy = Policy {
-        allow_net: false,
-        rw: Vec::new(),
-        env: EnvPolicy::default(),
-    };
-    let mut profile = Mode::Strict;
-    let mut timeout_secs = None;
-    let mut check_only = false;
-    let mut print_profile = false;
-    let mut i = 0;
-    while i < args.len() {
-        let a = args[i].as_str();
-        if a == "--" {
-            i += 1;
-            break;
-        }
-        match a {
-            "--allow-net" => {
-                policy.allow_net = true;
-                i += 1;
-            }
-            "--check" => {
-                check_only = true;
-                i += 1;
-            }
-            "--print-profile" => {
-                print_profile = true;
-                i += 1;
-            }
-            "--profile" => {
-                let v = args.get(i + 1).ok_or("--profile requires strict|installer")?;
-                profile = match v.as_str() {
-                    "strict" => Mode::Strict,
-                    "installer" => Mode::Installer,
-                    other => return Err(format!("unknown --profile value: {other}")),
-                };
-                i += 2;
-            }
-            "--env" => {
-                let v = args.get(i + 1).ok_or("--env requires keep|strip|clear")?;
-                policy.env = match v.as_str() {
-                    "keep" => EnvPolicy::Keep,
-                    "strip" => EnvPolicy::Strip,
-                    "clear" => EnvPolicy::Clear,
-                    other => return Err(format!("unknown --env value: {other}")),
-                };
-                i += 2;
-            }
-            "--rw" => {
-                let d = args.get(i + 1).ok_or("--rw requires a directory")?;
-                policy.rw.push(PathBuf::from(d));
-                i += 2;
-            }
-            "--timeout" => {
-                let v = args.get(i + 1).ok_or("--timeout requires seconds")?;
-                timeout_secs =
-                    Some(v.parse::<u64>().map_err(|_| format!("bad --timeout value: {v}"))?);
-                i += 2;
-            }
-            s if s.starts_with("--") => return Err(format!("unknown option: {s}")),
-            _ => break,
-        }
-    }
-    Ok(Parsed {
-        policy,
-        profile,
-        timeout_secs,
-        check_only,
-        print_profile,
-        command: args[i..].to_vec(),
-    })
+    super::cli::parse::<SandboxCli>("opencapx sandbox", args)
+        .map(parsed_from)
+        .map_err(|code| format!("clap exit code {code}"))
 }
 
 fn backend() -> Backend {

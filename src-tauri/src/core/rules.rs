@@ -345,9 +345,36 @@ pub fn rewrite_command(cmd: &str, stage: Stage, set: &RuleSet) -> RewriteOutcome
 
 /// CLI entry for `opencapx rules <list|explain|trust|untrust>`, returns the process exit code.
 /// `explain` is a **dry-run**: it only prints the match chain and the resulting command; it does not execute or output hook JSON.
+/// `opencapx rules` — clap owns the parsing and the generated help.
+#[derive(clap::Parser)]
+#[command(name = "opencapx rules", about = "Command rules: list, explain, trust and untrust rule files")]
+struct RulesCli {
+    #[command(subcommand)]
+    cmd: RulesCmd,
+}
+
+#[derive(clap::Subcommand)]
+enum RulesCmd {
+    /// List the effective rules (global + project + built-in)
+    List,
+    /// Print the rewritten form of a command (does not execute it)
+    Explain {
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
+    /// Trust the project rule file at <path> (default: the current directory)
+    Trust { path: Option<PathBuf> },
+    /// Stop trusting the project rule file at <path> (default: the current directory)
+    Untrust { path: Option<PathBuf> },
+}
+
 pub fn run_cli(args: &[String]) -> i32 {
-    match args.first().map(String::as_str) {
-        Some("list") => {
+    let cli = match super::cli::parse::<RulesCli>("opencapx rules", args) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    match cli.cmd {
+        RulesCmd::List => {
             let set = load(std::env::current_dir().ok().as_deref());
             for e in &set.errors {
                 eprintln!("rule load error: {e}");
@@ -361,12 +388,8 @@ pub fn run_cli(args: &[String]) -> i32 {
             }
             0
         }
-        Some("explain") => {
-            if args.len() < 2 {
-                eprintln!("usage: opencapx rules explain <command...>");
-                return 2;
-            }
-            let cmd = args[1..].join(" ");
+        RulesCmd::Explain { command } => {
+            let cmd = command.join(" ");
             let set = load(std::env::current_dir().ok().as_deref());
             match rewrite_command(&cmd, Stage::ToolPre, &set) {
                 RewriteOutcome::Rewritten { rule_id, command } => {
@@ -379,33 +402,30 @@ pub fn run_cli(args: &[String]) -> i32 {
                 }
             }
         }
-        Some("trust") | Some("untrust") => {
-            let on = args.first().map(String::as_str) == Some("trust");
-            let dir = match args.get(1) {
-                Some(p) => PathBuf::from(p),
-                None => match std::env::current_dir() {
-                    Ok(d) => d,
-                    Err(e) => {
-                        eprintln!("cannot resolve cwd: {e}");
-                        return 1;
-                    }
-                },
-            };
-            let res = if on { trust(&dir) } else { untrust(&dir) };
-            match res {
-                Ok(()) => {
-                    println!("{} {}", if on { "trusted" } else { "untrusted" }, dir.display());
-                    0
-                }
-                Err(e) => {
-                    eprintln!("{e}");
-                    1
-                }
+        RulesCmd::Trust { path } => set_trust(true, path),
+        RulesCmd::Untrust { path } => set_trust(false, path),
+    }
+}
+
+fn set_trust(on: bool, path: Option<PathBuf>) -> i32 {
+    let dir = match path {
+        Some(p) => p,
+        None => match std::env::current_dir() {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("cannot resolve cwd: {e}");
+                return 1;
             }
+        },
+    };
+    match if on { trust(&dir) } else { untrust(&dir) } {
+        Ok(()) => {
+            println!("{} {}", if on { "trusted" } else { "untrusted" }, dir.display());
+            0
         }
-        _ => {
-            eprintln!("usage: opencapx rules <list|explain <command...>|trust [path]|untrust [path]>");
-            2
+        Err(e) => {
+            eprintln!("{e}");
+            1
         }
     }
 }
