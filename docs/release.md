@@ -8,14 +8,14 @@ From code freeze to a user being able to install: who does each step, in what or
 |---|---|---|
 | §1 Pre-release gate check | agent or owner | All items are script-verifiable |
 | §2 Keys and secrets in place | owner | Involves private keys and accounts; the agent does not handle them |
-| §3 Tagging | owner | Requires push permission |
+| §3 Version, changelog, tagging | owner | Requires push permission |
 | §4 Build and artifact verification | agent (watches CI) | Fix directly on failure |
 | §5 npm publish | automatic in CI (Trusted Publishing) | owner for first-time setup and exceptions |
 
 ## 1. Pre-release Gate (all mandatory)
 
 ```bash
-node scripts/bump-version.mjs --check          # the three version locations agree; currently 0.1.0
+node scripts/bump-version.mjs --check          # the four version locations agree
 cd src-tauri && cargo test --bin opencapx && cargo clippy --all-targets; cd ..
 npx tsc --noEmit && npm run i18n:check
 cd packages/ts-sdk && npm test; cd ../..
@@ -34,11 +34,17 @@ Plus remote CI (`ci.yml`: rust / frontend / python / ts) all green. Local 970 pa
 
 Private key generation rules: `.gitignore` locks down `*.key.hex`; the seed never enters the repository. The air-gapped ceremony key (key-ceremony S1–S5) is reserved for future rotation; the current CI key is generated locally, the seed goes into a secret, and the local copy has 600 permissions.
 
-## 3. Tagging
+## 3. Version, Changelog, Tagging
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+node scripts/bump-version.mjs                  # derive from the commits since the last v* tag; writes the four version files
+# ... edit CHANGELOG.md by hand ...
+node scripts/bump-version.mjs --check          # the four version locations agree
+git commit -am "chore(release): 0.2.0"
+git tag v0.2.0 && git push origin v0.2.0
 ```
+
+The version is derived from the conventional commits since the last tag — `feat` → minor, `fix`/`perf`/`revert` → patch, and a `BREAKING CHANGE` footer → minor while the major is 0. The derivation anchors on the last tag, so re-running it before tagging derives the same version again. `--dry-run` previews without writing; `--notes` prints the commits the derivation saw. 1.0.0 is a deliberate call: pass an explicit version (`node scripts/bump-version.mjs 1.0.0`) when the time comes.
 
 The tag name is the version number (the `v` prefix is required; the `latest.json` verification step compares against it). Re-read the table in §2 before tagging.
 

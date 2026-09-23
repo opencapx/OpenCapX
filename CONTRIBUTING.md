@@ -34,7 +34,10 @@ Notes on the gate:
 - The two `install_grant_execute` end-to-end tests are `#[ignore]` by default because they spawn real plugin processes. They must run serially (`--test-threads=1`).
 - `pnpm run build` runs `i18n:check`, `tsc --noEmit`, and the Vite build in one step. `tsc --noEmit` alone is faster when you are iterating on the UI.
 - The i18n check enforces that every key exists in all three catalogs (`en`, `zh-Hans`, and `vi`). Add the translations with the code, not after.
-- `node scripts/bump-version.mjs --check` confirms the version is consistent across `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` before a release.
+- `node scripts/bump-version.mjs` derives the next version from the commits since the last `v*` tag
+  and writes the four version locations (`package.json`, `src-tauri/tauri.conf.json`,
+  `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`); `--check` verifies they agree. The release
+  sequence is in [docs/release.md](docs/release.md).
 
 If a database-backed test fails, suspect the environment before the code. There was a corrupt-workspace incident on 2026-09-18; re-check with a temporary directory fixture when that class of test goes red.
 
@@ -54,20 +57,37 @@ pass is a change of its own.
 
 ## Commit style
 
-Match the existing history: an imperative, single-line subject that says what the commit does.
+[Conventional Commits](https://www.conventionalcommits.org) — enforced by the `commit-msg` lefthook
+(`pnpm exec commitlint --edit`, rules in `commitlint.config.mjs`); a rejected commit prints the
+failing rule.
 
 ```text
-Add a JSON file store for hotkey bindings
-Fix safe-mode startup when the plugin dir is missing
-Document the list setting type for plugin authors
+feat(bubble): add a focus mode that promotes the most urgent session
+fix(tray): sync the Show Bubble check when the settings page writes bubbleEnabled
+docs(rules): document the danger guard's trust rule
+chore(release): 0.1.1
 ```
+
+Shape: `<type>[(scope)][!]: <description>`.
+
+- **type** — one of `build chore ci docs feat fix perf refactor revert style test`.
+- **scope** — optional, lowercase (`bubble`, `tray`, `rules`, `plugin`, `http`, `i18n`, …); use the
+  subsystem the change lives in. Omit it when the commit genuinely spans the tree (version bumps).
+- **`!`** — marks a breaking change; also add a `BREAKING CHANGE:` footer paragraph in the body.
+- **description** — imperative mood, lowercase, no trailing period, ≤ 100 chars.
 
 Rules:
 
 - One logical change per commit. Do not mix a refactor with a behavior change.
-- Subject line in the imperative mood, no trailing period, no `feat:` / `fix:` prefixes.
 - Use the body to explain why, not what. Focus on the constraint or failure the change addresses.
 - Keep the diff focused. Revert unrelated formatting churn.
+- Merge commits, reverts, and rebase fixups are exempt — commitlint's default ignore list, which
+  recognizes the subjects git and the hosting platform write: `Merge branch …`, `Merge … into …`,
+  `Merge pull request …`, `Merge remote-tracking branch …`, `Merged PR …`, `Automatic merge`,
+  `Revert …`, `fixup!`/`squash!`/`amend!`. A hand-written `Merge …` subject matching none of those
+  shapes is rejected.
+
+History note: commits before this rule (and the v0.1.1 tag) predate it and were not rewritten.
 
 ## Where plugins live
 

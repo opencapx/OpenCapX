@@ -3,9 +3,15 @@
 # The commands mirror the verification gate in CONTRIBUTING.md, scoped to what you staged:
 # Rust changes get clippy + the bin test suite, TypeScript changes get tsc, catalog changes get
 # i18n:check. pre-push runs the full five-set gate, serial end-to-end tests included.
+# commit-msg runs commitlint (Conventional Commits) — config in commitlint.config.mjs.
 #
 # One-commit bypass: `git commit --no-verify` / `git push --no-verify`. Use sparingly.
 # rustfmt is deliberately not here: the tree predates it; a dedicated formatting pass will add it.
+
+commit-msg:
+  commands:
+    conventional:
+      run: pnpm exec commitlint --edit {1}
 
 pre-commit:
   commands:
