@@ -25,7 +25,7 @@ const RULE_COOLDOWN: Duration = Duration::from_secs(5);
 
 /// Rules file `~/.opencapx/automation.json`.
 pub fn rules_path() -> PathBuf {
-    dirs::home_dir()
+    crate::core::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".opencapx")
         .join("automation.json")

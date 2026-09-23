@@ -25,7 +25,7 @@ pub fn logs_root() -> PathBuf {
     if let Ok(dir) = std::env::var("OPENCAPX_LOGS_DIR") {
         return PathBuf::from(dir);
     }
-    dirs::home_dir()
+    crate::core::home_dir()
         .map(|h| h.join(".opencapx").join("logs").join("plugins"))
         .unwrap_or_else(|| std::env::temp_dir().join("opencapx-plugin-logs"))
 }
@@ -41,7 +41,7 @@ pub fn crash_log_path() -> PathBuf {
     if let Ok(p) = std::env::var("OPENCAPX_CRASH_LOG") {
         return PathBuf::from(p);
     }
-    dirs::home_dir()
+    crate::core::home_dir()
         .map(|h| h.join(".opencapx").join("logs").join("crash.log"))
         .unwrap_or_else(|| std::env::temp_dir().join("opencapx-crash.log"))
 }

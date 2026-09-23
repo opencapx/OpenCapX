@@ -46,7 +46,7 @@ struct ProfileEntry {
 
 /// Full path of `~/.opencapx/profiles.json`.
 pub fn profiles_file() -> PathBuf {
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = crate::core::home_dir() {
         return home.join(".opencapx").join("profiles.json");
     }
     std::env::temp_dir().join("opencapx-profiles.json")
@@ -54,7 +54,7 @@ pub fn profiles_file() -> PathBuf {
 
 /// `~/.opencapx/workspaces/<name>/`.
 pub fn workspace_dir(name: &str) -> PathBuf {
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = crate::core::home_dir() {
         return home.join(".opencapx").join("workspaces").join(name);
     }
     std::env::temp_dir().join("opencapx-workspaces").join(name)
@@ -67,7 +67,7 @@ pub fn db_path_for(name: &str) -> PathBuf {
 
 /// `~/.opencapx/workspaces/`.
 pub fn profiles_root() -> PathBuf {
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = crate::core::home_dir() {
         return home.join(".opencapx").join("workspaces");
     }
     std::env::temp_dir().join("opencapx-workspaces")
@@ -426,7 +426,7 @@ pub fn dismiss_db_recovery_notice() -> Result<(), String> {
 }
 
 fn recovery_notice_path() -> PathBuf {
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = crate::core::home_dir() {
         return home.join(".opencapx").join("db-recovery.json");
     }
     std::env::temp_dir().join("opencapx-db-recovery.json")
@@ -466,9 +466,29 @@ mod tests {
         dir
     }
 
-    fn set_home(home: &Path) {
+    /// Sets the isolated home env and restores it on drop, so a panicking or early-returning
+    /// test cannot leak OPENCAPX_HOME into concurrently running modules' tests.
+    struct HomeGuard(std::ffi::OsString);
+
+    impl Drop for HomeGuard {
+        fn drop(&mut self) {
+            std::env::set_var("OPENCAPX_HOME", &self.0);
+            std::env::set_var("HOME", &self.0);
+            std::env::set_var("USERPROFILE", &self.0);
+        }
+    }
+
+    fn set_home(home: &Path) -> HomeGuard {
+        // OPENCAPX_HOME is the cross-platform override; on Windows neither HOME nor
+        // USERPROFILE reaches dirs::home_dir() (Known Folder API), which used to make
+        // these tests share the real home and leak state into each other.
+        let guard = HomeGuard(
+            std::env::var_os("OPENCAPX_HOME").unwrap_or_default(),
+        );
+        std::env::set_var("OPENCAPX_HOME", home);
         std::env::set_var("HOME", home);
-        std::env::set_var("USERPROFILE", home); // Windows fallback (this repo is mainly unix)
+        std::env::set_var("USERPROFILE", home);
+        guard
     }
 
     /// Corrupt db: the bad file (including -wal/-shm) is renamed into quarantine, a
@@ -478,7 +498,7 @@ mod tests {
     fn corrupt_db_is_quarantined_not_silently_dropped() {
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = fresh_home();
-        set_home(&home);
+        let _home = set_home(&home);
         let path = db_path_for(DEFAULT_PROFILE);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         // First create a real db, then smash it into garbage bytes (simulating an interrupted write)
@@ -528,7 +548,7 @@ mod tests {
     fn healthy_db_opens_without_quarantine() {
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let home = fresh_home();
-        set_home(&home);
+        let _home = set_home(&home);
         let path = db_path_for(DEFAULT_PROFILE);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         {
@@ -584,7 +604,7 @@ mod tests {
     fn workspace_dir_returns_correct_path() {
         let home = fresh_home();
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        set_home(&home);
+        let _home = set_home(&home);
         let p = workspace_dir("work");
         assert!(p.ends_with(".opencapx/workspaces/work") || p.to_string_lossy().contains("work"));
     }
@@ -593,7 +613,7 @@ mod tests {
     fn profiles_file_lives_under_home() {
         let home = fresh_home();
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        set_home(&home);
+        let _home = set_home(&home);
         let f = profiles_file();
         assert!(f.starts_with(&home) || f.to_string_lossy().contains("opencapx"));
     }
@@ -602,7 +622,7 @@ mod tests {
     fn read_profiles_file_default_when_missing() {
         let home = fresh_home();
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        set_home(&home);
+        let _home = set_home(&home);
         let pf = read_profiles_file();
         assert_eq!(pf.active, DEFAULT_PROFILE);
         assert_eq!(pf.profiles.len(), 1);
@@ -613,7 +633,7 @@ mod tests {
     fn active_profile_name_defaults_when_missing() {
         let home = fresh_home();
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        set_home(&home);
+        let _home = set_home(&home);
         assert_eq!(active_profile_name(), DEFAULT_PROFILE);
     }
 
@@ -621,7 +641,7 @@ mod tests {
     fn set_active_profile_persists_and_loads_back() {
         let home = fresh_home();
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        set_home(&home);
+        let _home = set_home(&home);
         create_profile("work").unwrap();
         set_active_profile("work").unwrap();
         assert_eq!(active_profile_name(), "work");
@@ -632,7 +652,7 @@ mod tests {
     fn create_profile_initializes_db_and_lists() {
         let home = fresh_home();
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        set_home(&home);
+        let _home = set_home(&home);
         let info = create_profile("alpha").unwrap();
         assert_eq!(info.name, "alpha");
         assert!(db_path_for("alpha").exists());
@@ -644,7 +664,7 @@ mod tests {
     fn create_profile_rejects_duplicate() {
         let home = fresh_home();
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        set_home(&home);
+        let _home = set_home(&home);
         create_profile("beta").unwrap();
         assert!(create_profile("beta").is_err());
     }
@@ -653,7 +673,7 @@ mod tests {
     fn delete_profile_removes_dir_and_json_entry() {
         let home = fresh_home();
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        set_home(&home);
+        let _home = set_home(&home);
         create_profile("gamma").unwrap();
         assert!(workspace_dir("gamma").exists());
         delete_profile("gamma").unwrap();
@@ -665,7 +685,7 @@ mod tests {
     fn delete_profile_rejects_default() {
         let home = fresh_home();
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        set_home(&home);
+        let _home = set_home(&home);
         assert!(delete_profile(DEFAULT_PROFILE).is_err());
     }
 
@@ -673,7 +693,7 @@ mod tests {
     fn delete_profile_rejects_active() {
         let home = fresh_home();
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        set_home(&home);
+        let _home = set_home(&home);
         create_profile("delta").unwrap();
         set_active_profile("delta").unwrap();
         assert!(delete_profile("delta").is_err());
@@ -683,7 +703,7 @@ mod tests {
     fn delete_profile_rejects_last_remaining() {
         let home = fresh_home();
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        set_home(&home);
+        let _home = set_home(&home);
         // The only profile is default → deletion is not allowed
         assert!(delete_profile(DEFAULT_PROFILE).is_err());
     }
@@ -692,7 +712,7 @@ mod tests {
     fn ensure_default_profile_migrated_is_idempotent() {
         let home = fresh_home();
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        set_home(&home);
+        let _home = set_home(&home);
         // No legacy DB → just ensure, no panic
         assert!(ensure_default_profile_migrated().is_ok());
         // A second call does not panic either
@@ -703,7 +723,7 @@ mod tests {
     fn list_profiles_returns_all_with_zero_count() {
         let home = fresh_home();
         let _g = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        set_home(&home);
+        let _home = set_home(&home);
         create_profile("epsilon").unwrap();
         let list = list_profiles();
         let names: HashSet<String> = list.iter().map(|p| p.name.clone()).collect();

@@ -37,7 +37,7 @@ fn replay_dir() -> PathBuf {
     if let Ok(p) = std::env::var("OPENCAPX_REPLAY_DIR") {
         return PathBuf::from(p);
     }
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = crate::core::home_dir() {
         return home.join(".opencapx").join("replay");
     }
     std::env::temp_dir().join("opencapx-replay")

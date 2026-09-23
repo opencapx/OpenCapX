@@ -45,7 +45,7 @@ pub fn traces_root() -> PathBuf {
     if let Ok(dir) = std::env::var("OPENCAPX_TRACES_DIR") {
         return PathBuf::from(dir);
     }
-    dirs::home_dir()
+    crate::core::home_dir()
         .map(|h| h.join(".opencapx").join("traces"))
         .unwrap_or_else(|| std::env::temp_dir().join("opencapx-traces"))
 }

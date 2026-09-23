@@ -1835,7 +1835,7 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
         if let Ok(dir) = std::env::var("OPENCAPX_PLUGINS_DIR") {
             return PathBuf::from(dir);
         }
-        dirs::home_dir()
+        crate::core::home_dir()
             .map(|h| h.join(".opencapx").join("plugins"))
             .unwrap_or_else(|| std::env::temp_dir().join("opencapx-plugins"))
     }

@@ -60,7 +60,7 @@ fn parse_head(text: &str) -> Option<String> {
 
 /// Short path: last two segments, `$HOME` replaced by `~`; prefix `…/` when trimming is needed.
 pub fn short_path(cwd: &str) -> String {
-    let home = dirs::home_dir().map(|h| h.to_string_lossy().into_owned());
+    let home = crate::core::home_dir().map(|h| h.to_string_lossy().into_owned());
     short_path_with(cwd, home.as_deref())
 }
 

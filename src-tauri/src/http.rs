@@ -42,7 +42,7 @@ pub fn parse_hook_payload(stdin: &str) -> (String, String) {
 }
 
 pub fn queue_dir() -> PathBuf {
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = crate::core::home_dir() {
         return home.join(".opencapx").join("queue");
     }
     std::env::temp_dir().join("opencapx-queue")

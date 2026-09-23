@@ -115,7 +115,7 @@ fn hotkeys_file_path() -> std::path::PathBuf {
     if let Ok(p) = std::env::var("OPENCAPX_HOTKEYS_FILE") {
         return p.into();
     }
-    match dirs::home_dir() {
+    match crate::core::home_dir() {
         Some(h) => h.join(".opencapx").join("hotkeys.json"),
         None => std::env::temp_dir().join("opencapx-hotkeys.json"),
     }

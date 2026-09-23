@@ -398,7 +398,7 @@ pub fn set_agent_decision(store: &SharedStore, agent_id: &str, perm: &str, decis
 
 /// `~/.opencapx/agent-tokens/<kind>.token`, contents JSON {agent_id, token}.
 pub fn token_file(kind: &str) -> std::path::PathBuf {
-    let base = dirs::home_dir()
+    let base = crate::core::home_dir()
         .unwrap_or_else(|| std::env::temp_dir())
         .join(".opencapx")
         .join("agent-tokens");
