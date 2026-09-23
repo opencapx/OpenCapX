@@ -2129,6 +2129,7 @@ fn read_settings_file() -> serde_json::Value {
 /// `signature` debounces content: no rebuild when nothing changed, avoiding per-second tray churn.
 struct TrayState {
     pet_check: std::sync::Mutex<Option<tauri::menu::CheckMenuItem<tauri::Wry>>>,
+    bubble_check: std::sync::Mutex<Option<tauri::menu::CheckMenuItem<tauri::Wry>>>,
     signature: std::sync::Mutex<String>,
 }
 
@@ -2138,6 +2139,19 @@ fn sync_tray_pet_check(app: &tauri::AppHandle, visible: bool) {
         if let Ok(g) = state.pet_check.lock() {
             if let Some(item) = g.as_ref() {
                 let _ = item.set_checked(visible);
+            }
+        }
+    }
+}
+
+/// Keeps the tray "Show Bubble" check in sync when bubbleEnabled changes from the settings page
+/// (same pattern as the pet check: settings writes do not fire tray-refreshing events).
+fn sync_tray_bubble_check(app: &tauri::AppHandle, enabled: bool) {
+    use tauri::Manager;
+    if let Some(state) = app.try_state::<TrayState>() {
+        if let Ok(g) = state.bubble_check.lock() {
+            if let Some(item) = g.as_ref() {
+                let _ = item.set_checked(enabled);
             }
         }
     }
@@ -2227,6 +2241,10 @@ fn refresh_tray_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
         .get("petVisible")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
+    let bubble_enabled = settings
+        .get("bubbleEnabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
     // native menu text follows the user's language (same setting as the frontend locale)
     let locale = settings.get("locale").and_then(|v| v.as_str()).unwrap_or("en");
     let strs = core::i18n::strings(core::i18n::from_locale(locale));
@@ -2255,9 +2273,10 @@ fn refresh_tray_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
         .collect();
     // locale goes into the signature: switching language must rebuild the menu
     let signature = format!(
-        "{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}",
         locale,
         pet_visible,
+        bubble_enabled,
         clearable,
         summary,
         structure.join("\n")
@@ -2344,6 +2363,14 @@ fn refresh_tray_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
         pet_visible,
         None::<&str>,
     )?;
+    let bubble_toggle = tauri::menu::CheckMenuItem::with_id(
+        app,
+        "toggle-bubble",
+        strs.show_bubble,
+        true,
+        bubble_enabled,
+        None::<&str>,
+    )?;
     let open_settings_item = tauri::menu::MenuItem::with_id(
         app,
         "open-settings",
@@ -2362,6 +2389,7 @@ fn refresh_tray_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     refs.push(&sep);
     refs.push(&clear);
     refs.push(&toggle);
+    refs.push(&bubble_toggle);
     refs.push(&open_settings_item);
     refs.push(&quit);
     let menu = tauri::menu::Menu::with_items(app, &refs)?;
@@ -2370,6 +2398,9 @@ fn refresh_tray_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
     if let Some(state) = app.try_state::<TrayState>() {
         if let Ok(mut g) = state.pet_check.lock() {
             *g = Some(toggle.clone());
+        }
+        if let Ok(mut g) = state.bubble_check.lock() {
+            *g = Some(bubble_toggle.clone());
         }
         if let Ok(mut g) = state.signature.lock() {
             *g = signature;
@@ -2420,6 +2451,18 @@ fn set_pet_visible(app: &tauri::AppHandle, v: bool) {
     sync_tray_pet_check(app, v);
 }
 
+/// Tray "Show Bubble": flips bubbleEnabled in the settings file. The overlay polls settings
+/// every second, so the bubble follows within one tick — no window command involved (unlike the
+/// pet, whose window is shown/hidden directly; the bubble lives inside the same window).
+fn set_bubble_visible(app: &tauri::AppHandle, v: bool) {
+    let mut s = read_settings_file();
+    if let Some(o) = s.as_object_mut() {
+        o.insert("bubbleEnabled".to_string(), serde_json::json!(v));
+    }
+    let _ = write_settings_file(&s);
+    sync_tray_bubble_check(app, v);
+}
+
 fn write_settings_file(value: &serde_json::Value) -> bool {
     let path = settings_path();
     if let Some(parent) = path.parent() {
@@ -2436,6 +2479,9 @@ fn set_settings(app: tauri::AppHandle, value: serde_json::Value) -> bool {
     let ok = write_settings_file(&value);
     if let Some(v) = value.get("petVisible").and_then(|x| x.as_bool()) {
         sync_tray_pet_check(&app, v);
+    }
+    if let Some(v) = value.get("bubbleEnabled").and_then(|x| x.as_bool()) {
+        sync_tray_bubble_check(&app, v);
     }
     ok
 }
@@ -3485,6 +3531,7 @@ fn main() {
             }
             app.manage(TrayState {
                 pet_check: std::sync::Mutex::new(None),
+                bubble_check: std::sync::Mutex::new(None),
                 signature: std::sync::Mutex::new(String::new()),
             });
             if let Some(tray) = app.tray_by_id("main") {
@@ -3503,6 +3550,13 @@ fn main() {
                             }
                             set_pet_visible(app_handle, next);
                         }
+                    }
+                    "toggle-bubble" => {
+                        let next = !read_settings_file()
+                            .get("bubbleEnabled")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true);
+                        set_bubble_visible(app_handle, next);
                     }
                     "open-settings" => show_settings(app_handle),
                     "quit" => app_handle.exit(0),

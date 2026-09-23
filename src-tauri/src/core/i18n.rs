@@ -27,6 +27,7 @@ pub fn from_locale(locale: &str) -> Lang {
 /// notification bodies use sentence case (a notification is not a menu; Title Case would look like a heading).
 pub struct Strings {
     pub show_pet: &'static str,
+    pub show_bubble: &'static str,
     pub open_settings: &'static str,
     pub clear_finished: &'static str,
     pub quit: &'static str,
@@ -49,6 +50,7 @@ pub struct Strings {
 
 pub const EN: Strings = Strings {
     show_pet: "Show Pet",
+    show_bubble: "Show Bubble",
     open_settings: "Open Settings",
     clear_finished: "Clear Finished",
     quit: "Quit OpenCapX",
@@ -67,6 +69,7 @@ pub const EN: Strings = Strings {
 
 pub const ZH_HANS: Strings = Strings {
     show_pet: "显示宠物",
+    show_bubble: "显示气泡",
     open_settings: "打开设置",
     clear_finished: "清除已完成",
     quit: "退出 OpenCapX",
@@ -85,6 +88,7 @@ pub const ZH_HANS: Strings = Strings {
 
 pub const VI: Strings = Strings {
     show_pet: "Hiện thú cưng",
+    show_bubble: "Hiện bong bóng",
     open_settings: "Mở cài đặt",
     clear_finished: "Xóa mục đã xong",
     quit: "Thoát OpenCapX",
@@ -159,6 +163,7 @@ mod tests {
         for (name, s) in ALL {
             let fields = [
                 s.show_pet,
+                s.show_bubble,
                 s.open_settings,
                 s.clear_finished,
                 s.quit,
@@ -198,7 +203,7 @@ mod tests {
     #[test]
     fn english_menu_items_use_title_case() {
         // macOS menu convention: capitalize the first letter of every content word (prepositions not tested)
-        for item in [EN.show_pet, EN.open_settings, EN.clear_finished, EN.no_active_agents] {
+        for item in [EN.show_pet, EN.show_bubble, EN.open_settings, EN.clear_finished, EN.no_active_agents] {
             let words: Vec<&str> = item.split(' ').collect();
             assert!(
                 words.iter().all(|w| w.chars().next().map(|c| c.is_uppercase()).unwrap_or(true)),
