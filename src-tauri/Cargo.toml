@@ -1,6 +1,6 @@
 [package]
 name = "opencapx"
-version = "0.1.1"
+version = "0.2.0"
 description = "Desktop body for AI agents: intercepts their requests, keeps system permissions safe and controllable, gives any model the multimodal abilities it lacks, and extends with plugins and rules"
 authors = ["OpenCapX"]
 edition = "2021"

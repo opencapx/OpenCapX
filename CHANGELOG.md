@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 — 2026-09-23
+
+- **`opencapx` installs onto your PATH** — the CLI shipped inside the app bundle, reachable only by its full path, so the documented first step (`opencapx connect claude`) did not work on a fresh DMG install. The tray menu now shows **Install opencapx Command** while the command is missing and drops it once installed; Settings → General → Command line manages install/remove and shows the state; and `opencapx install-cli` (or `uninstall-cli`) does the same from a terminal — macOS asks for your password once when `/usr/local/bin` is root-owned. The installed command is a symlink to the app's stable copy at `~/.opencapx/bin/opencapx`, so it survives app moves, re-installs and updates. Agent hooks and MCP entries never needed this — they already point at the stable copy by absolute path.
+
+- **The CLI got a real front door** — the dispatch is now built on clap: `opencapx --help` lists every command with a description (it previously showed only the signing toolchain, no matter how much was added since), each subcommand documents its own flags (`opencapx pack --help`, `opencapx sandbox --help`), a typo errors with a suggestion instead of silently launching the app, and `opencapx --version` exists. The commands themselves are unchanged: `connect`, `sandbox`, `rewrite`, `rules`, `guard`, `automation`, and the plugin signing toolchain.
+
 ## 0.1.1 — 2026-09-23
 
 - **Bubble position lifecycle fixed** — the saved side is now applied at startup instead of on the first per-second poll tick (a non-default side showed the wrong layout for a second, then the window visibly jumped); changing pet size under a "bottom" layout recomputes the window height (the bubble used to be clipped when the pet grew, dead space when it shrank); the pet rect is read after the compositor settles, so the side-switch anchor no longer computes from a stale viewport; and when the pet sits close enough to a monitor edge that the bubble's full budget would cross it, the side mirrors automatically — the pet stays put, only the bubble moves. A new **gap** setting (0–24px) spaces the bubble off the pet, and side layouts scroll like the vertical ones always did (an ask box could outgrow the window, and clipping it hid choices the user had to click).
