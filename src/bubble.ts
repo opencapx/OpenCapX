@@ -1,7 +1,7 @@
 import { answerChoice, type AgentEvent, type AgentState, type Choice } from "./shared";
 import { t, type I18nKey } from "./i18n";
 
-export type BubbleMode = "list" | "carousel" | "compact";
+export type BubbleMode = "list" | "carousel" | "compact" | "focus";
 export type BubblePos = "right" | "left" | "top" | "bottom";
 export type BubbleTheme =
   | "chef"
@@ -13,7 +13,9 @@ export type BubbleTheme =
   | "paper"
   | "cyber"
   | "terminal"
-  | "pixel";
+  | "pixel"
+  | "manga"
+  | "blueprint";
 
 /** Single source of truth for the theme list: the settings options and overlay validation both read it. */
 export const BUBBLE_THEMES: readonly BubbleTheme[] = [
@@ -27,6 +29,8 @@ export const BUBBLE_THEMES: readonly BubbleTheme[] = [
   "cyber",
   "terminal",
   "pixel",
+  "manga",
+  "blueprint",
 ];
 
 /** Which side of the pet the bubble can sit on. */
@@ -50,71 +54,85 @@ export interface BubbleOpts {
   customMessages?: Partial<Record<string, Partial<Record<AgentState, string>>>>;
 }
 
-const PHRASES: Record<BubbleTheme, Record<AgentState, string[]>> = {
+// Persona copy per theme: i18n keys, not literals — the fun of a persona theme only exists for the
+// user if the phrasing lands in their language. Every theme must define all four states.
+const PHRASE_KEYS: Record<BubbleTheme, Record<AgentState, I18nKey>> = {
   chef: {
-    working: ["Baking your code…"],
-    waiting: ["Needs a taste test!"],
-    done: ["Fresh out of the oven!"],
-    idle: ["Waiting for orders…"],
+    working: "phraseChefWorking",
+    waiting: "phraseChefWaiting",
+    done: "phraseChefDone",
+    idle: "phraseChefIdle",
   },
   engineer: {
-    working: ["Compiling…"],
-    waiting: ["Blocked, needs input"],
-    done: ["Build green"],
-    idle: ["Idle"],
+    working: "phraseEngineerWorking",
+    waiting: "phraseEngineerWaiting",
+    done: "phraseEngineerDone",
+    idle: "phraseEngineerIdle",
   },
   wizard: {
-    working: ["Casting…"],
-    waiting: ["The orb awaits your answer"],
-    done: ["Spell complete"],
-    idle: ["Resting"],
+    working: "phraseWizardWorking",
+    waiting: "phraseWizardWaiting",
+    done: "phraseWizardDone",
+    idle: "phraseWizardIdle",
   },
   explorer: {
-    working: ["Charting…"],
-    waiting: ["Trail fork, pick a path"],
-    done: ["Land ho!"],
-    idle: ["Camped"],
+    working: "phraseExplorerWorking",
+    waiting: "phraseExplorerWaiting",
+    done: "phraseExplorerDone",
+    idle: "phraseExplorerIdle",
   },
   scientist: {
-    working: ["Running experiment…"],
-    waiting: ["Hypothesis needs review"],
-    done: ["Result published"],
-    idle: ["Observing"],
+    working: "phraseScientistWorking",
+    waiting: "phraseScientistWaiting",
+    done: "phraseScientistDone",
+    idle: "phraseScientistIdle",
   },
   minimal: {
-    working: ["Working"],
-    waiting: ["Needs input"],
-    done: ["Done"],
-    idle: ["Idle"],
+    working: "phraseMinimalWorking",
+    waiting: "phraseMinimalWaiting",
+    done: "phraseMinimalDone",
+    idle: "phraseMinimalIdle",
   },
   paper: {
-    working: ["Drafting…"],
-    waiting: ["Needs a signature"],
-    done: ["Filed away"],
-    idle: ["Reading"],
+    working: "phrasePaperWorking",
+    waiting: "phrasePaperWaiting",
+    done: "phrasePaperDone",
+    idle: "phrasePaperIdle",
   },
   cyber: {
-    working: ["Jacking in…"],
-    waiting: ["Access requested"],
-    done: ["Transfer complete"],
-    idle: ["Standby"],
+    working: "phraseCyberWorking",
+    waiting: "phraseCyberWaiting",
+    done: "phraseCyberDone",
+    idle: "phraseCyberIdle",
   },
   terminal: {
-    working: ["$ running…"],
-    waiting: ["$ awaiting input"],
-    done: ["$ exit 0"],
-    idle: ["$ idle"],
+    working: "phraseTerminalWorking",
+    waiting: "phraseTerminalWaiting",
+    done: "phraseTerminalDone",
+    idle: "phraseTerminalIdle",
   },
   pixel: {
-    working: ["Grinding XP…"],
-    waiting: ["Press A to continue"],
-    done: ["Level up!"],
-    idle: ["AFK"],
+    working: "phrasePixelWorking",
+    waiting: "phrasePixelWaiting",
+    done: "phrasePixelDone",
+    idle: "phrasePixelIdle",
+  },
+  manga: {
+    working: "phraseMangaWorking",
+    waiting: "phraseMangaWaiting",
+    done: "phraseMangaDone",
+    idle: "phraseMangaIdle",
+  },
+  blueprint: {
+    working: "phraseBlueprintWorking",
+    waiting: "phraseBlueprintWaiting",
+    done: "phraseBlueprintDone",
+    idle: "phraseBlueprintIdle",
   },
 };
 
 export function phraseFor(theme: BubbleTheme, state: AgentState): string {
-  return PHRASES[theme][state][0];
+  return t(PHRASE_KEYS[theme][state]);
 }
 
 export function elapsedText(updatedAt: number, now: number): string {
@@ -274,6 +292,19 @@ export function renderBubble(
     const row = rows[idx];
     const open = opts.expandedIds?.has(row.id) ?? false;
     el.innerHTML = `${rowHtml(row, opts.theme, now, opts.density ?? "standard", opts.projects?.get(groupKey(row)), open)}<div class="dots">${dots}</div>`;
+    bindChoiceHandlers(el);
+    return;
+  }
+  // Focus: exactly one row — the first in Core's priority order (a waiting session outranks a working one,
+  // the newest working one outranks older ones). Everything else is hidden, but counted below the row,
+  // the same "don't vanish silently" rule as the maxRows cut. It differs from carousel: carousel rotates
+  // through everyone, focus only ever promotes the single row that needs you.
+  if (opts.mode === "focus" && rows.length > 0) {
+    const row = rows[0];
+    const open = opts.expandedIds?.has(row.id) ?? false;
+    const rest = ordered.length - 1;
+    const restHtml = rest > 0 ? `<div class="focus-rest">${esc(t("focusRest").replace("{n}", String(rest)))}</div>` : "";
+    el.innerHTML = `${rowHtml(row, opts.theme, now, opts.density ?? "standard", opts.projects?.get(groupKey(row)), open)}${restHtml}`;
     bindChoiceHandlers(el);
     return;
   }

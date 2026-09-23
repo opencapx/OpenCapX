@@ -31,40 +31,44 @@
    cue, using a border rather than a triangular tail: when stacked vertically the bubble needs to
    scroll (overflow would clip a tail off). */
 body[data-bpos="right"] #bubble {
-  left: var(--pet-w, 120px);
+  left: calc(var(--pet-w, 120px) + var(--bubble-gap, 0px));
   top: 0;
-  min-width: min(140px, calc(100vw - var(--pet-w, 120px) - 8px));
-  max-width: min(320px, calc(100vw - var(--pet-w, 120px) - 8px));
+  min-width: min(140px, calc(100vw - var(--pet-w, 120px) - var(--bubble-gap, 0px) - 8px));
+  max-width: min(320px, calc(100vw - var(--pet-w, 120px) - var(--bubble-gap, 0px) - 8px));
   max-height: calc(100vh - 8px);
+  /* Same scroll rule as the vertical layouts: an ask box or several expanded rows can outgrow
+     the window height, and clipping them silently hides choices the user must click. */
+  overflow-y: auto;
   border-left: var(--bubble-edge-w) solid var(--bubble-accent);
 }
 
 body[data-bpos="left"] #bubble {
-  right: var(--pet-w, 120px);
+  right: calc(var(--pet-w, 120px) + var(--bubble-gap, 0px));
   top: 0;
-  min-width: min(140px, calc(100vw - var(--pet-w, 120px) - 8px));
-  max-width: min(320px, calc(100vw - var(--pet-w, 120px) - 8px));
+  min-width: min(140px, calc(100vw - var(--pet-w, 120px) - var(--bubble-gap, 0px) - 8px));
+  max-width: min(320px, calc(100vw - var(--pet-w, 120px) - var(--bubble-gap, 0px) - 8px));
   max-height: calc(100vh - 8px);
+  overflow-y: auto;
   border-right: var(--bubble-edge-w) solid var(--bubble-accent);
 }
 
 body[data-bpos="bottom"] #bubble {
   left: 0;
-  top: var(--pet-w, 120px);
+  top: calc(var(--pet-w, 120px) + var(--bubble-gap, 0px));
   min-width: min(180px, calc(100vw - 8px));
   max-width: calc(100vw - 8px);
   /* In the vertical layouts the pet frame eats into the height, so content scrolls when it overflows (max 10 rows) */
-  max-height: calc(100vh - var(--pet-w, 120px) - 8px);
+  max-height: calc(100vh - var(--pet-w, 120px) - var(--bubble-gap, 0px) - 8px);
   overflow-y: auto;
   border-top: var(--bubble-edge-w) solid var(--bubble-accent);
 }
 
 body[data-bpos="top"] #bubble {
   left: 0;
-  bottom: var(--pet-w, 120px);
+  bottom: calc(var(--pet-w, 120px) + var(--bubble-gap, 0px));
   min-width: min(180px, calc(100vw - 8px));
   max-width: calc(100vw - 8px);
-  max-height: calc(100vh - var(--pet-w, 120px) - 8px);
+  max-height: calc(100vh - var(--pet-w, 120px) - var(--bubble-gap, 0px) - 8px);
   overflow-y: auto;
   border-bottom: var(--bubble-edge-w) solid var(--bubble-accent);
 }
@@ -303,6 +307,14 @@ body[data-bpos="top"] #state-badge {
   gap: 4px;
   justify-content: center;
   padding-top: 4px;
+}
+
+/* Focus mode: the count of everything hidden behind the single promoted row */
+#bubble .focus-rest {
+  padding-top: 4px;
+  font-size: 10px;
+  opacity: 0.5;
+  text-align: center;
 }
 
 #bubble .dot-nav {

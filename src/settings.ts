@@ -57,6 +57,8 @@ interface AppSettings {
   bubbleTheme: string;
   /** Which side of the pet the bubble sits on: right / left / top / bottom. */
   bubblePos: string;
+  /** Space between the pet frame and the bubble, logical px 0..24. */
+  bubbleGap: number;
   /** Bubble information density: tight / standard / rich. */
   bubbleDensity: string;
   petSheet: string;
@@ -87,6 +89,7 @@ const DEFAULTS: AppSettings = {
   maxRows: 5,
   bubbleTheme: "chef",
   bubblePos: "right",
+  bubbleGap: 0,
   bubbleDensity: "standard",
   petSheet: "",
   petPack: "",
@@ -212,6 +215,19 @@ async function load(): Promise<void> {
   } catch {
     settings = { ...DEFAULTS };
   }
+  // Stored values can be stale or hand-edited: fall back per field so every picker always shows
+  // one active option. The overlay validates the same way on its side when it reads the settings.
+  if (!(BUBBLE_POSITIONS as readonly string[]).includes(settings.bubblePos)) settings.bubblePos = DEFAULTS.bubblePos;
+  settings.bubbleGap = clampInt(String(settings.bubbleGap), 0, 24, DEFAULTS.bubbleGap);
+  if (!(BUBBLE_THEMES as readonly string[]).includes(settings.bubbleTheme)) settings.bubbleTheme = DEFAULTS.bubbleTheme;
+  if (!(BUBBLE_DENSITIES as readonly string[]).includes(settings.bubbleDensity)) settings.bubbleDensity = DEFAULTS.bubbleDensity;
+  // Same literal list as the segmented control; the overlay falls back to "carousel" on its side.
+  if (!["list", "carousel", "compact", "focus"].includes(settings.mode)) settings.mode = DEFAULTS.mode;
+  // Same bounds as the overlay: a value written by an older build (or a hand-edited file) shows
+  // clamped here instead of displaying a number that silently behaves as a different one.
+  settings.maxRows = clampInt(String(settings.maxRows), 1, 10, DEFAULTS.maxRows);
+  settings.bubbleDuration = clampInt(String(settings.bubbleDuration), 0, 300, DEFAULTS.bubbleDuration);
+  settings.breakMinutes = clampInt(String(settings.breakMinutes), 5, 480, DEFAULTS.breakMinutes);
   setLocale(settings.locale);
   applyTheme();
 }
@@ -236,6 +252,13 @@ async function refreshSessions(): Promise<void> {
 function row(labelKey: I18nKey, hintKey: I18nKey | null, control: string): string {
   const hint = hintKey ? `<span class="setting-hint">${esc(t(hintKey))}</span>` : "";
   return `<div class="setting-row"><div class="setting-info"><span class="setting-label">${esc(t(labelKey))}</span>${hint}</div>${control}</div>`;
+}
+
+/// Number inputs clamp to the same bounds the overlay enforces on read, so the stored value and the
+/// effective value can't drift apart (typing 999 or clearing the field used to save the raw number).
+function clampInt(raw: string, min: number, max: number, fallback: number): number {
+  const n = Math.round(Number(raw));
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 }
 
 function group(titleKey: I18nKey | null, inner: string): string {
@@ -1008,6 +1031,14 @@ function render(): void {
       cyber: "bubbleThemeCyber",
       terminal: "bubbleThemeTerminal",
       pixel: "bubbleThemePixel",
+      manga: "bubbleThemeManga",
+      blueprint: "bubbleThemeBlueprint",
+    };
+    const MODE_I18N: Record<string, I18nKey> = {
+      list: "modeList",
+      carousel: "modeCarousel",
+      compact: "modeCompact",
+      focus: "modeFocus",
     };
     const POS_I18N: Record<BubblePos, I18nKey> = {
       right: "bubblePosRight",
@@ -1038,11 +1069,15 @@ function render(): void {
         <span class="bubble-pos-label">${esc(t(POS_I18N[p]))}</span>
       </button>`;
     }).join("")}</div>`;
+    // The grid needs the full row width (10 swatches), so this row is stacked instead of the usual
+    // label-left / control-right: sharing one line crushes the hint into a sliver.
+    const themeRow = `<div class="setting-row vertical"><div class="setting-info"><span class="setting-label">${esc(t("bubbleTheme"))}</span><span class="setting-hint">${esc(t("bubbleThemeHint"))}</span></div>${themeGrid}</div>`;
     body.innerHTML = group("tabBubble",
       row("bubbleEnable", "bubbleEnableHint", toggle("bubbleEnabled", settings.bubbleEnabled)) +
-      row("mode", "modeHint", segmented("mode", ["list", "carousel", "compact"], settings.mode)) +
+      row("mode", "modeHint", segmented("mode", ["list", "carousel", "compact", "focus"], settings.mode, MODE_I18N)) +
       row("bubblePos", "bubblePosHint", posPicker) +
-      row("theme", "bubbleThemeHint", themeGrid) +
+      row("bubbleGap", "bubbleGapHint", `<input type="range" id="bgap" min="0" max="24" value="${settings.bubbleGap}" /><span id="bgap-v" class="pet-num">${settings.bubbleGap}px</span>`) +
+      themeRow +
       row("density", "densityHint", segmented("bubbleDensity", [...BUBBLE_DENSITIES], settings.bubbleDensity, DENSITY_I18N)) +
       row("maxRows", "maxRowsHint", `<input type="number" id="brows" min="1" max="10" value="${settings.maxRows}" />`) +
       row("bubbleDuration", "bubbleDurationHint", `<input type="number" id="bdur" min="0" max="300" value="${settings.bubbleDuration}" />`));
@@ -1052,6 +1087,12 @@ function render(): void {
         void save();
         render();
       });
+    });
+    const bgap = document.getElementById("bgap") as HTMLInputElement | null;
+    bgap?.addEventListener("input", () => {
+      settings = { ...settings, bubbleGap: Number(bgap.value) };
+      document.getElementById("bgap-v")!.textContent = `${bgap.value}px`;
+      void save();
     });
     body.querySelectorAll<HTMLButtonElement>(".bubble-theme").forEach((b) => {
       b.addEventListener("click", () => {
@@ -1075,16 +1116,23 @@ function render(): void {
       });
     });
     document.getElementById("brows")?.addEventListener("change", (e) => {
-      settings = { ...settings, maxRows: Number((e.target as HTMLInputElement).value) };
+      const input = e.target as HTMLInputElement;
+      const v = clampInt(input.value, 1, 10, DEFAULTS.maxRows);
+      input.value = String(v); // show the value that actually takes effect
+      settings = { ...settings, maxRows: v };
       void save();
     });
     document.getElementById("bmins")?.addEventListener("change", (e) => {
-      settings = { ...settings, breakMinutes: Number((e.target as HTMLInputElement).value) };
+      const input = e.target as HTMLInputElement;
+      const v = clampInt(input.value, 5, 480, DEFAULTS.breakMinutes);
+      input.value = String(v);
+      settings = { ...settings, breakMinutes: v };
       void save();
     });
     document.getElementById("bdur")?.addEventListener("change", (e) => {
-      settings = { ...settings, bubbleDuration: Number((e.target as HTMLInputElement).value) };
-      void save();
+      const input = e.target as HTMLInputElement;
+      const v = clampInt(input.value, 0, 300, DEFAULTS.bubbleDuration);
+      input.value = String(v);
     });
   } else if (tab === "plugins") {
     body.innerHTML =

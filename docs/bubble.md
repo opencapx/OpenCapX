@@ -82,10 +82,10 @@ Themes swap not just colors but also **shape**:
 `filter: drop-shadow(...)` instead — it follows the **silhouette** and is not clipped. Similarly, WebKit has a precedent for
 rendering anomalies when `filter` and `backdrop-filter` appear on the same element, so every theme that uses
 `filter` (engineer / explorer / cyber / pixel) is always `--bubble-blur: none`.
-This constraint is guarded by a probe: `fi=y → bf=-` holds for all 10 themes.
+This constraint is guarded by a probe: `fi=y → bf=-` holds for all 12 themes.
 
 Clipped shapes must also ensure that content is not cut off: the probe additionally checks both "the bubble-center hit test follows the silhouette"
-and "the content rows are still inside the bubble box", and all 10 themes pass (the cut corners are all at the corners, still some distance from the text).
+and "the content rows are still inside the bubble box", and all 12 themes pass (the cut corners are all at the corners, still some distance from the text).
 
 | id | Positioning |
 |---|---|

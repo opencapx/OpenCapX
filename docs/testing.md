@@ -147,7 +147,7 @@ only once per session, throttled to 30s.
 
 ## Observation Checklist
 
-- **Desktop bubble**: 4 modes (rows / carousel / compact), 10 themes (color + shape), 4 positions,
+- **Desktop bubble**: 4 modes (rows / carousel / compact / focus), 12 themes (color + shape), 4 positions,
   click-row-expand, option buttons, model badge, orange pulse on waiting rows, celebration on done rows.
 - **Pet**: 8 state badges (idle/thinking/working/waiting/permission/success/error/sleeping),
   default logo / pet pack / glTF; dragging.
