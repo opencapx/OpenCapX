@@ -18,6 +18,7 @@
 
 use super::plugin::SandboxDecl;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Per-plugin data directory root (`~/.opencapx/plugin-data/<id>/`); tests can override with `OPENCAPX_PLUGIN_DATA_DIR`.
 pub fn plugin_data_root() -> PathBuf {
@@ -1186,8 +1187,15 @@ fn backend() -> Backend {
 }
 
 /// Scratch dir handed to the child as its writable area; removed after the run.
+/// Unique per run, not per process: concurrent runs in one process (parallel plugin calls or
+/// tests) would otherwise share a dir, and the first to finish would delete another's live tree.
 fn make_scratch() -> std::io::Result<PathBuf> {
-    let dir = std::env::temp_dir().join(format!("opencapx-sandbox-{}", std::process::id()));
+    static SCRATCH_SEQ: AtomicU64 = AtomicU64::new(0);
+    let seq = SCRATCH_SEQ.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!(
+        "opencapx-sandbox-{}-{seq}",
+        std::process::id()
+    ));
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }
@@ -1580,6 +1588,18 @@ mod tests {
             "curl -s --max-time 5 https://example.com".into(),
         ]);
         assert_ne!(code, 0, "curl must not reach the network inside the sandbox");
+    }
+
+    /// Regression: the scratch dir must be per-run, not per-process. Two concurrent runs in one
+    /// process (parallel plugin calls, parallel tests) each need their own dir — a shared one lets
+    /// the first run's cleanup delete the other's only writable subtree while it is still running.
+    #[test]
+    fn scratch_dirs_are_unique_per_run() {
+        let first = make_scratch().expect("first scratch dir");
+        let second = make_scratch().expect("second scratch dir");
+        assert_ne!(first, second, "two runs must not share one scratch dir");
+        let _ = std::fs::remove_dir_all(&first);
+        let _ = std::fs::remove_dir_all(&second);
     }
 
     #[test]
