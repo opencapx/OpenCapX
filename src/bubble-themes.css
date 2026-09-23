@@ -264,3 +264,63 @@
   --bubble-nav: rgba(248, 248, 242, 0.3);
   --bubble-nav-on: #ffd166;
 }
+
+/* Manga — speech panel: near-white paper, 3px black outline, hard offset shadow, diagonal
+   speed-line texture, and a red facing edge. Distinct from every existing theme by weight:
+   nothing else in the set carries a heavy stroke. */
+[data-bubble-theme="manga"] {
+  --bubble-bg: #fdfdf8;
+  --bubble-border: #141414;
+  --bubble-accent: #e11d48;
+  --bubble-fg: #1c1917;
+  --bubble-dim: rgba(28, 25, 23, 0.66);
+  --bubble-sep: rgba(20, 20, 20, 0.14);
+  --bubble-chip-bg: rgba(20, 20, 20, 0.07);
+  --bubble-nav: rgba(20, 20, 20, 0.25);
+  --bubble-nav-on: #141414;
+  --bubble-radius: 4px;
+  --bubble-border-w: 3px;
+  --bubble-edge-w: 5px;
+  --bubble-pad-y: 9px;
+  --bubble-pad-x: 12px;
+  --bubble-bg-image: repeating-linear-gradient(
+    45deg,
+    rgba(20, 20, 20, 0.03) 0 2px,
+    transparent 2px 8px
+  );
+  --bubble-blur: none;
+  --bubble-shadow: 4px 4px 0 rgba(20, 20, 20, 0.9);
+  --bubble-chip-radius: 2px;
+  --bubble-warn-fg: #b45309;
+}
+
+/* Blueprint — cyanotype sheet: opaque drafting blue, white two-axis grid, dashed white outline,
+   serif lettering, pale-yellow annotation accent. Engineer is dark + horizontal cyan lines in
+   mono; this is the printed paper it was drafted on. */
+[data-bubble-theme="blueprint"] {
+  --bubble-bg: #1d4ed8e6;
+  --bubble-border: rgba(240, 249, 255, 0.85);
+  --bubble-accent: #fde68a;
+  --bubble-font: Georgia, "Times New Roman", serif;
+  --bubble-fg: #f0f9ff;
+  --bubble-dim: rgba(240, 249, 255, 0.72);
+  --bubble-sep: rgba(240, 249, 255, 0.18);
+  --bubble-chip-bg: rgba(240, 249, 255, 0.12);
+  --bubble-nav: rgba(240, 249, 255, 0.35);
+  --bubble-nav-on: #fde68a;
+  --bubble-radius: 2px;
+  --bubble-border-w: 2px;
+  --bubble-border-style: dashed;
+  --bubble-edge-w: 5px;
+  --bubble-pad-y: 9px;
+  --bubble-pad-x: 12px;
+  --bubble-bg-image: repeating-linear-gradient(
+      0deg,
+      rgba(240, 249, 255, 0.09) 0 1px,
+      transparent 1px 14px
+    ),
+    repeating-linear-gradient(90deg, rgba(240, 249, 255, 0.09) 0 1px, transparent 1px 14px);
+  --bubble-blur: none;
+  --bubble-shadow: 0 4px 14px rgba(9, 20, 64, 0.45);
+  --bubble-chip-radius: 2px;
+}

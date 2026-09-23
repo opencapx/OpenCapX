@@ -1008,6 +1008,14 @@ function render(): void {
       cyber: "bubbleThemeCyber",
       terminal: "bubbleThemeTerminal",
       pixel: "bubbleThemePixel",
+      manga: "bubbleThemeManga",
+      blueprint: "bubbleThemeBlueprint",
+    };
+    const MODE_I18N: Record<string, I18nKey> = {
+      list: "modeList",
+      carousel: "modeCarousel",
+      compact: "modeCompact",
+      focus: "modeFocus",
     };
     const POS_I18N: Record<BubblePos, I18nKey> = {
       right: "bubblePosRight",
@@ -1040,7 +1048,7 @@ function render(): void {
     }).join("")}</div>`;
     body.innerHTML = group("tabBubble",
       row("bubbleEnable", "bubbleEnableHint", toggle("bubbleEnabled", settings.bubbleEnabled)) +
-      row("mode", "modeHint", segmented("mode", ["list", "carousel", "compact"], settings.mode)) +
+      row("mode", "modeHint", segmented("mode", ["list", "carousel", "compact", "focus"], settings.mode, MODE_I18N)) +
       row("bubblePos", "bubblePosHint", posPicker) +
       row("theme", "bubbleThemeHint", themeGrid) +
       row("density", "densityHint", segmented("bubbleDensity", [...BUBBLE_DENSITIES], settings.bubbleDensity, DENSITY_I18N)) +
