@@ -34,7 +34,10 @@ Notes on the gate:
 - The two `install_grant_execute` end-to-end tests are `#[ignore]` by default because they spawn real plugin processes. They must run serially (`--test-threads=1`).
 - `pnpm run build` runs `i18n:check`, `tsc --noEmit`, and the Vite build in one step. `tsc --noEmit` alone is faster when you are iterating on the UI.
 - The i18n check enforces that every key exists in all three catalogs (`en`, `zh-Hans`, and `vi`). Add the translations with the code, not after.
-- `node scripts/bump-version.mjs --check` confirms the version is consistent across `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json` before a release.
+- `node scripts/bump-version.mjs` derives the next version from the commits since the last `v*` tag
+  and writes the four version locations (`package.json`, `src-tauri/tauri.conf.json`,
+  `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`); `--check` verifies they agree. The release
+  sequence is in [docs/release.md](docs/release.md).
 
 If a database-backed test fails, suspect the environment before the code. There was a corrupt-workspace incident on 2026-09-18; re-check with a temporary directory fixture when that class of test goes red.
 
