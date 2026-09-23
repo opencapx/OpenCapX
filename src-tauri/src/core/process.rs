@@ -44,8 +44,21 @@ impl Default for EnvPolicy {
 /// `plugin_env_isolation=false` is a one-switch rollback).
 const BASE_ENV_ALLOW: &[&str] = &["PATH", "HOME", "TMPDIR", "TZ", "LANG"];
 
+/// Windows equivalents: python.exe (and anything on the CRT) aborts without SYSTEMROOT,
+/// and temp/home resolve through TEMP/USERPROFILE rather than TMPDIR/HOME. Without these,
+/// every process plugin on Windows died instantly with "timeout waiting for plugin.initialize"
+/// while the same plugin ran fine under the unix allowlist.
+#[cfg(windows)]
+const PLATFORM_ENV_ALLOW: &[&str] = &[
+    "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC", "WINDIR", "PATHEXT", "TEMP", "TMP", "USERPROFILE",
+    "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
+];
+#[cfg(not(windows))]
+const PLATFORM_ENV_ALLOW: &[&str] = &[];
+
 fn env_is_allowed(key: &str, extra: &[String]) -> bool {
     BASE_ENV_ALLOW.contains(&key)
+        || PLATFORM_ENV_ALLOW.contains(&key)
         || key.starts_with("LC_")
         || key.starts_with("XDG_")
         || extra.iter().any(|k| k == key)
