@@ -54,20 +54,32 @@ pass is a change of its own.
 
 ## Commit style
 
-Match the existing history: an imperative, single-line subject that says what the commit does.
+[Conventional Commits](https://www.conventionalcommits.org) — enforced by the `commit-msg` lefthook
+(`scripts/check-commit-msg.mjs`); the hook rejects the commit with the expected shape on failure.
 
 ```text
-Add a JSON file store for hotkey bindings
-Fix safe-mode startup when the plugin dir is missing
-Document the list setting type for plugin authors
+feat(bubble): add a focus mode that promotes the most urgent session
+fix(tray): sync the Show Bubble check when the settings page writes bubbleEnabled
+docs(rules): document the danger guard's trust rule
+chore(release): 0.1.1
 ```
+
+Shape: `<type>[(scope)][!]: <description>`.
+
+- **type** — one of `build chore ci docs feat fix perf refactor revert style test`.
+- **scope** — optional, lowercase (`bubble`, `tray`, `rules`, `plugin`, `http`, `i18n`, …); use the
+  subsystem the change lives in. Omit it when the commit genuinely spans the tree (version bumps).
+- **`!`** — marks a breaking change; also add a `BREAKING CHANGE:` footer paragraph in the body.
+- **description** — imperative mood, lowercase, no trailing period, ≤ 100 chars.
 
 Rules:
 
 - One logical change per commit. Do not mix a refactor with a behavior change.
-- Subject line in the imperative mood, no trailing period, no `feat:` / `fix:` prefixes.
 - Use the body to explain why, not what. Focus on the constraint or failure the change addresses.
 - Keep the diff focused. Revert unrelated formatting churn.
+- Merge and auto-revert commits are exempt (git writes those subjects, not the author).
+
+History note: commits before this rule (and the v0.1.1 tag) predate it and were not rewritten.
 
 ## Where plugins live
 
