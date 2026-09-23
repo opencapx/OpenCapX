@@ -1,7 +1,7 @@
 {
   "name": "opencapx",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Desktop body for AI agents: intercepts their requests, keeps system permissions safe and controllable, gives any model the multimodal abilities it lacks, and extends with plugins and rules.",
   "scripts": {

@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 — 2026-09-23
+
+- **Bubble position lifecycle fixed** — the saved side is now applied at startup instead of on the first per-second poll tick (a non-default side showed the wrong layout for a second, then the window visibly jumped); changing pet size under a "bottom" layout recomputes the window height (the bubble used to be clipped when the pet grew, dead space when it shrank); the pet rect is read after the compositor settles, so the side-switch anchor no longer computes from a stale viewport; and when the pet sits close enough to a monitor edge that the bubble's full budget would cross it, the side mirrors automatically — the pet stays put, only the bubble moves. A new **gap** setting (0–24px) spaces the bubble off the pet, and side layouts scroll like the vertical ones always did (an ask box could outgrow the window, and clipping it hid choices the user had to click).
+
+- **Two new bubble themes, a focus mode, localized phrases** — **manga** (heavy black outline, hard offset shadow, speed-line texture on near-white paper) and **blueprint** (cyanotype sheet, white two-axis grid, dashed outline) join the set; the **focus** mode promotes the single most urgent session (a waiting one outranks a working one) and counts the rest below the row instead of rotating through everyone like carousel; persona phrases were hardcoded English and now carry i18n keys for all 12 themes × 4 states × 3 languages; the mode picker gained localized labels instead of raw option ids.
+
+- **Bubble settings hardened** — number inputs (max rows / bubble duration / break minutes) clamp to the same bounds the overlay enforces instead of saving raw input (a typed 999 displayed as 999 while behaving as 10), `load()` normalizes values written by older builds or hand-edited files, and the theme row gets its own label and a full-width stacked row instead of reusing the app-theme "Theme" key and crushing its hint.
+
+- **Show Bubble tray toggle** — `bubbleEnabled` is reachable from the tray menu like Show Pet; the overlay polls the settings file, so the change lands within one tick.
 
 - **Factory Droid, Cursor and Copilot CLI write-back** — the command rules now rewrite those hosts' shell calls too: Factory Droid and Copilot CLI take the Claude shape (`PreToolUse` + `hookSpecificOutput.updatedInput`; Copilot CLI needs the PascalCase event, and its rewritten commands still pass its own confirmation dialog — upstream github/copilot-cli#2643), while Cursor takes its top-level envelope (`permission` + `updated_input`, `{}` on the no-decision path). The remaining pass-through hosts (windsurf / antigravity / kiro / grok / pi) keep event-only integration.
 
