@@ -896,6 +896,13 @@ mod tests {
 
     static HOME_LOCK: Mutex<()> = Mutex::new(());
 
+    /// Escape a filesystem path the way the TOML/JSON config writers do. On Windows the
+    /// shim path is full of backslashes; raw comparisons against written (correctly
+    /// escaped) config text used to fail, and raw fixtures made valid repairs look stale.
+    fn esc_path(p: &str) -> String {
+        p.replace('\\', "\\\\").replace('"', "\\\"")
+    }
+
     fn with_temp_home(tag: &str, f: impl FnOnce()) {
         // Proceed even when poisoned: otherwise one panicking test leaves the rest of
         // the group stuck on lock() (observed: 1 flake amplified into 4 reds).
@@ -1241,7 +1248,7 @@ mod tests {
             std::fs::write(&path, omp_extension("/gone/debug/opencapx")).unwrap();
             assert!(refresh_installations() >= 1);
             let text = std::fs::read_to_string(&path).unwrap();
-            assert!(text.contains(&shim_path().to_string_lossy().to_string()));
+            assert!(text.contains(&esc_path(&shim_path().to_string_lossy())));
             assert_eq!(refresh_installations(), 0, "idempotent");
         });
     }
@@ -1358,7 +1365,7 @@ mod tests {
 
             assert!(refresh_installations() >= 1);
             let text = std::fs::read_to_string(&path).unwrap();
-            assert!(text.contains(&format!("command = \"{}\"", shim_path().to_string_lossy())));
+            assert!(text.contains(&format!("command = \"{}\"", esc_path(&shim_path().to_string_lossy()))));
             assert!(text.contains("args = [\"mcp\"]"), "block body preserved");
             assert!(
                 text.contains("env = { OPEN_CAPX_AGENT = \"codex\" }"),
@@ -1378,7 +1385,7 @@ mod tests {
         with_temp_home("toml-env", || {
             let path = mcp_config_target("codex").unwrap().0;
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            let current = shim_path().to_string_lossy().to_string();
+            let current = esc_path(&shim_path().to_string_lossy());
             std::fs::write(
                 &path,
                 format!("[mcp_servers.opencapx]\ncommand = \"{}\"\nargs = [\"mcp\"]\n", current),
@@ -1402,7 +1409,7 @@ mod tests {
         with_temp_home("toml-env-merge", || {
             let path = mcp_config_target("codex").unwrap().0;
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            let current = shim_path().to_string_lossy().to_string();
+            let current = esc_path(&shim_path().to_string_lossy());
             std::fs::write(
                 &path,
                 format!(
