@@ -9,4 +9,8 @@ export default defineConfig({
       input: { overlay: "index.html", settings: "settings.html" },
     },
   },
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts"],
+  },
 });
