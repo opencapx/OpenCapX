@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { listen } from "@tauri-apps/api/event";
 import { mergeSession, onAgentEvent, type AgentEvent, type AgentState } from "./shared";
@@ -48,6 +48,9 @@ const BUBBLE_BUDGET = 320;
 /** Where the pet "should" sit in screen coordinates; null = not recorded yet (or the user just dragged it). */
 let petAnchor: { x: number; y: number } | null = null;
 
+/** Logical window height last requested by us; null = not applied yet. Lets the petSize sync skip no-op resizes. */
+let appliedWindowH: number | null = null;
+
 // pet.state text: i18n key + state → CSS class. Aligned with the Agent State Protocol
 // (i2 §12, mcp.md): idle|thinking|working|waiting|permission|success|error|sleeping.
 type PetState = "idle" | "thinking" | "working" | "waiting" | "permission" | "success" | "error" | "sleeping";
@@ -87,6 +90,8 @@ interface OverlayPrefs {
   theme: BubbleTheme;
   /** Which side of the pet the bubble is on (default right). */
   bubblePos: BubblePos;
+  /** Space between the pet frame and the bubble, logical px 0..24. */
+  bubbleGap: number;
   maxRows: number;
   /** Information density (tight / standard / rich). */
   density: BubbleDensity;
@@ -100,9 +105,9 @@ interface OverlayPrefs {
   breakMinutes: number;
 }
 
-const DEFAULT_PREFS: OverlayPrefs = { mode: "carousel", theme: "chef", bubblePos: "right", maxRows: 5, density: "standard", petSize: 100, petSheet: "", petPack: "", bubbleEnabled: true, bubbleDuration: 5, petVisible: true, breakEnabled: false, breakMinutes: 60 };
+const DEFAULT_PREFS: OverlayPrefs = { mode: "carousel", theme: "chef", bubblePos: "right", bubbleGap: 0, maxRows: 5, density: "standard", petSize: 100, petSheet: "", petPack: "", bubbleEnabled: true, bubbleDuration: 5, petVisible: true, breakEnabled: false, breakMinutes: 60 };
 
-const MODES: readonly string[] = ["list", "carousel", "compact"];
+const MODES: readonly string[] = ["list", "carousel", "compact", "focus"];
 
 /** A user-supplied image (URL or upload): always sliced by alpha gaps; a single image is 1 frame. */
 let petSheetImg: HTMLImageElement | null = null;
@@ -195,7 +200,8 @@ function renderAsk(
     "margin-top:8px;padding:8px 10px;background:rgba(20,20,24,0.92);border:1px solid rgba(255,255,255,0.18);border-radius:10px;color:#eee;font-size:12px;display:flex;flex-direction:column;gap:6px;";
   const q = document.createElement("div");
   q.textContent = payload.question;
-  q.style.cssText = "font-weight:600;";
+  // overflow-wrap: a long question (or a pasted path/URL) must wrap, not push out the bubble's fixed width
+  q.style.cssText = "font-weight:600;overflow-wrap:anywhere;";
   box.appendChild(q);
 
   // Form type (fields): Core has already validated the shape; here we render + check required
@@ -351,6 +357,7 @@ async function loadPrefs(): Promise<void> {
     const mode = String(s.mode ?? "carousel");
     const theme = String(s.bubbleTheme ?? "chef");
     const pos = String(s.bubblePos ?? "right");
+    const bubbleGap = Math.min(24, Math.max(0, Number(s.bubbleGap ?? 0) || 0));
     const maxRows = Math.min(10, Math.max(1, Number(s.maxRows ?? 5) || 5));
     const density = String(s.bubbleDensity ?? "standard");
     const petSize = Math.min(130, Math.max(70, Number(s.petSize ?? 100) || 100));
@@ -371,6 +378,7 @@ async function loadPrefs(): Promise<void> {
       bubblePos: (BUBBLE_POSITIONS as readonly string[]).includes(pos)
         ? (pos as BubblePos)
         : "right",
+      bubbleGap,
       maxRows,
       density: (BUBBLE_DENSITIES as readonly string[]).includes(density)
         ? (density as BubbleDensity)
@@ -421,6 +429,55 @@ async function loadPrefs(): Promise<void> {
   }
 }
 
+/** Window height for a layout: "bottom" stacks pet + gap + bubble vertically; every other side fits in the bubble budget. */
+function windowHeightFor(pos: BubblePos, petPx: number, gap: number): number {
+  return pos === "bottom" ? petPx + gap + BUBBLE_BUDGET : BUBBLE_BUDGET;
+}
+
+/** Give the compositor frames to apply the new viewport size: the pet rect in the top/bottom layouts is
+ *  pinned to 100vh, and reading it before the resize lands computes the anchor from the old height. */
+function settleViewport(): Promise<void> {
+  return new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+}
+
+/** petSize/gap changed under the current layout: the window height must follow, or the bubble is clipped when the
+ *  pet grows and dead space is left when it shrinks. The pet is pinned top:0 and setSize keeps the window
+ *  origin, so no anchor dance is needed here. */
+async function syncWindowHeight(): Promise<void> {
+  // Same effective side as applyBubblePos: the edge auto-flip may have mirrored the user's side,
+  // and the height must follow the layout that is actually on screen — otherwise the sync would
+  // shrink a flipped-to-bottom window right back down every tick.
+  const pos =
+    flipCache && flipCache.want === prefs.bubblePos ? flipCache.eff : prefs.bubblePos;
+  const petPx = Math.round((BASE_PX * prefs.petSize) / 100);
+  const wantH = windowHeightFor(pos, petPx, prefs.bubbleGap);
+  if (wantH === appliedWindowH) return;
+  try {
+    await getCurrentWindow().setSize(new LogicalSize(PET_WINDOW_W, wantH));
+    appliedWindowH = wantH;
+  } catch (err) {
+    console.warn("syncWindowHeight: failed to resize the window, bubble space may be insufficient", err);
+  }
+}
+
+/** Logical bounds of the monitor the window is on; null when the platform refuses. */
+async function monitorBounds(): Promise<{ x: number; y: number; w: number; h: number } | null> {
+  try {
+    const m = await currentMonitor();
+    if (!m) return null;
+    return {
+      x: m.position.x / m.scaleFactor,
+      y: m.position.y / m.scaleFactor,
+      w: m.size.width / m.scaleFactor,
+      h: m.size.height / m.scaleFactor,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Move the bubble to the pet's other side.
  *
@@ -429,10 +486,30 @@ async function loadPrefs(): Promise<void> {
  *
  * Top/bottom layouts also need the window made taller (pet frame + bubble budget): moving the window alone is not enough,
  * because when the window hits the top screen edge the system clamps its position and the pet gets shoved along.
+ *
+ * Edge auto-flip: when the pet sits so close to a screen edge that the bubble's full budget would cross it, the side
+ * mirrors (right↔left, top↔bottom) and the pet stays put — only the bubble moves to where the room actually is.
+ * The decision is cached per (user side, pet anchor, pet size, gap) so the per-second poll costs nothing when nothing changed.
  */
+let flipCache: { want: BubblePos; ax: number; ay: number; petPx: number; gap: number; eff: BubblePos } | null = null;
+
 async function applyBubblePos(): Promise<void> {
   const want = prefs.bubblePos;
-  if (document.body.dataset.bpos === want) return;
+  const petPx = Math.round((BASE_PX * prefs.petSize) / 100);
+  const gap = prefs.bubbleGap;
+  // Fast path: same user side, same recorded anchor and metrics, layout already applied → nothing can have changed.
+  if (
+    document.body.dataset.bpos &&
+    flipCache &&
+    petAnchor &&
+    flipCache.want === want &&
+    flipCache.ax === petAnchor.x &&
+    flipCache.ay === petAnchor.y &&
+    flipCache.petPx === petPx &&
+    flipCache.gap === gap
+  ) {
+    return;
+  }
   const petEl = (pet3d
     ? document.getElementById("pet3d")
     : document.getElementById("pet")) as HTMLElement | null;
@@ -450,14 +527,35 @@ async function applyBubblePos(): Promise<void> {
   } catch (err) {
     console.warn("applyBubblePos: cannot read window position, the pet will follow the side switch", err);
   }
-  document.body.dataset.bpos = want;
+  // Effective side: the user's choice, mirrored when the full bubble budget would cross the monitor edge.
+  // Full budget (not "whatever fits") keeps the rule simple: a half-width bubble at the edge is worse than a flipped one.
+  let eff = want;
+  if (anchor) {
+    const mb = await monitorBounds();
+    if (mb) {
+      const need = gap + BUBBLE_BUDGET;
+      if (want === "right" && anchor.x + petPx + need > mb.x + mb.w) eff = "left";
+      else if (want === "left" && anchor.x - need < mb.x) eff = "right";
+      else if (want === "bottom" && anchor.y + petPx + need > mb.y + mb.h) eff = "top";
+      else if (want === "top" && anchor.y - need < mb.y) eff = "bottom";
+    }
+    flipCache = { want, ax: anchor.x, ay: anchor.y, petPx, gap, eff };
+  }
+  if (document.body.dataset.bpos === eff) {
+    // Layout already correct (e.g. the HTML default "right" on first run, or a flip that happens
+    // to match the newly picked side): adopt the anchor so the per-second fast path can engage.
+    if (anchor) petAnchor = anchor;
+    return;
+  }
+  document.body.dataset.bpos = eff;
   // Only grow the window for "bottom" layout: the window grows downward from the top-left corner, needs no space above the pet,
   // and the bubble gets the full size budget. Conversely, a "top" layout growing upward needs
   // more headroom and more easily hits the screen edge and gets pushed back by the system, shoving the pet away.
   try {
-    const petPx = Math.round((BASE_PX * prefs.petSize) / 100);
-    const wantH = want === "bottom" ? petPx + BUBBLE_BUDGET : BUBBLE_BUDGET;
+    const wantH = windowHeightFor(eff, petPx, prefs.bubbleGap);
     await win.setSize(new LogicalSize(PET_WINDOW_W, wantH));
+    appliedWindowH = wantH;
+    await settleViewport();
   } catch (err) {
     console.warn("applyBubblePos: failed to resize the window, bubble space may be insufficient", err);
   }
@@ -478,6 +576,8 @@ function applyPetSize(canvas: HTMLCanvasElement): void {
   if (canvas.width !== px) canvas.width = px;
   if (canvas.height !== px) canvas.height = px;
   document.documentElement.style.setProperty("--pet-w", `${px}px`);
+  // Pet-to-bubble spacing is applied here too: this runs every poll tick, so a gap change lands within a second.
+  document.documentElement.style.setProperty("--bubble-gap", `${prefs.bubbleGap}px`);
   pet3d?.setSize(px); // the 3D renderer must follow the size too
 }
 
@@ -754,6 +854,10 @@ export async function startOverlay(canvas: HTMLCanvasElement): Promise<void> {
 
   await loadPrefs();
   applyPetSize(canvas);
+  // Apply the saved side right away: index.html hardcodes data-bpos="right", so without this the
+  // pet window shows the wrong layout for a second and then visibly jumps on the first poll tick.
+  await applyBubblePos();
+  await syncWindowHeight();
   try {
     const saved = await invoke<Record<string, unknown>>("get_settings");
     if (saved.onboarded === false) {
@@ -1017,9 +1121,12 @@ export async function startOverlay(canvas: HTMLCanvasElement): Promise<void> {
   let petShown = true;
   window.setInterval(() => {
     paintBubble();
-    void loadPrefs().then(() => {
+    void loadPrefs().then(async () => {
       applyPetSize(canvas);
-      void applyBubblePos();
+      // Side switch first (full anchor dance), then the petSize sync: when the side did change,
+      // applyBubblePos already applied the matching height and the sync becomes a no-op.
+      await applyBubblePos();
+      await syncWindowHeight();
       if (prefs.petVisible !== petShown) {
         petShown = prefs.petVisible;
         const win = getCurrentWindow();
