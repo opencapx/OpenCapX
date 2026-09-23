@@ -169,7 +169,7 @@ fn modified_secs(m: &std::fs::Metadata) -> i64 {
         .unwrap_or(0)
 }
 
-fn same_file(a: &std::path::Path, b: &std::path::Path) -> bool {
+pub(crate) fn same_file(a: &std::path::Path, b: &std::path::Path) -> bool {
     if a == b {
         return true;
     }

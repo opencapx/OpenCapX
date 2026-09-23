@@ -278,19 +278,37 @@ fn fire(handle: &tauri::AppHandle, bus: &Arc<EventBus>, rule_id: &str, then: Val
 }
 
 /// CLI (`opencapx automation …`) entry: users manage rules without depending on MCP/UI.
+/// `opencapx automation` — clap owns the parsing and the generated help.
+#[derive(clap::Parser)]
+#[command(name = "opencapx automation", about = "Automation rules: list, add and remove")]
+struct AutomationCli {
+    #[command(subcommand)]
+    cmd: AutomationCmd,
+}
+
+#[derive(clap::Subcommand)]
+enum AutomationCmd {
+    /// List the configured automation rules
+    List,
+    /// Add a rule from a '<when/then JSON>' spec
+    Add { spec: String },
+    /// Remove a rule by id
+    Remove { id: String },
+}
+
 pub fn run_cli(args: &[String]) -> i32 {
-    match args.first().map(|s| s.as_str()) {
-        Some("list") => {
+    let cli = match super::cli::parse::<AutomationCli>("opencapx automation", args) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    match cli.cmd {
+        AutomationCmd::List => {
             let rules = load_rules();
             println!("{}", serde_json::to_string_pretty(&json!({ "rules": rules })).unwrap());
             0
         }
-        Some("add") => {
-            let Some(spec) = args.get(1) else {
-                eprintln!("usage: opencapx automation add '<when/then JSON>'");
-                return 1;
-            };
-            let Ok(v) = serde_json::from_str::<Value>(spec) else {
+        AutomationCmd::Add { spec } => {
+            let Ok(v) = serde_json::from_str::<Value>(&spec) else {
                 eprintln!("bad JSON: {}", spec);
                 return 1;
             };
@@ -308,30 +326,20 @@ pub fn run_cli(args: &[String]) -> i32 {
                 }
             }
         }
-        Some("remove") => {
-            let Some(id) = args.get(1) else {
-                eprintln!("usage: opencapx automation remove <rule-id>");
-                return 1;
-            };
-            match remove_rule(id) {
-                Ok(true) => {
-                    println!("removed {}", id);
-                    0
-                }
-                Ok(false) => {
-                    eprintln!("no such rule: {}", id);
-                    1
-                }
-                Err(e) => {
-                    eprintln!("{}", e);
-                    1
-                }
+        AutomationCmd::Remove { id } => match remove_rule(&id) {
+            Ok(true) => {
+                println!("removed {}", id);
+                0
             }
-        }
-        _ => {
-            eprintln!("usage: opencapx automation <list | add '<json>' | remove <id>>");
-            1
-        }
+            Ok(false) => {
+                eprintln!("no such rule: {}", id);
+                1
+            }
+            Err(e) => {
+                eprintln!("{}", e);
+                1
+            }
+        },
     }
 }
 
@@ -444,11 +452,11 @@ mod tests {
         last_fired().lock().unwrap().remove(&id);
     }
 
-    /// CLI: no-arg usage, bad JSON rejected.
+    /// CLI: missing subcommand / missing argument are usage errors (2); bad JSON is a runtime error (1).
     #[test]
     fn cli_rejects_bad_usage() {
-        assert_eq!(run_cli(&[]), 1);
-        assert_eq!(run_cli(&["add".into()]), 1);
+        assert_eq!(run_cli(&[]), 2);
+        assert_eq!(run_cli(&["add".into()]), 2);
         assert_eq!(run_cli(&["add".into(), "{bad".into()]), 1);
     }
 }

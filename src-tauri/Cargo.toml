@@ -11,6 +11,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # image-png: the tray icon composites a status dot dynamically (Image::from_bytes decodes our bundled 32x32.png)
 tauri = { version = "2", features = ["tray-icon", "macos-private-api", "image-png"] }
+clap = { version = "4", features = ["derive"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-updater = "2"

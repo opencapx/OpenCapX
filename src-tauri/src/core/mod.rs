@@ -6,6 +6,7 @@ pub mod alerting;
 pub mod backup;
 pub mod browser;
 pub mod capability;
+pub mod cli;
 pub mod clipboard;
 pub mod config;
 pub mod declaration;

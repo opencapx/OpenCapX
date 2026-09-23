@@ -23,7 +23,7 @@ The desktop pet is the most visible UI of this system, but it is not the core. T
 | [mcp.md](mcp.md) | MCP gateway: the 6 tools agents use to call OpenCapX |
 | [supply-chain.md](supply-chain.md) | Supply chain and publishing plan (decision document): trust model, publisher registration, review policy, install UX |
 | [release.md](release.md) | Release process: pre-release gate, key and secrets checklist, tagging, build verification, npm publish, emergencies |
-| [user-guide.md](user-guide.md) | User guide: plugin installation (three states), permission confirmation, settings (secret masking), updates, revocation handling, uninstall |
+| [user-guide.md](user-guide.md) | User guide: plugin installation (three states), permission confirmation, settings (secret masking), the opencapx command, updates, revocation handling, uninstall |
 | [plugin-review.md](plugin-review.md) | Plugin review handbook: 5 categories of automated gate checks, manual channel and SLA, observation period, incident process |
 | [permission-domains.md](permission-domains.md) | Plugin permission domain design proposal (proposal, pending review): third-party domain declaration, mapping freeze, phased domain ownership |
 | [i18n.md](i18n.md) | Internationalization: three-layer copy ownership, 3-step process for adding a language, validation rules |

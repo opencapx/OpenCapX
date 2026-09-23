@@ -4,6 +4,17 @@ Download the latest build from the [releases page](https://github.com/opencapx/O
 
 The macOS builds are not code-signed or notarized, and will stay that way until there is a commercial reason to buy an Apple Developer membership. If Gatekeeper blocks the first launch, right-click the app and choose Open, or run `xattr -dr com.apple.quarantine /Applications/OpenCapX.app` after copying it to Applications.
 
+## The `opencapx` command
+
+The app ships a command-line interface (`opencapx connect`, `opencapx sandbox`, `opencapx rules`, plugin signing, …). It is not on `PATH` by default. Install it once:
+
+- The tray menu's **Install opencapx Command** item (it only appears while the command is missing), or
+- **Settings → General → Command line → Install opencapx command** (macOS asks for your password when `/usr/local/bin` is root-owned), or
+- `/Applications/OpenCapX.app/Contents/MacOS/opencapx install-cli` from a terminal, or
+- manually: `sudo ln -sfn ~/.opencapx/bin/opencapx /usr/local/bin/opencapx`
+
+The symlink points at `~/.opencapx/bin/opencapx`, the stable copy the app keeps fresh, so it survives app updates and reinstalls; the same Settings row (or `opencapx uninstall-cli`) removes it. Agent hooks and MCP entries do not depend on this — they already use the stable copy by absolute path.
+
 ## Build from source
 
 Build from source when you need a local binary.
