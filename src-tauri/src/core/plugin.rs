@@ -4742,6 +4742,8 @@ mod tests {
     }
 
     /// F6 transactionality: swap failure (blocked by a .old placeholder file) → roll back the DB row + restore the original runtime state.
+    /// Unix-only: the filesystem fault injection is not portable (see the placeholder note below).
+    #[cfg(unix)]
     #[test]
     fn update_swap_failure_restores_old_running() {
         skip_probe_in_tests();
@@ -4769,7 +4771,11 @@ mod tests {
             .iter()
             .any(|p| p.id == id && p.status == "running"));
 
-        // placeholder: put a regular file at the backup path → rename(dest→backup) must fail
+        // placeholder: put a regular file at the backup path → rename(dest→backup) must fail.
+        // Note: install blind-removes a stale dir at this path first, so only a FILE blocks
+        // the unix rename; Windows replaces a file blocker wholesale (seen in CI), and the
+        // prod pre-remove defeats non-empty-dir injection. A portable fault-injection seam
+        // is the TODO; until then this stays unix-gated.
         let backup = base
             .join("plugins")
             .join(format!(".old-{}-{}", id, std::process::id()));

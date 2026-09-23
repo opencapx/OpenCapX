@@ -113,6 +113,12 @@ mod tests {
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     #[test]
     fn print_reports_platform_limit() {
-        assert!(print(&json!({ "path": "/x.pdf" })).unwrap_err().contains("macOS/Linux-only"));
+        // validate() runs before the platform branch; a unix-style "/x.pdf" is not an
+        // absolute path on Windows and trips path validation instead of the platform limit.
+        #[cfg(windows)]
+        let path = "C:\\x.pdf";
+        #[cfg(not(windows))]
+        let path = "/x.pdf";
+        assert!(print(&json!({ "path": path })).unwrap_err().contains("macOS/Linux-only"));
     }
 }
