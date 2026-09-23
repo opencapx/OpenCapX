@@ -38,7 +38,7 @@ Claude Code, Codex, and OpenCode already know how to code. They cannot see your 
 
 **Agent surface**
 - **MCP gateway** — six tools (`say`, `notify`, `set_state`, `ask`, `list_capabilities`, `execute`) plus event subscriptions, so any MCP host can drive the desktop.
-- **One-command connect** — `opencapx connect claude|codex|opencode|omp` wires the agent's hooks and MCP entry, idempotently. Entries point at a stable CLI copy (`~/.opencapx/bin/opencapx`) that survives rebuilds and reinstalls.
+- **One-command connect** — `opencapx connect <agent>` wires 13 agent hosts (hooks for all of them; the MCP server entry for Claude Code, Codex, opencode and OMP), idempotently. Entries point at a stable CLI copy (`~/.opencapx/bin/opencapx`) that survives rebuilds and reinstalls.
 - **Session-start capability brief** — supported agents receive OpenCapX's capability list in their context at session start, before they have to ask.
 - **Notifications** — OS toasts when an agent finishes or waits for input, collected in a Notification Center.
 
@@ -117,10 +117,10 @@ Build from source, the prerequisites, and the live development window are in [IN
 
 ### Connect your agent
 
-One command wires the agent's hooks and MCP server entry (idempotent, no credentials land in the agent's config — the token flow is handled between `opencapx mcp` and the core at startup). Install the CLI first if `opencapx` is not on your `PATH` — **Settings → General → Command line** ([INSTALL.md](INSTALL.md#the-opencapx-command)):
+One command wires the agent's hooks and MCP server entry (idempotent, no credentials land in the agent's config — the token flow is handled between `opencapx mcp` and the core at startup). If `opencapx` is not on your `PATH` yet, install it in one click — **tray menu → Install opencapx Command** (or **Settings → General → Command line**; [INSTALL.md](INSTALL.md#the-opencapx-command)):
 
 ```bash
-opencapx connect claude   # or: codex | opencode | omp
+opencapx connect claude   # or any of 13 hosts — an unknown name lists them all
 ```
 
 Restart the agent, then ask it to call `opencapx.list_capabilities` to verify. The manual per-host config shapes are in [docs/mcp.md](docs/mcp.md).

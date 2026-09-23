@@ -269,10 +269,10 @@ and displayed side by side in the same viewer; the rpc trace and the hook sessio
 Preferred one-command setup (from v1.5, idempotent, repeatable):
 
 ```bash
-opencapx connect claude   # or: codex / opencode / omp
+opencapx connect claude   # or any of the 13 supported hosts — an unknown name lists them all
 ```
 
-It writes both the hook and the MCP server entry for that agent in one go — for hosts that have an MCP target (claude / codex / opencode / omp); hooks-only hosts (pi) get the hook side and a note; the auth token is handled by `opencapx mcp`
+It writes the hook (and, where the host has an MCP target, the MCP server entry) in one go. MCP targets: claude / codex / opencode / omp. Hooks-only hosts — gemini, cursor, windsurf, antigravity, copilot, kiro, droid, pi, grok — get the hook side and a note; the auth token is handled by `opencapx mcp`
 itself via TOFU at startup, and the host configuration contains no credentials. Manual configuration is equivalent to the examples below.
 
 **Stable CLI path.** The entries `connect` writes point at `~/.opencapx/bin/opencapx` — a stable
