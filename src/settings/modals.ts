@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { onEvent } from "../events";
 import { t } from "../i18n";
-import { esc } from "./shared";
+import { esc, escAttr } from "./shared";
 import type { HotkeyAction, PaletteEntry } from "./types";
 
 /// Install-time permission ask modal. Core emits `app.emit("opencapx-install-ask")` per permission during the commit phase,
@@ -82,7 +82,7 @@ export async function openCommandPalette(): Promise<void> {
         .map(
           (e) => {
             const derivedAction = e.kind === "builtin" ? e.id.replace(/^builtin:/, "") : (e.capability ?? "");
-            return `<li class="palette-row" data-pal-id="${esc(e.id)}" data-pal-kind="${esc(e.kind)}" data-pal-action="${esc(derivedAction)}" data-pal-plugin="${esc(e.plugin_id ?? "")}" data-pal-cap="${esc(e.capability ?? "")}"><span class="palette-row-title">${esc(e.title)}</span><span class="palette-row-kind">${esc(e.kind)}</span></li>`;
+            return `<li class="palette-row" data-pal-id="${escAttr(e.id)}" data-pal-kind="${escAttr(e.kind)}" data-pal-action="${escAttr(derivedAction)}" data-pal-plugin="${esc(e.plugin_id ?? "")}" data-pal-cap="${esc(e.capability ?? "")}"><span class="palette-row-title">${esc(e.title)}</span><span class="palette-row-kind">${esc(e.kind)}</span></li>`;
           },
         )
         .join("")}</ul>

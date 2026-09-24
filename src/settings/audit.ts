@@ -1,16 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { connectEventStream, onEvent, type OpencapxEvent } from "../events";
 import { t } from "../i18n";
-import {
-  dayLabel,
-  detailKv,
-  detailPayload,
-  esc,
-  formatBytes,
-  group,
-  listError,
-  listSkeleton,
-} from "./shared";
+import { dayLabel, detailKv, detailPayload, esc, escAttr, formatBytes, group, listError, listSkeleton } from "./shared";
 
 let auditStreamOnEvent: (() => void) | null = null;
 // i2 §14 — the Audit tab shows the Activity Timeline by default; the old permission list moves into a second view.
@@ -267,7 +258,7 @@ async function refreshReplay(): Promise<void> {
     .map((s) => {
       const startDate = new Date(s.startedAt * 1000).toLocaleString();
       const dur = s.endedAt ? `${s.endedAt - s.startedAt}s` : "ongoing";
-      return `<tr><td><code>${esc(s.sessionId)}</code></td><td>${esc(startDate)}</td><td>${esc(dur)}</td><td>${s.lineCount}</td><td>${esc(formatBytes(s.sizeBytes))}</td><td><input type="text" class="replay-filter" placeholder="${esc(t("replayFilter"))}" aria-label="${esc(t("replayFilter"))}: ${esc(s.sessionId)}" data-sid="${esc(s.sessionId)}" /><button class="btn ghost replay-go" data-sid="${esc(s.sessionId)}">▶</button><button class="btn ghost replay-export" data-sid="${esc(s.sessionId)}">⬇</button></td></tr>`;
+      return `<tr><td><code>${esc(s.sessionId)}</code></td><td>${esc(startDate)}</td><td>${esc(dur)}</td><td>${s.lineCount}</td><td>${esc(formatBytes(s.sizeBytes))}</td><td><input type="text" class="replay-filter" placeholder="${esc(t("replayFilter"))}" aria-label="${esc(t("replayFilter"))}: ${esc(s.sessionId)}" data-sid="${escAttr(s.sessionId)}" /><button class="btn ghost replay-go" data-sid="${escAttr(s.sessionId)}">▶</button><button class="btn ghost replay-export" data-sid="${escAttr(s.sessionId)}">⬇</button></td></tr>`;
     })
     .join("");
   box.innerHTML = `<table class="replay-table"><thead><tr><th>${esc(t("replaySession"))}</th><th>${esc(t("replayStarted"))}</th><th>${esc(t("replayDuration"))}</th><th>${esc(t("replayEvents"))}</th><th>${esc(t("replaySize"))}</th><th>${esc(t("replayActions"))}</th></tr></thead><tbody>${rows}</tbody></table>`;

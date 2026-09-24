@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { t, type I18nKey } from "../i18n";
-import { esc } from "./shared";
+import { esc, escAttr } from "./shared";
 
 export function renderAlerting(body: HTMLElement): void {
     // hero (enable dot + title + status slot) + section cards: the same depth language as the metrics/sla/plugin settings pages,
@@ -122,7 +122,7 @@ function renderAlertingForm(): void {
     </div>
     <div class="alerting-row">
       <label class="alerting-label">${esc(t("alertingUrl"))}</label>
-      <input type="text" class="logs-input alerting-url" id="alerting-url" placeholder="https://hooks.slack.com/..." value="${esc(c.url)}" />
+      <input type="text" class="logs-input alerting-url" id="alerting-url" placeholder="https://hooks.slack.com/..." value="${escAttr(c.url)}" />
     </div>
     <div class="alerting-row">
       <label class="alerting-label">${esc(t("alertingMinInterval"))}</label>
@@ -169,8 +169,8 @@ function renderAlertingHeaders(headers: WebhookHeader[]): void {
   }
   box.innerHTML = headers.map((h, i) =>
     `<div class="alerting-header-row">
-       <input type="text" class="logs-input alerting-hkey" data-i="${i}" placeholder="${esc(t("alertingHeaderKey"))}" value="${esc(h.key)}" />
-       <input type="text" class="logs-input alerting-hval" data-i="${i}" placeholder="${esc(t("alertingHeaderValue"))}" value="${esc(h.value)}" />
+       <input type="text" class="logs-input alerting-hkey" data-i="${i}" placeholder="${esc(t("alertingHeaderKey"))}" value="${escAttr(h.key)}" />
+       <input type="text" class="logs-input alerting-hval" data-i="${i}" placeholder="${esc(t("alertingHeaderValue"))}" value="${escAttr(h.value)}" />
        <button class="btn ghost alerting-hdel" data-i="${i}" type="button">×</button>
      </div>`
   ).join("");
@@ -490,46 +490,46 @@ function renderOverrideRow(epId: string, oi: number, srcName: string, sev: strin
   const opts = ["info", "warn", "error", "critical"]
     .map((v) => `<option value="${v}"${v === sev ? " selected" : ""}>${v}</option>`)
     .join("");
-  return `<div class="alerting-override-row" data-ep-id="${esc(epId)}" data-oi="${oi}">
-     <input type="text" class="logs-input alerting-ep-override-source" data-ep-id="${esc(epId)}" data-oi="${oi}" placeholder="${esc(t("alertingEndpointSeverityOverrideSource"))}" value="${esc(srcName)}" style="min-width:200px" />
-     <select class="logs-input alerting-ep-override-severity" data-ep-id="${esc(epId)}" data-oi="${oi}">${opts}</select>
-     <button class="btn ghost alerting-ep-override-delete" data-ep-id="${esc(epId)}" data-oi="${oi}" type="button" title="${esc(t("alertingEndpointSeverityOverrideDelete"))}">×</button>
+  return `<div class="alerting-override-row" data-ep-id="${escAttr(epId)}" data-oi="${oi}">
+     <input type="text" class="logs-input alerting-ep-override-source" data-ep-id="${escAttr(epId)}" data-oi="${oi}" placeholder="${esc(t("alertingEndpointSeverityOverrideSource"))}" value="${escAttr(srcName)}" style="min-width:200px" />
+     <select class="logs-input alerting-ep-override-severity" data-ep-id="${escAttr(epId)}" data-oi="${oi}">${opts}</select>
+     <button class="btn ghost alerting-ep-override-delete" data-ep-id="${escAttr(epId)}" data-oi="${oi}" type="button" title="${esc(t("alertingEndpointSeverityOverrideDelete"))}">×</button>
    </div>`;
 }
 
 function renderEndpointCard(ep: WebhookEndpointDto, i: number): string {
   const sourceBoxes = ALERTING_SOURCES.map((s) => {
     const checked = ep.sourceFilter.includes(s.id) ? " checked" : "";
-    return `<label><input type="checkbox" class="alerting-ep-src" data-ep-id="${esc(ep.id)}" data-src="${esc(s.id)}"${checked}/> ${esc(t(s.i18n))}</label>`;
+    return `<label><input type="checkbox" class="alerting-ep-src" data-ep-id="${escAttr(ep.id)}" data-src="${escAttr(s.id)}"${checked}/> ${esc(t(s.i18n))}</label>`;
   }).join("");
   const headersHtml = ep.headers.map((h, hi) =>
     `<div class="alerting-header-row">
-       <input type="text" class="logs-input alerting-ep-hkey" data-ep-id="${esc(ep.id)}" data-hi="${hi}" placeholder="${esc(t("alertingHeaderKey"))}" value="${esc(h.key)}" />
-       <input type="text" class="logs-input alerting-ep-hval" data-ep-id="${esc(ep.id)}" data-hi="${hi}" placeholder="${esc(t("alertingHeaderValue"))}" value="${esc(h.value)}" />
-       <button class="btn ghost alerting-ep-hdel" data-ep-id="${esc(ep.id)}" data-hi="${hi}" type="button">×</button>
+       <input type="text" class="logs-input alerting-ep-hkey" data-ep-id="${escAttr(ep.id)}" data-hi="${hi}" placeholder="${esc(t("alertingHeaderKey"))}" value="${escAttr(h.key)}" />
+       <input type="text" class="logs-input alerting-ep-hval" data-ep-id="${escAttr(ep.id)}" data-hi="${hi}" placeholder="${esc(t("alertingHeaderValue"))}" value="${escAttr(h.value)}" />
+       <button class="btn ghost alerting-ep-hdel" data-ep-id="${escAttr(ep.id)}" data-hi="${hi}" type="button">×</button>
      </div>`
   ).join("");
   return `
-    <div class="alerting-endpoint-card ${ep.enabled ? "alerting-ep-on" : "alerting-ep-off"}" data-ep-id="${esc(ep.id)}" data-i="${i}">
+    <div class="alerting-endpoint-card ${ep.enabled ? "alerting-ep-on" : "alerting-ep-off"}" data-ep-id="${escAttr(ep.id)}" data-i="${i}">
       <div class="alerting-row">
-        <label class="alerting-toggle"><input type="checkbox" class="alerting-ep-enabled" data-ep-id="${esc(ep.id)}"${ep.enabled ? " checked" : ""}/> ${esc(t("alertingEndpointEnabled"))}</label>
+        <label class="alerting-toggle"><input type="checkbox" class="alerting-ep-enabled" data-ep-id="${escAttr(ep.id)}"${ep.enabled ? " checked" : ""}/> ${esc(t("alertingEndpointEnabled"))}</label>
       </div>
       <div class="alerting-row">
         <label class="alerting-label">${esc(t("alertingEndpointName"))}</label>
-        <input type="text" class="logs-input alerting-ep-name" data-ep-id="${esc(ep.id)}" value="${esc(ep.name)}" />
+        <input type="text" class="logs-input alerting-ep-name" data-ep-id="${escAttr(ep.id)}" value="${escAttr(ep.name)}" />
       </div>
       <div class="alerting-row">
         <label class="alerting-label">${esc(t("alertingUrl"))}</label>
-        <input type="text" class="logs-input alerting-ep-url" data-ep-id="${esc(ep.id)}" placeholder="https://hooks.example.com/..." value="${esc(ep.url)}" />
+        <input type="text" class="logs-input alerting-ep-url" data-ep-id="${escAttr(ep.id)}" placeholder="https://hooks.example.com/..." value="${escAttr(ep.url)}" />
       </div>
       <div class="alerting-row vertical">
         <label class="alerting-label">${esc(t("alertingHeaders"))}</label>
-        <div class="alerting-ep-headers" data-ep-id="${esc(ep.id)}">${headersHtml || `<div class="setting-hint">${esc(t("alertingHeadersHint"))}</div>`}</div>
-        <button class="btn ghost alerting-ep-add-header" data-ep-id="${esc(ep.id)}" type="button">${esc(t("alertingAddHeader"))}</button>
+        <div class="alerting-ep-headers" data-ep-id="${escAttr(ep.id)}">${headersHtml || `<div class="setting-hint">${esc(t("alertingHeadersHint"))}</div>`}</div>
+        <button class="btn ghost alerting-ep-add-header" data-ep-id="${escAttr(ep.id)}" type="button">${esc(t("alertingAddHeader"))}</button>
       </div>
       <div class="alerting-row vertical">
         <label class="alerting-label">${esc(t("alertingEndpointSecret"))}</label>
-        <input type="password" class="logs-input alerting-ep-secret" data-ep-id="${esc(ep.id)}" placeholder="${esc(t("alertingEndpointSecretHint"))}" value="${esc(ep.secret)}" />
+        <input type="password" class="logs-input alerting-ep-secret" data-ep-id="${escAttr(ep.id)}" placeholder="${esc(t("alertingEndpointSecretHint"))}" value="${escAttr(ep.secret)}" />
       </div>
       <div class="alerting-row vertical">
         <label class="alerting-label">${esc(t("alertingEndpointSourceFilter"))}</label>
@@ -539,15 +539,15 @@ function renderEndpointCard(ep: WebhookEndpointDto, i: number): string {
         <details class="alerting-overrides-section">
           <summary class="alerting-label">${esc(t("alertingEndpointSeverityOverrides"))}</summary>
           <span class="setting-hint">${esc(t("alertingEndpointSeverityOverridesHint"))}</span>
-          <div class="alerting-overrides-list" data-ep-id="${esc(ep.id)}">
+          <div class="alerting-overrides-list" data-ep-id="${escAttr(ep.id)}">
             ${(ep.severityOverrides ?? []).map((o, oi) => renderOverrideRow(ep.id, oi, o.source, o.severity)).join("")}
           </div>
-          <button class="btn ghost alerting-ep-override-add" data-ep-id="${esc(ep.id)}" type="button">${esc(t("alertingEndpointSeverityOverrideAdd"))}</button>
+          <button class="btn ghost alerting-ep-override-add" data-ep-id="${escAttr(ep.id)}" type="button">${esc(t("alertingEndpointSeverityOverrideAdd"))}</button>
         </details>
       </div>
       <div class="alerting-row">
         <label class="alerting-label">${esc(t("alertingSchemaVersion"))}</label>
-        <select class="logs-input alerting-ep-schema-version" data-ep-id="${esc(ep.id)}">
+        <select class="logs-input alerting-ep-schema-version" data-ep-id="${escAttr(ep.id)}">
           <option value="0"${(ep.schemaVersion ?? 0) === 0 ? " selected" : ""}>${esc(t("alertingSchemaLegacy"))}</option>
           <option value="1"${(ep.schemaVersion ?? 0) === 1 ? " selected" : ""}>${esc(t("alertingSchemaCanonical"))}</option>
         </select>
@@ -555,7 +555,7 @@ function renderEndpointCard(ep: WebhookEndpointDto, i: number): string {
       <div class="alerting-row vertical">
         <label class="alerting-label">${esc(t("alertingEndpointTemplatePreset"))}</label>
         <div class="alerting-template-preset-bar">
-          <select class="logs-input alerting-ep-preset-select" data-ep-id="${esc(ep.id)}">
+          <select class="logs-input alerting-ep-preset-select" data-ep-id="${escAttr(ep.id)}">
             <option value="">${esc(t("alertingEndpointTemplatePresetNone"))}</option>
             <optgroup label="${esc(t("alertingEndpointTemplatePresetBuiltins"))}">
               <option value="builtin:slack">${esc(t("alertingEndpointTemplatePresetSlack"))}</option>
@@ -570,39 +570,39 @@ function renderEndpointCard(ep: WebhookEndpointDto, i: number): string {
                   const label = !p.builtin && p.version > 1
                     ? `${esc(p.name)} <span class="preset-version-suffix">v${p.version}</span>`
                     : esc(p.name);
-                  return `<option value="${esc(p.kind)}">${label}</option>`;
+                  return `<option value="${escAttr(p.kind)}">${label}</option>`;
                 }).join("")}
               </optgroup>` : ""}
           </select>
-          <button class="btn ghost preset-icon-btn alerting-ep-preset-save" data-ep-id="${esc(ep.id)}" title="${esc(t("alertingEndpointTemplatePresetSaveTitle"))}" type="button">💾</button>
-          <button class="btn ghost preset-icon-btn alerting-ep-preset-fork" data-ep-id="${esc(ep.id)}" title="${esc(t("alertingEndpointTemplatePresetForkTitle"))}" type="button">🍴</button>
-          <button class="btn ghost preset-icon-btn alerting-ep-preset-delete" data-ep-id="${esc(ep.id)}" title="${esc(t("alertingEndpointTemplatePresetDeleteTitle"))}" type="button">🗑</button>
-          <button class="btn ghost preset-icon-btn alerting-ep-preset-export" data-ep-id="${esc(ep.id)}" title="${esc(t("alertingEndpointTemplatePresetExportTitle"))}" type="button">⬇</button>
-          <button class="btn ghost preset-icon-btn alerting-ep-preset-import" data-ep-id="${esc(ep.id)}" title="${esc(t("alertingEndpointTemplatePresetImportTitle"))}" type="button">⬆</button>
+          <button class="btn ghost preset-icon-btn alerting-ep-preset-save" data-ep-id="${escAttr(ep.id)}" title="${esc(t("alertingEndpointTemplatePresetSaveTitle"))}" type="button">💾</button>
+          <button class="btn ghost preset-icon-btn alerting-ep-preset-fork" data-ep-id="${escAttr(ep.id)}" title="${esc(t("alertingEndpointTemplatePresetForkTitle"))}" type="button">🍴</button>
+          <button class="btn ghost preset-icon-btn alerting-ep-preset-delete" data-ep-id="${escAttr(ep.id)}" title="${esc(t("alertingEndpointTemplatePresetDeleteTitle"))}" type="button">🗑</button>
+          <button class="btn ghost preset-icon-btn alerting-ep-preset-export" data-ep-id="${escAttr(ep.id)}" title="${esc(t("alertingEndpointTemplatePresetExportTitle"))}" type="button">⬇</button>
+          <button class="btn ghost preset-icon-btn alerting-ep-preset-import" data-ep-id="${escAttr(ep.id)}" title="${esc(t("alertingEndpointTemplatePresetImportTitle"))}" type="button">⬆</button>
         </div>
         <span class="setting-hint">${esc(t("alertingEndpointTemplatePresetBarHint"))}</span>
         <label class="alerting-label">
-          <input type="checkbox" class="alerting-ep-template-toggle" data-ep-id="${esc(ep.id)}"${ep.template ? " checked" : ""}/>
+          <input type="checkbox" class="alerting-ep-template-toggle" data-ep-id="${escAttr(ep.id)}"${ep.template ? " checked" : ""}/>
           ${esc(t("alertingEndpointTemplate"))}
         </label>
         <span class="setting-hint">${esc(t("alertingEndpointTemplateHint"))}</span>
-        <textarea class="logs-input alerting-ep-template" data-ep-id="${esc(ep.id)}" rows="6" placeholder="${esc(t("alertingEndpointTemplatePlaceholder"))}"${ep.template ? "" : " disabled"}>${esc(ep.template ?? "")}</textarea>
+        <textarea class="logs-input alerting-ep-template" data-ep-id="${escAttr(ep.id)}" rows="6" placeholder="${esc(t("alertingEndpointTemplatePlaceholder"))}"${ep.template ? "" : " disabled"}>${esc(ep.template ?? "")}</textarea>
         <span class="setting-hint">${esc(t("alertingEndpointTemplateContentType"))}</span>
         <label class="alerting-label alerting-template-sample-label">${esc(t("alertingEndpointTemplateSample"))}</label>
         <span class="setting-hint">${esc(t("alertingEndpointTemplateSampleHint"))}</span>
-        <textarea class="logs-input alerting-ep-sample" data-ep-id="${esc(ep.id)}" rows="6" placeholder="${esc(t("alertingEndpointTemplateSamplePlaceholder"))}"${ep.template ? "" : " disabled"}>${esc(ep.templateSample ?? DEFAULT_TEMPLATE_SAMPLE)}</textarea>
+        <textarea class="logs-input alerting-ep-sample" data-ep-id="${escAttr(ep.id)}" rows="6" placeholder="${esc(t("alertingEndpointTemplateSamplePlaceholder"))}"${ep.template ? "" : " disabled"}>${esc(ep.templateSample ?? DEFAULT_TEMPLATE_SAMPLE)}</textarea>
         <div class="endpoint-template-preview-row">
-          <span class="endpoint-content-type-badge ct-text" data-ep-id="${esc(ep.id)}">${esc(t("alertingEndpointTemplatePreviewLabel"))}</span>
-          <pre class="endpoint-template-preview" data-ep-id="${esc(ep.id)}"></pre>
+          <span class="endpoint-content-type-badge ct-text" data-ep-id="${escAttr(ep.id)}">${esc(t("alertingEndpointTemplatePreviewLabel"))}</span>
+          <pre class="endpoint-template-preview" data-ep-id="${escAttr(ep.id)}"></pre>
         </div>
-        <div class="endpoint-template-diag" data-ep-id="${esc(ep.id)}"></div>
+        <div class="endpoint-template-diag" data-ep-id="${escAttr(ep.id)}"></div>
       </div>
       <div class="alerting-actions">
-        <button class="btn ghost alerting-ep-test" data-ep-id="${esc(ep.id)}" type="button">${esc(t("alertingTest"))}</button>
-        <button class="btn ghost alerting-ep-preview" data-ep-id="${esc(ep.id)}" type="button" title="${esc(t("alertingSeverityPreviewButton"))}">🔮</button>
-        <button class="btn alerting-ep-save" data-ep-id="${esc(ep.id)}" type="button">${esc(t("alertingSave"))}</button>
-        <button class="btn ghost alerting-ep-delete" data-ep-id="${esc(ep.id)}" type="button">${esc(t("alertingEndpointDelete"))}</button>
-        <span class="setting-hint alerting-ep-msg" data-ep-id="${esc(ep.id)}"></span>
+        <button class="btn ghost alerting-ep-test" data-ep-id="${escAttr(ep.id)}" type="button">${esc(t("alertingTest"))}</button>
+        <button class="btn ghost alerting-ep-preview" data-ep-id="${escAttr(ep.id)}" type="button" title="${esc(t("alertingSeverityPreviewButton"))}">🔮</button>
+        <button class="btn alerting-ep-save" data-ep-id="${escAttr(ep.id)}" type="button">${esc(t("alertingSave"))}</button>
+        <button class="btn ghost alerting-ep-delete" data-ep-id="${escAttr(ep.id)}" type="button">${esc(t("alertingEndpointDelete"))}</button>
+        <span class="setting-hint alerting-ep-msg" data-ep-id="${escAttr(ep.id)}"></span>
       </div>
     </div>`;
 }
@@ -1017,7 +1017,7 @@ async function refreshTemplatePreview(epId: string, root: Element): Promise<void
       diagEl.innerHTML = `<span class="setting-hint">✓ ${esc(t("alertingEndpointTemplateLintClean"))}</span>`;
     } else {
       diagEl.innerHTML = result.diagnostics.map((d) => `
-        <div class="endpoint-template-diag-item diag-${esc(d.severity)}">
+        <div class="endpoint-template-diag-item diag-${escAttr(d.severity)}">
           <span class="endpoint-template-diag-loc">[line ${d.line}, col ${d.column}]</span>
           <span class="endpoint-template-diag-code">${esc(d.code)}</span>
           <span class="endpoint-template-diag-msg">${esc(d.message)}</span>
@@ -1152,7 +1152,7 @@ function populateAlertingPreviewEndpointSelect(): void {
     enabled
       .map(
         (e) =>
-          `<option value="${esc(e.id)}"${e.id === current ? " selected" : ""}>${esc(e.name)}</option>`,
+          `<option value="${escAttr(e.id)}"${e.id === current ? " selected" : ""}>${esc(e.name)}</option>`,
       )
       .join("");
 }
@@ -1188,13 +1188,13 @@ async function onPreviewPredict(): Promise<void> {
 
 function renderPreviewRow(row: EndpointPreviewRowDto): string {
   const hitHtml = row.overrideHit
-    ? `<code>${esc(row.overrideHit.pattern)}</code> → <span class="severity-badge sev-${esc(row.overrideHit.severity)}">${esc(row.overrideHit.severity)}</span> <span class="setting-hint">(${t("alertingSeverityPreviewIndex")} ${row.overrideHit.index})</span>`
+    ? `<code>${esc(row.overrideHit.pattern)}</code> → <span class="severity-badge sev-${escAttr(row.overrideHit.severity)}">${esc(row.overrideHit.severity)}</span> <span class="setting-hint">(${t("alertingSeverityPreviewIndex")} ${row.overrideHit.index})</span>`
     : `<em>${esc(t("alertingSeverityPreviewNoOverride"))}</em>`;
   return `<div class="alerting-preview-row">
     <div class="alerting-preview-ep"><strong>${esc(row.endpointName)}</strong></div>
-    <div class="alerting-preview-prop">${esc(t("alertingSeverityPreviewPropagation"))}: <span class="severity-badge sev-${esc(row.propagationSeverity)}">${esc(row.propagationSeverity)}</span></div>
+    <div class="alerting-preview-prop">${esc(t("alertingSeverityPreviewPropagation"))}: <span class="severity-badge sev-${escAttr(row.propagationSeverity)}">${esc(row.propagationSeverity)}</span></div>
     <div class="alerting-preview-override">${esc(t("alertingSeverityPreviewOverride"))}: ${hitHtml}</div>
-    <div class="alerting-preview-final">${esc(t("alertingSeverityPreviewFinal"))}: <span class="severity-badge sev-${esc(row.finalEnvelopeSeverity)}">${esc(row.finalEnvelopeSeverity)}</span></div>
+    <div class="alerting-preview-final">${esc(t("alertingSeverityPreviewFinal"))}: <span class="severity-badge sev-${escAttr(row.finalEnvelopeSeverity)}">${esc(row.finalEnvelopeSeverity)}</span></div>
   </div>`;
 }
 
@@ -1515,7 +1515,7 @@ async function refreshRecipients(): Promise<void> {
       const status = r.enabled
         ? `<span class="alerting-badge alerting-badge-on">${esc(t("alertingRecipientCardEnabled"))}</span>`
         : `<span class="alerting-badge">${esc(t("alertingRecipientCardDisabled"))}</span>`;
-      return `<div class="recipient-card${r.enabled ? " recipient-card-active" : ""}" data-id="${esc(r.id)}">
+      return `<div class="recipient-card${r.enabled ? " recipient-card-active" : ""}" data-id="${escAttr(r.id)}">
         <div class="recipient-card-head">
           <b>${esc(r.name)}</b>
           <code class="recipient-kind">${esc(r.kind)}</code>
@@ -1523,9 +1523,9 @@ async function refreshRecipients(): Promise<void> {
         </div>
         <div class="recipient-card-config"><span class="setting-hint">config:</span> <code>${esc(cfgStr)}</code></div>
         <div class="recipient-card-foot">
-          <button class="btn ghost rec-test" data-id="${esc(r.id)}" type="button">${esc(t("alertingRecipientTest"))}</button>
-          <button class="btn ghost rec-toggle" data-id="${esc(r.id)}" data-enabled="${r.enabled ? "1" : "0"}" type="button">${r.enabled ? esc(t("alertingRecipientCardDisable")) : esc(t("alertingRecipientCardEnable"))}</button>
-          <button class="btn ghost rec-delete" data-id="${esc(r.id)}" type="button">${esc(t("alertingRecipientCardDelete"))}</button>
+          <button class="btn ghost rec-test" data-id="${escAttr(r.id)}" type="button">${esc(t("alertingRecipientTest"))}</button>
+          <button class="btn ghost rec-toggle" data-id="${escAttr(r.id)}" data-enabled="${r.enabled ? "1" : "0"}" type="button">${r.enabled ? esc(t("alertingRecipientCardDisable")) : esc(t("alertingRecipientCardEnable"))}</button>
+          <button class="btn ghost rec-delete" data-id="${escAttr(r.id)}" type="button">${esc(t("alertingRecipientCardDelete"))}</button>
         </div>
       </div>`;
     })
@@ -1703,15 +1703,15 @@ function renderFailedRow(r: FailedDeliveryDto): string {
   const stateLabel = r.state === "exhausted" ? t("alertingFailedStateExhausted") : r.state === "resolved" ? t("alertingFailedStateResolved") : t("alertingFailedStatePending");
   // Phase 49 — translate endpointId into an endpoint name (when found in the local cache)
   const epChip = r.endpointId
-    ? `<span class="alerting-failed-ep" title="${esc(r.endpointId)}">${esc(alertingEndpoints.find((e) => e.id === r.endpointId)?.name ?? r.endpointId)}</span>`
+    ? `<span class="alerting-failed-ep" title="${escAttr(r.endpointId)}">${esc(alertingEndpoints.find((e) => e.id === r.endpointId)?.name ?? r.endpointId)}</span>`
     : "";
   return `<div class="alerting-failed-row ${stateClass}">
     <div class="alerting-failed-meta"><code>${esc(r.id)}</code> ${epChip} <span class="alerting-failed-source">${esc(r.source)}</span> <span class="alerting-failed-state-badge">${esc(stateLabel)}</span></div>
     <div class="alerting-failed-detail">${esc(t("alertingFailedAttempts"))}: ${r.attempts}/${r.maxAttempts} · ${esc(t("alertingFailedError"))}: ${esc(r.lastError)}</div>
     <div class="alerting-failed-next">${esc(t("alertingFailedNextRetry"))}: ${esc(nextRetry)}</div>
     <div class="alerting-failed-actions">
-      <button class="btn ghost alerting-failed-retry" data-id="${esc(r.id)}" type="button">${esc(t("alertingFailedRetry"))}</button>
-      <button class="btn ghost alerting-failed-del" data-id="${esc(r.id)}" type="button">${esc(t("alertingFailedDelete"))}</button>
+      <button class="btn ghost alerting-failed-retry" data-id="${escAttr(r.id)}" type="button">${esc(t("alertingFailedRetry"))}</button>
+      <button class="btn ghost alerting-failed-del" data-id="${escAttr(r.id)}" type="button">${esc(t("alertingFailedDelete"))}</button>
     </div>
   </div>`;
 }
@@ -1810,7 +1810,7 @@ async function refreshAlertingSilences(): Promise<void> {
           <div class="silence-card-row"><span class="setting-hint">${esc(t("alertingSilenceEnd"))}:</span> ${esc(formatUnix(s.endsAt))}</div>
           <div class="silence-card-row"><span class="setting-hint">${esc(t("alertingSilenceWeekdays"))}:</span> ${esc(weekdayBitsToLabels(s.weekdays))}</div>
           <div class="silence-card-row"><span class="setting-hint">${esc(t("alertingSilenceStartHour"))}–${esc(t("alertingSilenceEndHour"))}:</span> ${s.startHour}–${s.endHour}</div>
-          <div class="silence-card-foot"><button class="btn ghost" data-silence-del="${esc(s.id)}" type="button">${esc(t("alertingSilenceDelete"))}</button></div>
+          <div class="silence-card-foot"><button class="btn ghost" data-silence-del="${escAttr(s.id)}" type="button">${esc(t("alertingSilenceDelete"))}</button></div>
         </div>`;
       })
       .join("");
@@ -1908,7 +1908,7 @@ async function refreshAlertingAcks(): Promise<void> {
             ${status}
           </div>
           <div class="ack-card-row"><span class="setting-hint">${esc(t("alertingAckUntil"))}:</span> ${esc(formatUnix(a.ackUntil))}</div>
-          <div class="ack-card-foot"><button class="btn ghost" data-ack-del="${esc(a.id)}" type="button">${esc(t("alertingSilenceDelete"))}</button></div>
+          <div class="ack-card-foot"><button class="btn ghost" data-ack-del="${escAttr(a.id)}" type="button">${esc(t("alertingSilenceDelete"))}</button></div>
         </div>`;
       })
       .join("");
@@ -1999,7 +1999,7 @@ async function refreshAlertingRoutes(): Promise<void> {
           <div class="route-card-row"><span class="setting-hint">${esc(t("alertingRouteThen"))}:</span> <code>${esc(targetNames)}</code></div>
           ${recipientsLine}
           ${tags}
-          <div class="route-card-foot"><button class="btn ghost" data-route-del="${esc(r.id)}" type="button">${esc(t("alertingSilenceDelete"))}</button><button class="btn ghost" data-route-toggle="${esc(r.id)}" type="button">${r.enabled ? esc(t("alertingRouteDisable")) : esc(t("alertingRouteEnable"))}</button></div>
+          <div class="route-card-foot"><button class="btn ghost" data-route-del="${escAttr(r.id)}" type="button">${esc(t("alertingSilenceDelete"))}</button><button class="btn ghost" data-route-toggle="${escAttr(r.id)}" type="button">${r.enabled ? esc(t("alertingRouteDisable")) : esc(t("alertingRouteEnable"))}</button></div>
         </div>`;
       })
       .join("");
@@ -2240,16 +2240,16 @@ async function refreshAlertingSeverityHints(): Promise<void> {
       ? ` <span class="severity-hint-effective">${esc(t("alertingSeverityEffective"))} <strong>${esc(h.effectiveSeverity)}</strong></span>`
       : "";
     return `
-      <div class="severity-hint-card severity-hint-card-${esc(h.severity)}" data-source="${esc(h.source)}">
+      <div class="severity-hint-card severity-hint-card-${escAttr(h.severity)}" data-source="${escAttr(h.source)}">
         <code class="severity-hint-source">${esc(h.source)}</code>
-        <select class="logs-input severity-hint-severity" data-source="${esc(h.source)}">${opts}</select>
-        <span class="severity-origin-badge severity-origin-badge-${esc(h.origin)}">${esc(originLabel)}</span>
+        <select class="logs-input severity-hint-severity" data-source="${escAttr(h.source)}">${opts}</select>
+        <span class="severity-origin-badge severity-origin-badge-${escAttr(h.origin)}">${esc(originLabel)}</span>
         ${owner}
         ${effective}
-        <button class="btn ghost severity-hint-preview" data-source="${esc(h.source)}" type="button" title="${esc(t("alertingSeverityPreviewChain"))}">↻</button>
-        <button class="btn ghost severity-hint-propagation" data-source="${esc(h.source)}" type="button" title="${esc(t("alertingSeverityPreviewPropagation"))}">↗</button>
-        <button class="btn ghost severity-hint-cascade" data-source="${esc(h.source)}" type="button" title="${esc(t("alertingSeverityCascadeDelete"))}">⌫</button>
-        <button class="btn ghost severity-hint-delete" data-source="${esc(h.source)}" type="button">×</button>
+        <button class="btn ghost severity-hint-preview" data-source="${escAttr(h.source)}" type="button" title="${esc(t("alertingSeverityPreviewChain"))}">↻</button>
+        <button class="btn ghost severity-hint-propagation" data-source="${escAttr(h.source)}" type="button" title="${esc(t("alertingSeverityPreviewPropagation"))}">↗</button>
+        <button class="btn ghost severity-hint-cascade" data-source="${escAttr(h.source)}" type="button" title="${esc(t("alertingSeverityCascadeDelete"))}">⌫</button>
+        <button class="btn ghost severity-hint-delete" data-source="${escAttr(h.source)}" type="button">×</button>
       </div>`;
   }).join("");
   list.querySelectorAll<HTMLSelectElement>(".severity-hint-severity").forEach((el) => {
@@ -2414,7 +2414,7 @@ async function onPreviewPropagation(source: string): Promise<void> {
       `<div class="severity-propagation-row">
          <span class="severity-propagation-label">${esc(label)}</span>
          <code class="severity-propagation-severity">${esc(sev)}</code>
-         <span class="severity-origin-badge severity-origin-badge-${esc(origin)}">${esc(policyLabel(origin))}</span>
+         <span class="severity-origin-badge severity-origin-badge-${escAttr(origin)}">${esc(policyLabel(origin))}</span>
        </div>`
     ).join("");
     if (msg) msg.textContent = `✓ ${t("alertingSaved")}`;
@@ -2470,16 +2470,16 @@ async function refreshAlertingAggregations(): Promise<void> {
         ? `<span class="agg-target-severity">→ ${esc(r.targetSeverity)}</span>`
         : "";
       const enabledBadge = `<span class="agg-enabled-badge ${r.enabled ? "on" : "off"}">${r.enabled ? esc(t("alertingAggregationEnabledOn")) : esc(t("alertingAggregationEnabledOff"))}</span>`;
-      const toggle = `<button class="btn ghost agg-toggle" data-id="${esc(r.id)}" type="button">${r.enabled ? esc(t("alertingAggregationDisable")) : esc(t("alertingAggregationEnable"))}</button>`;
-      return `<div class="agg-card ${r.enabled ? "agg-card-on" : "agg-card-off"}" data-id="${esc(r.id)}">
+      const toggle = `<button class="btn ghost agg-toggle" data-id="${escAttr(r.id)}" type="button">${r.enabled ? esc(t("alertingAggregationDisable")) : esc(t("alertingAggregationEnable"))}</button>`;
+      return `<div class="agg-card ${r.enabled ? "agg-card-on" : "agg-card-off"}" data-id="${escAttr(r.id)}">
         <span class="agg-name">${esc(r.name)}</span>
         <code class="agg-pattern">${esc(r.kindPattern)}</code>
         <span class="agg-count">${r.thresholdCount}× / ${r.windowSecs}s</span>
-        <span class="agg-action-badge agg-action-${esc(r.action)}">${esc(r.action)}</span>
+        <span class="agg-action-badge agg-action-${escAttr(r.action)}">${esc(r.action)}</span>
         ${tgt}
         ${enabledBadge}
         ${toggle}
-        <button class="btn ghost agg-delete" data-id="${esc(r.id)}" type="button">${esc(t("alertingAggregationDelete"))}</button>
+        <button class="btn ghost agg-delete" data-id="${escAttr(r.id)}" type="button">${esc(t("alertingAggregationDelete"))}</button>
       </div>`;
     })
     .join("");
@@ -2603,8 +2603,8 @@ async function refreshAlertingCorrelations(): Promise<void> {
   list.innerHTML = rules
     .map((r) => {
       const enabledBadge = `<span class="corr-enabled-badge ${r.enabled ? "on" : "off"}">${r.enabled ? esc(t("alertingCorrelationEnabledOn")) : esc(t("alertingCorrelationEnabledOff"))}</span>`;
-      const toggle = `<button class="btn ghost corr-toggle" data-id="${esc(r.id)}" type="button">${r.enabled ? esc(t("alertingCorrelationDisable")) : esc(t("alertingCorrelationEnable"))}</button>`;
-      return `<div class="corr-card ${r.enabled ? "corr-card-on" : "corr-card-off"}" data-id="${esc(r.id)}">
+      const toggle = `<button class="btn ghost corr-toggle" data-id="${escAttr(r.id)}" type="button">${r.enabled ? esc(t("alertingCorrelationDisable")) : esc(t("alertingCorrelationEnable"))}</button>`;
+      return `<div class="corr-card ${r.enabled ? "corr-card-on" : "corr-card-off"}" data-id="${escAttr(r.id)}">
         <span class="corr-name">${esc(r.name)}</span>
         <code class="corr-pattern-a">${esc(r.kindPatternA)}</code>
         <span class="corr-arrow">→</span>
@@ -2612,7 +2612,7 @@ async function refreshAlertingCorrelations(): Promise<void> {
         <span class="corr-window">≤ ${r.windowSecs}s</span>
         ${enabledBadge}
         ${toggle}
-        <button class="btn ghost corr-delete" data-id="${esc(r.id)}" type="button">${esc(t("alertingCorrelationDelete"))}</button>
+        <button class="btn ghost corr-delete" data-id="${escAttr(r.id)}" type="button">${esc(t("alertingCorrelationDelete"))}</button>
       </div>`;
     })
     .join("");
@@ -2733,11 +2733,11 @@ async function refreshAlertingEscalations(): Promise<void> {
   list.innerHTML = rules
     .map((r) => {
       const enabledBadge = `<span class="esc-enabled-badge ${r.enabled ? "on" : "off"}">${r.enabled ? esc(t("alertingEscalationEnabledOn")) : esc(t("alertingEscalationEnabledOff"))}</span>`;
-      const toggle = `<button class="btn ghost esc-toggle" data-id="${esc(r.id)}" type="button">${r.enabled ? esc(t("alertingEscalationDisable")) : esc(t("alertingEscalationEnable"))}</button>`;
+      const toggle = `<button class="btn ghost esc-toggle" data-id="${escAttr(r.id)}" type="button">${r.enabled ? esc(t("alertingEscalationDisable")) : esc(t("alertingEscalationEnable"))}</button>`;
       const endpointsLabel = r.targetEndpointIds && r.targetEndpointIds.length > 0
         ? ` → ${esc(r.targetEndpointIds.join(", "))}`
         : ` → ${esc(t("alertingEscalationAllEndpoints"))}`;
-      return `<div class="esc-card ${r.enabled ? "esc-card-on" : "esc-card-off"}" data-id="${esc(r.id)}">
+      return `<div class="esc-card ${r.enabled ? "esc-card-on" : "esc-card-off"}" data-id="${escAttr(r.id)}">
         <span class="esc-name">${esc(r.name)}</span>
         <code class="esc-pattern">${esc(r.kindPattern)}</code>
         <span class="esc-window">≥ ${r.escalateAfterSecs}s</span>
@@ -2745,7 +2745,7 @@ async function refreshAlertingEscalations(): Promise<void> {
         <span class="esc-endpoints">${endpointsLabel}</span>
         ${enabledBadge}
         ${toggle}
-        <button class="btn ghost esc-delete" data-id="${esc(r.id)}" type="button">${esc(t("alertingEscalationDelete"))}</button>
+        <button class="btn ghost esc-delete" data-id="${escAttr(r.id)}" type="button">${esc(t("alertingEscalationDelete"))}</button>
       </div>`;
     })
     .join("");

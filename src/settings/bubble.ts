@@ -6,19 +6,7 @@ import {
   type BubblePos,
   type BubbleTheme,
 } from "../bubble";
-import {
-  DEFAULTS,
-  clampInt,
-  esc,
-  getSettings,
-  group,
-  render,
-  row,
-  save,
-  segmented,
-  setSettings,
-  toggle,
-} from "./shared";
+import { DEFAULTS, clampInt, esc, escAttr, getSettings, group, render, row, save, segmented, setSettings, toggle } from "./shared";
 
 export function renderBubbleSettings(body: HTMLElement): void {
   // Themes changed to a palette grid: 10 themes can't be chosen by name alone, you need to see the colors
@@ -66,7 +54,7 @@ export function renderBubbleSettings(body: HTMLElement): void {
   }).join("")}</div>`;
   const posPicker = `<div class="bubble-pos-picker">${BUBBLE_POSITIONS.map((p) => {
     const on = p === getSettings().bubblePos;
-    return `<button class="bubble-pos${on ? " active" : ""}" data-pos="${p}" type="button" aria-pressed="${on}" title="${esc(t(POS_I18N[p]))}">
+    return `<button class="bubble-pos${on ? " active" : ""}" data-pos="${p}" type="button" aria-pressed="${on}" title="${escAttr(t(POS_I18N[p]))}">
       <span class="bubble-pos-dia" data-dia="${p}"><i class="bubble-pos-pet"></i><i class="bubble-pos-bub"></i></span>
       <span class="bubble-pos-label">${esc(t(POS_I18N[p]))}</span>
     </button>`;

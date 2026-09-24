@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { t } from "../i18n";
 import { startHotkeyPaletteListener } from "./modals";
-import { esc, group } from "./shared";
+import { esc, escAttr, group } from "./shared";
 import type { HotkeyAction, PaletteEntry } from "./types";
 
 // ---- Phase 39 — Hotkeys tab (global hotkeys + command palette) ------------------------
@@ -239,18 +239,18 @@ async function refreshHotkeys(): Promise<void> {
     const pillClass = `hotkey-pill${b ? " bound" : ""}${notActive ? " warn" : ""}`;
     const pillText = b ? prettifyCombo(b.combo) : t("hotkeyNoBinding");
     const pillTitle = notActive ? t("hotkeyNotActiveHint") : b ? t("hotkeyRebind") : t("hotkeyPressKeys");
-    const pill = `<button class="${pillClass}" data-hotkey-row="${index}" data-combo="${esc(b?.combo ?? "")}" title="${esc(pillTitle)}" type="button">${esc(pillText)}</button>`;
+    const pill = `<button class="${pillClass}" data-hotkey-row="${index}" data-combo="${esc(b?.combo ?? "")}" title="${escAttr(pillTitle)}" type="button">${esc(pillText)}</button>`;
     const toggle = b
-      ? `<button class="btn ghost" data-hotkey-toggle="${esc(b.combo)}" data-next="${b.enabled ? "0" : "1"}" type="button">${esc(b.enabled ? t("hotkeyDisable") : t("hotkeyEnable"))}</button>`
+      ? `<button class="btn ghost" data-hotkey-toggle="${escAttr(b.combo)}" data-next="${b.enabled ? "0" : "1"}" type="button">${esc(b.enabled ? t("hotkeyDisable") : t("hotkeyEnable"))}</button>`
       : "";
     let badge = "";
     if (b && b.enabled && !b.registered_at_os) {
-      badge = `<span class="hotkey-badge">${esc(t("hotkeyNotActive"))}</span><button class="btn ghost" data-hotkey-retry="${esc(b.combo)}" type="button">${esc(t("hotkeyRetry"))}</button>`;
+      badge = `<span class="hotkey-badge">${esc(t("hotkeyNotActive"))}</span><button class="btn ghost" data-hotkey-retry="${escAttr(b.combo)}" type="button">${esc(t("hotkeyRetry"))}</button>`;
     }
     // Orphan rows keep an explicit delete button (no palette action to lean on); normal rows are cleared with the pill's Delete.
     const del =
       orphan && b
-        ? `<button class="btn ghost danger" data-hotkey-del="${esc(b.combo)}" type="button">${esc(t("remove"))}</button>`
+        ? `<button class="btn ghost danger" data-hotkey-del="${escAttr(b.combo)}" type="button">${esc(t("remove"))}</button>`
         : "";
     return `<div class="sess hotkey-row${b && !b.enabled ? " inactive" : ""}" data-hotkey-combo="${esc(b?.combo ?? "")}"><span class="hotkey-label">${esc(row.label)}</span><span class="hotkey-actions">${pill}${toggle}${badge}${del}</span></div>`;
   };

@@ -15,13 +15,7 @@ import {
   type UninstallPreview,
 } from "./dialogs";
 import { showTraceDialog } from "./rpc-trace";
-import {
-  esc,
-  group,
-  openPluginSettingsPage,
-  refreshPluginConfig,
-  setPluginNameById,
-} from "./shared";
+import { esc, escAttr, group, openPluginSettingsPage, refreshPluginConfig, setPluginNameById } from "./shared";
 
 export function renderPlugins(body: HTMLElement): void {
   body.innerHTML =
@@ -112,7 +106,7 @@ const CHANNEL_OPTIONS: Array<{ key: string; i18nKey: string }> = [
 
 function channelBadgeHtml(channel: string | undefined): string {
   if (!channel) return "";
-  return `<span class="channel-badge channel-${esc(channel)}" title="${esc(t("channelBadgeTitle"))}">${esc(channel)}</span>`;
+  return `<span class="channel-badge channel-${escAttr(channel)}" title="${esc(t("channelBadgeTitle"))}">${esc(channel)}</span>`;
 }
 
 let pluginUpdates: Record<string, PluginUpdateInfo> = {};
@@ -270,7 +264,7 @@ function renderDepGraph(graph: DependencyGraph): string {
       const a = pos.get(e.from);
       const b = pos.get(e.to);
       if (!a || !b) return "";
-      return `<line class="dep-edge" data-from="${esc(e.from)}" data-to="${esc(e.to)}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"><title>${esc(e.shared.join(", "))}</title></line>`;
+      return `<line class="dep-edge" data-from="${escAttr(e.from)}" data-to="${escAttr(e.to)}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"><title>${esc(e.shared.join(", "))}</title></line>`;
     })
     .join("");
   // Nodes
@@ -279,7 +273,7 @@ function renderDepGraph(graph: DependencyGraph): string {
       const p = pos.get(nd.id)!;
       const tip = `${nd.name}\n${nd.capabilities.join(", ") || "(no capabilities)"}\nedges: ${graph.edges.filter((e) => e.from === nd.id || e.to === nd.id).length}`;
       const idShort = nd.id.replace(/^com\.opencapx\./, "");
-      return `<g class="dep-node" data-id="${esc(nd.id)}"><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="22"><title>${esc(tip)}</title></circle><text x="${p.x.toFixed(1)}" y="${(p.y + 38).toFixed(1)}" text-anchor="middle" font-size="11" font-family="ui-monospace,monospace" fill="currentColor">${esc(idShort.slice(0, 22))}</text></g>`;
+      return `<g class="dep-node" data-id="${escAttr(nd.id)}"><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="22"><title>${esc(tip)}</title></circle><text x="${p.x.toFixed(1)}" y="${(p.y + 38).toFixed(1)}" text-anchor="middle" font-size="11" font-family="ui-monospace,monospace" fill="currentColor">${esc(idShort.slice(0, 22))}</text></g>`;
     })
     .join("");
   return `<svg class="dep-graph" viewBox="0 0 ${w} ${h}" width="100%" style="overflow:visible"><g class="dep-edges">${edges}</g><g class="dep-nodes">${nodes}</g></svg>`;
@@ -454,20 +448,20 @@ function renderHeatmap(heatmap: PermissionHeatmap): { grid: string; top: string 
     const isHigh = heatmap.topDenied.find((t) => t.permission === p)?.highRisk ?? false;
     const label = p.replace(/^.*\./, ""); // shorten image.read -> read
     const cls = isHigh ? "heatmap-col high-risk" : "heatmap-col";
-    return `<th class="${cls}" title="${esc(p)}">${esc(label)}</th>`;
+    return `<th class="${cls}" title="${escAttr(p)}">${esc(label)}</th>`;
   }).join("");
 
   const rows = plugins.map((plugin) => {
     const idShort = plugin.replace(/^com\.opencapx\./, "");
     const cells = perms.map((perm) => {
       const c = cellMap.get(`${plugin}|${perm}`);
-      if (!c) return `<td class="heatmap-cell empty" title="${esc(plugin)} · ${esc(perm)}">·</td>`;
+      if (!c) return `<td class="heatmap-cell empty" title="${escAttr(plugin)} · ${escAttr(perm)}">·</td>`;
       const cls = `heatmap-cell ${c.decision}${c.highRisk ? " high-risk" : ""}`;
       const tip = `${plugin} · ${perm} · ${c.decision}${c.highRisk ? " (high-risk)" : ""}`;
       const icon = c.decision === "granted" ? "✓" : c.decision === "denied" ? "✗" : "?";
-      return `<td class="${cls}" title="${esc(tip)}">${icon}</td>`;
+      return `<td class="${cls}" title="${escAttr(tip)}">${icon}</td>`;
     }).join("");
-    return `<tr><th class="heatmap-row" title="${esc(plugin)}">${esc(idShort.slice(0, 22))}</th>${cells}</tr>`;
+    return `<tr><th class="heatmap-row" title="${escAttr(plugin)}">${esc(idShort.slice(0, 22))}</th>${cells}</tr>`;
   }).join("");
 
   const grid = `<table class="heatmap"><thead><tr><th></th>${headerCells}</tr></thead><tbody>${rows}</tbody></table>`;
@@ -543,16 +537,16 @@ export async function refreshPlugins(): Promise<void> {
         ? `<span class="plugin-update-badge channel-${esc(update.channel ?? "stable")}" title="${esc(t("pluginUpdateAvailable"))}">↑ v${esc(update.latestVersion)}</span>`
           : "";
       const updateBtn = update
-        ? `<button class="btn ghost" data-plugin-update="${esc(p.id)}" type="button">${esc(t("pluginUpdate"))}</button>`
+        ? `<button class="btn ghost" data-plugin-update="${escAttr(p.id)}" type="button">${esc(t("pluginUpdate"))}</button>`
         : "";
       // Local-file update: packages the channel/marketplace can't see (installed manually from .ocplugin) also get a non-destructive update entry,
       // right next to the channel update button, read as its 'local counterpart'.
-      const updateFileBtn = `<button class="btn ghost" data-plugin-update-file="${esc(p.id)}" type="button">${esc(t("pluginUpdateFromFile"))}</button>`;
+      const updateFileBtn = `<button class="btn ghost" data-plugin-update-file="${escAttr(p.id)}" type="button">${esc(t("pluginUpdateFromFile"))}</button>`;
       const probeBadge = p.probeStatus
-        ? `<span class="probe-status probe-${esc(p.probeStatus)}" title="${esc(p.probeAt ? new Date(p.probeAt * 1000).toLocaleString() : "")}">${esc(probeStatusLabel(p.probeStatus))}</span>`
+        ? `<span class="probe-status probe-${escAttr(p.probeStatus)}" title="${esc(p.probeAt ? new Date(p.probeAt * 1000).toLocaleString() : "")}">${esc(probeStatusLabel(p.probeStatus))}</span>`
         : "";
-      const channelSel = `<select class="channel-select" data-plugin-channel="${esc(p.id)}" title="${esc(t("channelSelectHint"))}">${CHANNEL_OPTIONS.map(
-        (o) => `<option value="${esc(o.key)}"${(p.channel ?? "stable") === o.key ? " selected" : ""}>${esc(t(o.i18nKey as never))}</option>`,
+      const channelSel = `<select class="channel-select" data-plugin-channel="${escAttr(p.id)}" title="${esc(t("channelSelectHint"))}">${CHANNEL_OPTIONS.map(
+        (o) => `<option value="${escAttr(o.key)}"${(p.channel ?? "stable") === o.key ? " selected" : ""}>${esc(t(o.i18nKey as never))}</option>`,
       ).join("")}</select>`;
       const channelBadge = channelBadgeHtml(p.channel);
       const missingDepsList = p.missingDependencies ?? [];
@@ -560,17 +554,17 @@ export async function refreshPlugins(): Promise<void> {
         ? `<div class="plugin-desc warn">${esc(t("pluginMissingDeps"))}: ${missingDepsList.map((d) => `${esc(d.id)} (${esc(d.requirement)})`).join(", ")}</div>`
         : "";
       const revokedBanner = p.revokedKey
-        ? `<div class="plugin-desc warn">${esc(t("pluginRevoked"))} (${esc(p.revokedKey)}) <button class="btn ghost" data-plugin-reopen="${esc(p.id)}" type="button">${esc(t("pluginReopen"))}</button></div>`
+        ? `<div class="plugin-desc warn">${esc(t("pluginRevoked"))} (${esc(p.revokedKey)}) <button class="btn ghost" data-plugin-reopen="${escAttr(p.id)}" type="button">${esc(t("pluginReopen"))}</button></div>`
         : "";
       const head = `<div class="plugin-card">
-        <div class="plugin-title-line"${detail ? "" : ` data-plugin-open="${esc(p.id)}"`}><span class="plugin-name">${esc(p.name)}</span><span class="plugin-status plugin-status-${esc(p.status)}">${esc(p.status)}</span>${updateBadge}${probeBadge}${channelBadge}${p.sandboxDeclared ? `<span class="cap-badge">${esc(t("pluginSandboxBadge"))}</span>` : ""}${detail ? `<span class="plugin-detail-open-hint">›</span>` : ""}</div>
+        <div class="plugin-title-line"${detail ? "" : ` data-plugin-open="${escAttr(p.id)}"`}><span class="plugin-name">${esc(p.name)}</span><span class="plugin-status plugin-status-${escAttr(p.status)}">${esc(p.status)}</span>${updateBadge}${probeBadge}${channelBadge}${p.sandboxDeclared ? `<span class="cap-badge">${esc(t("pluginSandboxBadge"))}</span>` : ""}${detail ? `<span class="plugin-detail-open-hint">›</span>` : ""}</div>
         <div class="plugin-sub-line"><span class="plugin-id">${esc(p.id)}</span><span class="plugin-sub-sep">·</span><span class="plugin-ver">v${esc(p.version)}</span>${p.capabilities.length ? `<span class="plugin-caps">${p.capabilities.map((c) => `<span class="cap-badge">${esc(c)}</span>`).join("")}</span>` : ""}</div>
         ${detail && (p.author || p.license || p.homepage) ? `<div class="plugin-meta-line">${esc([p.author, p.license, p.homepage].filter(Boolean).join(" · "))}</div>` : ""}
-        <div class="plugin-actions">${detail ? `<button class="btn ghost" data-plugin-cfg="${esc(p.id)}" type="button">${esc(t("pluginDetailOpenCfg"))}</button>` : ""}${updateBtn}${updateFileBtn}<button class="btn ghost" data-plugin-toggle="${esc(p.id)}" type="button">${esc(running ? t("pluginDisable") : t("pluginEnable"))}</button><button class="btn ghost" data-plugin-probe="${esc(p.id)}" data-plugin-probe-name="${esc(p.name)}" type="button">${esc(t("probeBtn"))}</button><button class="btn ghost" data-plugin-lifecycle="${esc(p.id)}" type="button">${esc(t("lifecycleBtn"))}</button><button class="btn ghost" data-plugin-trace="${esc(p.id)}" type="button">${esc(t("traceBtn"))}</button><button class="btn ghost" data-plugin-health="${esc(p.id)}" data-plugin-health-name="${esc(p.name)}" type="button">${esc(t("healthBtn"))}</button><button class="btn ghost danger" data-plugin-uninstall="${esc(p.id)}" type="button">${esc(t("pluginUninstall"))}</button></div>
-        <div class="plugin-config-row"><div class="plugin-channel-row"><span class="setting-hint">${esc(t("channelRowLabel"))}</span>${channelSel}</div><label class="plugin-autoreload"><input type="checkbox" data-plugin-autoreload="${esc(p.id)}"${p.autoReload ? " checked" : ""}/><span>${esc(t("pluginAutoReload"))}</span></label></div>
+        <div class="plugin-actions">${detail ? `<button class="btn ghost" data-plugin-cfg="${escAttr(p.id)}" type="button">${esc(t("pluginDetailOpenCfg"))}</button>` : ""}${updateBtn}${updateFileBtn}<button class="btn ghost" data-plugin-toggle="${escAttr(p.id)}" type="button">${esc(running ? t("pluginDisable") : t("pluginEnable"))}</button><button class="btn ghost" data-plugin-probe="${escAttr(p.id)}" data-plugin-probe-name="${escAttr(p.name)}" type="button">${esc(t("probeBtn"))}</button><button class="btn ghost" data-plugin-lifecycle="${escAttr(p.id)}" type="button">${esc(t("lifecycleBtn"))}</button><button class="btn ghost" data-plugin-trace="${escAttr(p.id)}" type="button">${esc(t("traceBtn"))}</button><button class="btn ghost" data-plugin-health="${escAttr(p.id)}" data-plugin-health-name="${escAttr(p.name)}" type="button">${esc(t("healthBtn"))}</button><button class="btn ghost danger" data-plugin-uninstall="${escAttr(p.id)}" type="button">${esc(t("pluginUninstall"))}</button></div>
+        <div class="plugin-config-row"><div class="plugin-channel-row"><span class="setting-hint">${esc(t("channelRowLabel"))}</span>${channelSel}</div><label class="plugin-autoreload"><input type="checkbox" data-plugin-autoreload="${escAttr(p.id)}"${p.autoReload ? " checked" : ""}/><span>${esc(t("pluginAutoReload"))}</span></label></div>
         ${missingDeps}${revokedBanner}
         ${p.description ? `<div class="plugin-desc">${esc(p.description)}</div>` : `<div class="plugin-desc muted">${esc(t("pluginNoDescription"))}</div>`}
-        ${p.path ? `<div class="plugin-path" title="${esc(p.path)}">${esc(p.path)}</div>` : ""}`;
+        ${p.path ? `<div class="plugin-path" title="${escAttr(p.path)}">${esc(p.path)}</div>` : ""}`;
       const entries = permByPlugin.get(p.id)?.permissions ?? [];
       const permRows = entries
         .map((e) => {
@@ -580,12 +574,12 @@ export async function refreshPlugins(): Promise<void> {
           const opts = noAlways && e.decision !== "granted"
             ? [["ask", t("permAsk")], ["denied", t("permDenied")]]
             : [["granted", t("permGranted")], ["ask", t("permAsk")], ["denied", t("permDenied")]];
-          const sel = `<select data-perm-plugin="${esc(p.id)}" data-perm="${esc(e.permission)}">${opts
-            .map(([v, l]) => `<option value="${esc(v)}"${v === e.decision ? " selected" : ""}>${esc(l)}</option>`)
+          const sel = `<select data-perm-plugin="${escAttr(p.id)}" data-perm="${escAttr(e.permission)}">${opts
+            .map(([v, l]) => `<option value="${escAttr(v)}"${v === e.decision ? " selected" : ""}>${esc(l)}</option>`)
             .join("")}</select>`;
           const badge = (e.high_risk ? ` <span class="setting-hint">${esc(t("permHighRisk"))}</span>` : "")
             + (e.declared ? ` <span class="setting-hint">${esc(t("permDeclared"))}</span>` : "");
-          const reset = `<button class="btn ghost" data-perm-reset="${esc(e.permission)}" data-perm-def="${esc(e.default)}" data-perm-plugin="${esc(p.id)}" type="button">${esc(t("permReset"))}</button>`;
+          const reset = `<button class="btn ghost" data-perm-reset="${escAttr(e.permission)}" data-perm-def="${escAttr(e.default)}" data-perm-plugin="${escAttr(p.id)}" type="button">${esc(t("permReset"))}</button>`;
           return `<div class="setting-row"><div class="setting-info"><span class="setting-label">${esc(e.permission)}${badge}</span></div><div class="perm-controls">${sel}${reset}</div></div>`;
         })
         .join("");

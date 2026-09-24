@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { onEvent } from "../events";
 import { t } from "../i18n";
-import { esc, group } from "./shared";
+import { esc, escAttr, group } from "./shared";
 
 // ─── Phase 46: Workspace profiles ─────────────────────────────────────────────
 
@@ -39,12 +39,12 @@ function renderProfiles(profiles: ProfileInfo[]): void {
       const activeClass = p.isActive ? " profiles-active" : "";
       const badge = p.isActive ? `<span class="profiles-badge">${esc(t("profilesActive"))}</span>` : "";
       const dateStr = new Date(p.createdAt * 1000).toLocaleString();
-      return `<div class="profiles-card${activeClass}" data-pname="${esc(p.name)}">
+      return `<div class="profiles-card${activeClass}" data-pname="${escAttr(p.name)}">
         <div class="metrics-card-head"><b>${esc(p.name)}</b>${badge}</div>
         <div class="profiles-meta">${p.pluginCount} ${esc(t("profilesPlugins"))} · ${esc(dateStr)}</div>
         <div class="metrics-card-foot">
-          ${p.isActive ? "" : `<button class="btn profiles-switch-btn" data-pname="${esc(p.name)}" type="button">${esc(t("profilesSwitch"))}</button>`}
-          ${p.name === "default" ? "" : `<button class="btn ghost profiles-delete-btn" data-pname="${esc(p.name)}" type="button">${esc(t("profilesDelete"))}</button>`}
+          ${p.isActive ? "" : `<button class="btn profiles-switch-btn" data-pname="${escAttr(p.name)}" type="button">${esc(t("profilesSwitch"))}</button>`}
+          ${p.name === "default" ? "" : `<button class="btn ghost profiles-delete-btn" data-pname="${escAttr(p.name)}" type="button">${esc(t("profilesDelete"))}</button>`}
         </div>
       </div>`;
     })

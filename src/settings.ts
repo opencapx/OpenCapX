@@ -2,9 +2,6 @@ import "./settings.css";
 import { getVersion } from "@tauri-apps/api/app";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  disconnectEventStream,
-} from "./events";
-import {
   load,
   loadDbRecoveryNotice,
   refreshPluginConfig,
@@ -34,7 +31,7 @@ import { renderPet } from "./settings/pet";
 import { renderPluginPageTab } from "./settings/plugin-page";
 import { renderRules } from "./settings/rules";
 import { renderStats } from "./settings/stats";
-import { renderSla } from "./settings/sla";
+import { renderSla, stopSlaStream } from "./settings/sla";
 import { renderRpcTrace } from "./settings/rpc-trace";
 import { startInstallAskListener } from "./settings/modals";
 
@@ -63,7 +60,7 @@ registerTab({ id: "alerting", render: renderAlerting });
 registerTab({ id: "notify", render: renderNotify });
 registerTab({ id: "profiles", render: renderProfilesTab, stop: stopWorkspaceListener });
 registerTab({ id: "stats", render: renderStats });
-registerTab({ id: "sla", render: renderSla });
+registerTab({ id: "sla", render: renderSla, stop: stopSlaStream });
 registerTab({ id: "rpcTrace", render: renderRpcTrace });
 registerTab({ id: "capabilities", render: renderCapabilities });
 registerTab({ id: "audit", render: renderAudit, stop: stopAuditStream });

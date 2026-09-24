@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { t } from "../i18n";
-import { esc, formatLifecycleTime } from "./shared";
+import { esc, escAttr, formatLifecycleTime } from "./shared";
 
 interface PermissionPreviewItem {
   name: string;
@@ -39,7 +39,7 @@ function signatureBadgeHtml(sig: PluginPreview["signature"]): string {
     label = status;
   }
   const keyTxt = keyId ? ` · ${keyId}` : "";
-  return `<span class="${cls}" title="${esc(status)}${esc(keyTxt)}">${esc(label)}${esc(keyTxt)}</span>`;
+  return `<span class="${cls}" title="${escAttr(status)}${escAttr(keyTxt)}">${esc(label)}${esc(keyTxt)}</span>`;
 }
 
 export interface UninstallPreview {
@@ -195,7 +195,7 @@ export async function showProbeDialog(
         </div>`;
     } else {
       const stamp = new Date(report.ranAt * 1000).toLocaleString();
-      const statusBadge = `<span class="probe-status probe-${esc(report.status)}">${esc(probeStatusLabel(report.status))}</span>`;
+      const statusBadge = `<span class="probe-status probe-${escAttr(report.status)}">${esc(probeStatusLabel(report.status))}</span>`;
       const rows = report.capabilities.length
         ? `<ul class="probe-list">${report.capabilities
             .map(
@@ -404,7 +404,7 @@ export function showWarningConfirmDialog(opts: {
     overlay.style.cssText =
       "position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);";
     overlay.innerHTML = `
-      <div class="install-dialog" role="dialog" aria-label="${esc(opts.title)}">
+      <div class="install-dialog" role="dialog" aria-label="${escAttr(opts.title)}">
         <h2>${esc(opts.title)}</h2>
         <p class="install-desc">${esc(opts.body)}</p>
         <div class="install-actions">

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { t } from "../i18n";
-import { esc, group } from "./shared";
+import { esc, escAttr, group } from "./shared";
 
 export function renderAgents(body: HTMLElement): void {
   body.innerHTML = group("tabAgents",
@@ -69,8 +69,8 @@ async function refreshIdAgents(): Promise<void> {
         ? `<span class="plugin-status plugin-status-error">${esc(t("agentsRevoked"))}</span>`
         : `<span class="plugin-status plugin-status-running">${esc(t("agentsActive"))}</span>`;
       const action = revoked
-        ? `<button class="btn ghost" data-agent-reauth="${esc(a.agent_id)}" type="button">${esc(t("agentsReauthorize"))}</button>`
-        : `<button class="btn ghost danger" data-agent-revoke="${esc(a.agent_id)}" data-agent-name="${esc(a.displayName)}" type="button">${esc(t("agentsRevoke"))}</button>`;
+        ? `<button class="btn ghost" data-agent-reauth="${escAttr(a.agent_id)}" type="button">${esc(t("agentsReauthorize"))}</button>`
+        : `<button class="btn ghost danger" data-agent-revoke="${escAttr(a.agent_id)}" data-agent-name="${escAttr(a.displayName)}" type="button">${esc(t("agentsRevoke"))}</button>`;
       const permRows = perms
         .map((e) => {
           // docs/permission-domains.md §4.3 enforcement point 3: declared derived permissions offer only ask/denied
@@ -79,8 +79,8 @@ async function refreshIdAgents(): Promise<void> {
           const opts = noAlways && e.decision !== "granted"
             ? [["ask", t("permAsk")], ["denied", t("permDenied")]]
             : [["granted", t("permGranted")], ["ask", t("permAsk")], ["denied", t("permDenied")]];
-          const sel = `<select data-agent-perm="${esc(a.agent_id)}" data-perm="${esc(e.permission)}">${opts
-            .map(([v, l]) => `<option value="${esc(v)}"${v === e.decision ? " selected" : ""}>${esc(l)}</option>`)
+          const sel = `<select data-agent-perm="${escAttr(a.agent_id)}" data-perm="${escAttr(e.permission)}">${opts
+            .map(([v, l]) => `<option value="${escAttr(v)}"${v === e.decision ? " selected" : ""}>${esc(l)}</option>`)
             .join("")}</select>`;
           const badge = (e.high_risk ? ` <span class="setting-hint">${esc(t("permHighRisk"))}</span>` : "")
             + (e.declared ? ` <span class="setting-hint">${esc(t("permDeclared"))}</span>` : "")
@@ -91,7 +91,7 @@ async function refreshIdAgents(): Promise<void> {
       return `<div class="agent-card">` +
         `<div class="sess plugin-head"><div class="plugin-meta"><b>${esc(a.displayName)}</b> <span class="plugin-id">${esc(a.agent_id)}</span> <span class="plugin-ver">${esc(a.kind)}</span>${statusBadge}</div><div class="plugin-actions">${action}</div></div>` +
         `<div class="plugin-desc"><span class="setting-hint">${esc(t("agentsFirstSeen"))}: ${esc(fmt(a.firstSeen))} · ${esc(t("agentsLastSeen"))}: ${esc(fmt(a.lastSeen))} · ${esc(t("agentsVia"))}: ${esc(a.registeredVia)}</span></div>` +
-        `<details data-agent-details="${esc(a.agent_id)}"${openIds.has(a.agent_id) ? " open" : ""}><summary class="setting-label">${esc(t("agentsPermsTitle"))}</summary><div class="settings-list">${permRows}</div></details>` +
+        `<details data-agent-details="${escAttr(a.agent_id)}"${openIds.has(a.agent_id) ? " open" : ""}><summary class="setting-label">${esc(t("agentsPermsTitle"))}</summary><div class="settings-list">${permRows}</div></details>` +
         `</div>`;
     }),
   );

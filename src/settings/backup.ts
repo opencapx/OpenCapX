@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { t } from "../i18n";
-import { esc, formatBytes, group } from "./shared";
+import { esc, escAttr, formatBytes, group } from "./shared";
 
 // ---- Phase 41 — Backup tab (one-click workspace backup / restore) ---------------------
 
@@ -45,7 +45,7 @@ async function refreshBackups(): Promise<void> {
           .filter((k) => (b.tableCounts[k] ?? 0) > 0)
           .map((k) => `${k}=${b.tableCounts[k]}`)
           .join(" · ");
-        return `<div class="sess backup-row" data-backup-file="${esc(b.filename)}"><span class="msg"><b>${esc(b.filename)}</b><br><span class="muted">${esc(formatTimestamp(b.createdAt))} · ${esc(formatBytes(b.sizeBytes))} · v${esc(b.appVersion)}</span>${summary ? `<br><span class="muted">${esc(summary)}</span>` : ""}${b.pluginConfigCount ? ` · configs=${b.pluginConfigCount}` : ""}</span><button class="btn ghost" data-backup-restore="${esc(b.filename)}" type="button">${esc(t("backupRestore"))}</button><button class="btn ghost danger" data-backup-delete="${esc(b.filename)}" type="button">${esc(t("remove"))}</button></div>`;
+        return `<div class="sess backup-row" data-backup-file="${escAttr(b.filename)}"><span class="msg"><b>${esc(b.filename)}</b><br><span class="muted">${esc(formatTimestamp(b.createdAt))} · ${esc(formatBytes(b.sizeBytes))} · v${esc(b.appVersion)}</span>${summary ? `<br><span class="muted">${esc(summary)}</span>` : ""}${b.pluginConfigCount ? ` · configs=${b.pluginConfigCount}` : ""}</span><button class="btn ghost" data-backup-restore="${escAttr(b.filename)}" type="button">${esc(t("backupRestore"))}</button><button class="btn ghost danger" data-backup-delete="${escAttr(b.filename)}" type="button">${esc(t("remove"))}</button></div>`;
       },
     )
     .join("");
