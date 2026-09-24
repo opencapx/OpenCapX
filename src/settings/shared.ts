@@ -464,21 +464,9 @@ export interface TabModule {
 }
 
 const tabModules = new Map<Tab | "plugin:", TabModule>();
-let legacyRenderer: ((body: HTMLElement) => void) | null = null;
-let legacyCleanup: (() => void) | null = null;
 
 export function registerTab(module: TabModule): void {
   tabModules.set(module.id, module);
-}
-
-/** Temporary migration bridge: the entry keeps the old branch chain until each domain registers. */
-export function registerLegacyRenderer(renderer: (body: HTMLElement) => void): void {
-  legacyRenderer = renderer;
-}
-
-/** Temporary migration bridge for the four existing tab-cleanup callbacks. */
-export function registerLegacyCleanup(cleanup: () => void): void {
-  legacyCleanup = cleanup;
 }
 
 function findTabModule(next: Tab): TabModule | undefined {
@@ -491,8 +479,10 @@ function findTabModule(next: Tab): TabModule | undefined {
 /// The single entry point for switching tabs (shared by sidebar static items and the 'Plugin Settings' section): stop streams + mark freshTab, then render.
 /// There is only this one entry point, so the plugin settings section buttons and static items cannot drift apart.
 export function switchTab(next: Tab): void {
-  findTabModule(tab)?.stop?.();
-  legacyCleanup?.();
+  tabModules.get("audit")?.stop?.();
+  tabModules.get("logs")?.stop?.();
+  tabModules.get("metrics")?.stop?.();
+  tabModules.get("profiles")?.stop?.();
   setFreshTab(true); // enter animation plays only on tab switch; redraws from settings changes do not play it
   // Drop the Back target when leaving a plugin settings page, so the next sidebar entry doesn't leave a stale Back pointing at an old tab
   if (!next.startsWith("plugin:")) setPluginPageReturn(null);
@@ -558,7 +548,9 @@ export function render(): void {
   if (module) {
     module.render(body);
   } else {
-    legacyRenderer?.(body);
+    // Fallback: an unknown tab doesn't white-screen, it only shows the version card.
+    body.innerHTML =
+      `<div class="settings-list"><div class="about-card"><div class="logo">${ICON_PET}</div><div><b>OpenCapX</b></div><div class="ver">${esc(t("version"))} ${esc(getAppVersion())}</div><p>${esc(t("aboutText"))}</p></div></div>`;
   }
 }
 

@@ -1,20 +1,14 @@
 import "./settings.css";
-import { t } from "./i18n";
-import { ICON_ABOUT, ICON_AGENTS, ICON_AUDIT, ICON_AUTOMATION, ICON_BUBBLE, ICON_CONFIG, ICON_GENERAL, ICON_LOGS, ICON_NOTIFY, ICON_PET, ICON_PLUGINS, ICON_SLA, ICON_STATS } from "./icons";
 import { getVersion } from "@tauri-apps/api/app";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   disconnectEventStream,
 } from "./events";
 import {
-  esc,
-  getAppVersion,
   load,
   loadDbRecoveryNotice,
   refreshPluginConfig,
   refreshSessions,
-  registerLegacyCleanup,
-  registerLegacyRenderer,
   registerTab,
   render,
   setAppVersion,
@@ -44,12 +38,6 @@ import { renderSla } from "./settings/sla";
 import { renderRpcTrace } from "./settings/rpc-trace";
 import { startInstallAskListener } from "./settings/modals";
 
-function renderLegacyTab(body: HTMLElement): void {
-    // Fallback: an unknown tab doesn't white-screen, it only shows the version card.
-    body.innerHTML =
-      `<div class="settings-list"><div class="about-card"><div class="logo">${ICON_PET}</div><div><b>OpenCapX</b></div><div class="ver">${esc(t("version"))} ${esc(getAppVersion())}</div><p>${esc(t("aboutText"))}</p></div></div>`;
-}
-
 startThemeListener();
 
 void getCurrentWindow()
@@ -58,10 +46,6 @@ void getCurrentWindow()
   })
   .catch(() => undefined);
 
-registerLegacyCleanup(() => {
-  stopWorkspaceListener();
-});
-registerLegacyRenderer(renderLegacyTab);
 registerTab({ id: "general", render: renderGeneral });
 registerTab({ id: "pet", render: renderPet });
 registerTab({ id: "agents", render: renderAgents });
@@ -77,7 +61,7 @@ registerTab({ id: "plugin:", render: renderPluginPageTab });
 registerTab({ id: "metrics", render: renderMetricsTab, stop: stopMetricsStream });
 registerTab({ id: "alerting", render: renderAlerting });
 registerTab({ id: "notify", render: renderNotify });
-registerTab({ id: "profiles", render: renderProfilesTab });
+registerTab({ id: "profiles", render: renderProfilesTab, stop: stopWorkspaceListener });
 registerTab({ id: "stats", render: renderStats });
 registerTab({ id: "sla", render: renderSla });
 registerTab({ id: "rpcTrace", render: renderRpcTrace });
