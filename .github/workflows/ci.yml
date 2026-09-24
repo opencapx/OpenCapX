@@ -35,16 +35,14 @@ jobs:
       - name: node plugin e2e (ts-sdk fixture)
         run: cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx install_grant_execute_ts_e2e -- --ignored --test-threads=1
 
-  # The core ships on Windows, but its tests have only ever run on Linux. This job surfaces
-  # path-separator, registry, and filesystem-assumption failures without blocking PRs;
-  # once it is reliably green, drop continue-on-error.
+  # The core's tests on Windows: path-separator, registry, and filesystem assumptions
+  # are now clean (the first green run was 2026-09-24 on PR #7). This job is blocking.
   rust-windows:
     runs-on: windows-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: test (best effort)
+      - name: test
         run: cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx
   frontend:
     runs-on: ubuntu-22.04
