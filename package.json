@@ -12,7 +12,8 @@
     "i18n:check": "node scripts/i18n-check.mjs",
     "i18n:report": "node scripts/i18n-check.mjs --report",
     "i18n:scaffold": "node scripts/i18n-check.mjs --scaffold",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@pixiv/three-vrm": "^3.5.5",
@@ -32,6 +33,7 @@
     "@commitlint/config-conventional": "^21.2.3",
     "@tauri-apps/cli": "^2.0.0",
     "@types/three": "^0.186.0",
+    "@vitest/coverage-v8": "^2.1.9",
     "conventional-changelog-conventionalcommits": "^10.4.0",
     "conventional-recommended-bump": "^12.1.0",
     "lefthook": "^2.1.14",

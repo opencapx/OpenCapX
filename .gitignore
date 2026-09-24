@@ -18,3 +18,6 @@ __pycache__/
 .codegraph
 .omo/
 .codegraph/
+
+# vitest coverage output (CI uploads it as an artifact)
+coverage/

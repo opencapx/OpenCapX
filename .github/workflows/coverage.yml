@@ -1,0 +1,90 @@
+# Coverage — a report, not a gate. Runs on main and PRs, uploads lcov artifacts,
+# and prints headline numbers into the job summary. Nothing here can fail a PR on
+# a low percentage; the blocking suites stay in ci.yml.
+
+name: coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: frontend dist (tauri build script expects dist/)
+        run: pnpm install --frozen-lockfile && pnpm exec vite build
+      - name: install Linux deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Python signing deps (cross-language SDK test)
+        run: pip install cryptography
+      - name: coverage
+        env:
+          PYTHONPATH: packages/plugin-sdk
+        run: cargo llvm-cov --manifest-path src-tauri/Cargo.toml --bin opencapx --lcov --output-path lcov.info
+      - name: summary
+        run: |
+          awk -F'[ ,]+' '
+            /^TN:/ { next }
+            /^(SF|DA|BRF|BRH|LF|LH):/ {
+              if ($1 == "LF:") total += $2
+              if ($1 == "LH:") covered += $2
+              if ($1 == "BRF:") brtotal += $2
+              if ($1 == "BRH:") brcovered += $2
+            }
+            END {
+              printf "### Rust coverage (bin opencapx)\n\n" >> $GITHUB_STEP_SUMMARY
+              if (total > 0) printf "| lines | %.1f%% (%d/%d) |\n|---|---|\n| branches | %.1f%% (%d/%d) |\n" \
+                , covered*100/total, covered, total, brcovered*100/(brtotal?brtotal:1), brcovered, brtotal >> $GITHUB_STEP_SUMMARY
+            }' lcov.info
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-lcov
+          path: lcov.info
+          retention-days: 14
+
+  frontend:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:coverage
+      - name: summary
+        if: always()
+        run: |
+          node -e '
+            const s = require("./coverage/coverage-summary.json").total;
+            const pct = (n, d) => (d ? (100*n/d).toFixed(1) + "%" : "n/a");
+            const rows = [["lines", s.lines], ["statements", s.statements], ["functions", s.functions], ["branches", s.branches]]
+              .map(([k, v]) => `| ${k} | ${pct(v.covered, v.total)} (${v.covered}/${v.total}) |`).join("\n");
+            require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+              `### Frontend coverage (vitest, pure modules only)\n\n| metric | covered |\n|---|---|\n${rows}\n`);
+          ' || echo "no coverage summary produced"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-coverage
+          path: |
+            coverage/lcov.info
+            coverage/coverage-summary.json
+          retention-days: 14
