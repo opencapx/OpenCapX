@@ -1,12 +1,11 @@
 import "./settings.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
+import { isEnabled } from "@tauri-apps/plugin-autostart";
 import { open } from "@tauri-apps/plugin-dialog";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { availableLocales, getLocale, setLocale, t, type I18nKey, type Locale } from "./i18n";
-import type { AgentEvent } from "./shared";
 import { ICON_ABOUT, ICON_AGENTS, ICON_AUDIT, ICON_AUTOMATION, ICON_BUBBLE, ICON_CONFIG, ICON_GENERAL, ICON_LOGS, ICON_NOTIFY, ICON_PET, ICON_PLUGINS, ICON_SLA, ICON_STATS } from "./icons";
 import { getVersion } from "@tauri-apps/api/app";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -27,7 +26,6 @@ import { MOOD_ROWS } from "./sprite";
 import {
   isSoundEnabled,
   setCustomSound,
-  setSoundEnabled,
   type SoundKind,
 } from "./sounds";
 import {
@@ -43,100 +41,65 @@ import {
   type BubblePos,
   type BubbleTheme,
 } from "./bubble";
+import {
+  DEFAULTS,
+  applyTheme,
+  bindToggles,
+  clampInt,
+  cssEscape,
+  dayLabel,
+  detailBlock,
+  detailKv,
+  detailPayload,
+  esc,
+  escAttr,
+  formatBytes,
+  formatLifecycleTime,
+  getAppVersion,
+  getNotifUnread,
+  getPluginNameById,
+  getPluginPageReturn,
+  getSettings,
+  getTab,
+  group,
+  listError,
+  listSkeleton,
+  load,
+  loadDbRecoveryNotice,
+  openPluginSettingsPage,
+  paintSessions,
+  refreshPluginConfig,
+  refreshSessions,
+  registerLegacyCleanup,
+  registerLegacyRenderer,
+  render,
+  row,
+  save,
+  segmented,
+  setAppVersion,
+  setNotifUnread,
+  setPluginNameById,
+  setSettings,
+  setWindowFocused,
+  startThemeListener,
+  switchTab,
+  toggle,
+  type Tab,
+} from "./settings/shared";
+import type {
+  Cond,
+  HotkeyAction,
+  LocalizedText,
+  PaletteEntry,
+  PluginConfigRow,
+  PluginSettingsView,
+  SettingDecl,
+  ValidateRule,
+} from "./settings/types";
 
-interface AppSettings {
-  theme: string;
-  opacity: number;
-  fontSize: number;
-  mode: string;
-  soundDone: boolean;
-  soundWaiting: boolean;
-  locale: Locale;
-  petSize: number;
-  maxRows: number;
-  bubbleTheme: string;
-  /** Which side of the pet the bubble sits on: right / left / top / bottom. */
-  bubblePos: string;
-  /** Space between the pet frame and the bubble, logical px 0..24. */
-  bubbleGap: number;
-  /** Bubble information density: tight / standard / rich. */
-  bubbleDensity: string;
-  petSheet: string;
-  /** Selected petpack id (~/.opencapx/pets/<id>); empty = use spritesheet / built-in logo. */
-  petPack: string;
-  bubbleEnabled: boolean;
-  bubbleDuration: number;
-  petVisible: boolean;
-  onboarded: boolean;
-  breakEnabled: boolean;
-  breakMinutes: number;
-  /// SessionStart additionalContext injection: capability digest into supported agents'
-  /// context at session start (Rust side reads this in http::session_start_reply).
-  sessionContextInject?: boolean;
-  /// i2 §13 — epoch seconds of the last 'mark all read'; notification.posted after this counts as unread.
-  notifLastRead?: number;
-}
-
-const DEFAULTS: AppSettings = {
-  theme: "system",
-  opacity: 0.9,
-  fontSize: 13,
-  mode: "carousel",
-  soundDone: true,
-  soundWaiting: true,
-  locale: "en",
-  petSize: 100,
-  maxRows: 5,
-  bubbleTheme: "chef",
-  bubblePos: "right",
-  bubbleGap: 0,
-  bubbleDensity: "standard",
-  petSheet: "",
-  petPack: "",
-  bubbleEnabled: true,
-  bubbleDuration: 5,
-  petVisible: true,
-  onboarded: false,
-  breakEnabled: false,
-  breakMinutes: 60,
-  sessionContextInject: true,
-  notifLastRead: 0,
-};
-
-type Tab = "general" | "pet" | "bubble" | "plugins" | "market" | "agents" | "rpcTrace" | "capabilities" | "audit" | "notify" | "automation" | "rules" | "logs" | "stats" | "sla" | "hotkeys" | "backup" | "profiles" | "metrics" | "alerting" | `plugin:${string}`;
-
-const TABS: Array<{ id: Tab; labelKey: I18nKey; icon: string }> = [
-  { id: "general", labelKey: "tabGeneral", icon: ICON_GENERAL },
-  { id: "pet", labelKey: "tabPet", icon: ICON_PET },
-  { id: "bubble", labelKey: "tabBubble", icon: ICON_BUBBLE },
-  { id: "agents", labelKey: "tabAgents", icon: ICON_AGENTS },
-  { id: "rpcTrace", labelKey: "rpcTraceTitle", icon: ICON_AUDIT },
-  { id: "capabilities", labelKey: "tabCapabilities", icon: ICON_CONFIG },
-  { id: "audit", labelKey: "tabAudit", icon: ICON_AUDIT },
-  { id: "notify", labelKey: "tabNotify", icon: ICON_NOTIFY },
-  { id: "automation", labelKey: "tabAutomation", icon: ICON_AUTOMATION },
-  { id: "rules", labelKey: "tabRules", icon: ICON_AUTOMATION },
-  { id: "logs", labelKey: "tabLogs", icon: ICON_LOGS },
-  { id: "stats", labelKey: "tabStats", icon: ICON_STATS },
-  { id: "sla", labelKey: "tabSla", icon: ICON_SLA },
-  { id: "hotkeys", labelKey: "tabHotkeys", icon: ICON_PLUGINS },
-  { id: "backup", labelKey: "tabBackup", icon: ICON_CONFIG },
-  { id: "profiles", labelKey: "tabProfiles", icon: ICON_CONFIG },
-  { id: "metrics", labelKey: "tabMetrics", icon: ICON_STATS },
-  { id: "alerting", labelKey: "tabAlerting", icon: ICON_SLA },
-  { id: "market", labelKey: "tabMarket", icon: ICON_PLUGINS },
-  { id: "plugins", labelKey: "tabPlugins", icon: ICON_PLUGINS },
-];
-
-let settings: AppSettings = { ...DEFAULTS };
-let tab: Tab = "general";
-let appVersion = "";
-let sessions: AgentEvent[] = [];
 let auditStreamOnEvent: (() => void) | null = null;
 // i2 §14 — the Audit tab shows the Activity Timeline by default; the old permission list moves into a second view.
 let auditView: "timeline" | "perms" = "timeline";
-// i2 §13 — unread notification count (notification.posted after settings.notifLastRead).
-let notifUnread = 0;
 
 // Settings · Pet tab preview state and thumbnail cache.
 // Preview state is UI state (not persisted to settings): switching just shows the same pet in different states.
@@ -151,9 +114,6 @@ const PET_MOOD_I18N: Record<PetMood, I18nKey> = {
 let petPreviewMood: PetMood = "idle";
 /** Cache of petpack thumbnails (first frame), keyed by pack id. `broken` = this pack fails to render. */
 const petThumbCache = new Map<string, { url: string; broken: boolean }>();
-/** Whether the next render plays the grouped enter animation (true only when switching tabs). */
-let freshTab = false;
-
 interface AgentInfo {
   kind: string;
   display_name: string;
@@ -198,280 +158,15 @@ interface CorePermPolicy {
   highRisk: boolean;
 }
 
-function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function applyTheme(): void {
-  const root = document.documentElement;
-  root.classList.toggle("light", settings.theme === "light");
-  root.classList.toggle("dark", settings.theme === "dark");
-}
-
-async function load(): Promise<void> {
-  try {
-    const saved = await invoke<Partial<AppSettings>>("get_settings");
-    settings = { ...DEFAULTS, ...saved };
-  } catch {
-    settings = { ...DEFAULTS };
-  }
-  // Stored values can be stale or hand-edited: fall back per field so every picker always shows
-  // one active option. The overlay validates the same way on its side when it reads the settings.
-  if (!(BUBBLE_POSITIONS as readonly string[]).includes(settings.bubblePos)) settings.bubblePos = DEFAULTS.bubblePos;
-  settings.bubbleGap = clampInt(String(settings.bubbleGap), 0, 24, DEFAULTS.bubbleGap);
-  if (!(BUBBLE_THEMES as readonly string[]).includes(settings.bubbleTheme)) settings.bubbleTheme = DEFAULTS.bubbleTheme;
-  if (!(BUBBLE_DENSITIES as readonly string[]).includes(settings.bubbleDensity)) settings.bubbleDensity = DEFAULTS.bubbleDensity;
-  // Same literal list as the segmented control; the overlay falls back to "carousel" on its side.
-  if (!["list", "carousel", "compact", "focus"].includes(settings.mode)) settings.mode = DEFAULTS.mode;
-  // Same bounds as the overlay: a value written by an older build (or a hand-edited file) shows
-  // clamped here instead of displaying a number that silently behaves as a different one.
-  settings.maxRows = clampInt(String(settings.maxRows), 1, 10, DEFAULTS.maxRows);
-  settings.bubbleDuration = clampInt(String(settings.bubbleDuration), 0, 300, DEFAULTS.bubbleDuration);
-  settings.breakMinutes = clampInt(String(settings.breakMinutes), 5, 480, DEFAULTS.breakMinutes);
-  setLocale(settings.locale);
-  applyTheme();
-}
-
-async function save(): Promise<void> {
-  try {
-    await invoke("set_settings", { value: settings });
-  } catch {
-    /* settings file unavailable, keep in-memory */
-  }
-}
-
-async function refreshSessions(): Promise<void> {
-  try {
-    sessions = await invoke<AgentEvent[]>("get_sessions");
-  } catch {
-    sessions = [];
-  }
-  paintSessions();
-}
-
-function row(labelKey: I18nKey, hintKey: I18nKey | null, control: string): string {
-  const hint = hintKey ? `<span class="setting-hint">${esc(t(hintKey))}</span>` : "";
-  return `<div class="setting-row"><div class="setting-info"><span class="setting-label">${esc(t(labelKey))}</span>${hint}</div>${control}</div>`;
-}
-
-/// Number inputs clamp to the same bounds the overlay enforces on read, so the stored value and the
-/// effective value can't drift apart (typing 999 or clearing the field used to save the raw number).
-function clampInt(raw: string, min: number, max: number, fallback: number): number {
-  const n = Math.round(Number(raw));
-  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
-}
-
-function group(titleKey: I18nKey | null, inner: string): string {
-  const title = titleKey ? `<p class="settings-group-title">${esc(t(titleKey))}</p>` : "";
-  return `${title}<div class="settings-list">${inner}</div>`;
-}
-
-function toggle(controlKey: string, on: boolean): string {
-  return `<button class="toggle-switch${on ? " active" : ""}" data-toggle="${controlKey}" type="button"><span class="toggle-slider"></span></button>`;
-}
-
-function segmented(
-  name: string,
-  options: string[],
-  current: string,
-  labels?: Partial<Record<string, I18nKey>>,
-): string {
-  return `<div class="segmented-control">${options
-    .map((o) => `<button class="segment-btn${o === current ? " active" : ""}" data-seg="${name}" data-val="${esc(o)}" type="button">${esc(labels?.[o] ? t(labels[o] as I18nKey) : o)}</button>`)
-    .join("")}</div>`;
-}
-
-function paintSessions(): void {
-  const box = document.getElementById("session-list");
-  if (!box) return;
-  if (sessions.length === 0) {
-    box.innerHTML = `<p class="empty">${esc(t("noSessions"))}</p>`;
-    return;
-  }
-  box.innerHTML = sessions
-    .map(
-      (s) =>
-        `<div class="sess"><span class="dot ${esc(s.state)}"></span><b>${esc(s.agent)}</b><span>${esc(s.project)}</span><span class="msg">${esc(s.message)}</span><button data-id="${esc(s.id)}" type="button">${esc(t("dismiss"))}</button></div>`,
-    )
-    .join("");
-  box.querySelectorAll("button[data-id]").forEach((b) => {
-    b.addEventListener("click", async () => {
-      await invoke("dismiss_session", { id: (b as HTMLElement).dataset.id });
-      await refreshSessions();
-    });
-  });
-}
-
-function bindToggles(body: HTMLElement): void {
-  body.querySelectorAll("button[data-toggle]").forEach((b) => {
-    b.addEventListener("click", () => {
-      const key = (b as HTMLElement).dataset.toggle ?? "";
-      const on = !b.classList.contains("active");
-      b.classList.toggle("active", on);
-      if (key === "soundDone" || key === "soundWaiting") {
-        const kind = (key === "soundDone" ? "done" : "waiting") as SoundKind;
-        setSoundEnabled(kind, on);
-        settings = { ...settings, [key]: on };
-        void save();
-      } else if (key === "bubbleEnabled") {
-        settings = { ...settings, bubbleEnabled: on };
-        void save();
-      } else if (key === "petVisible") {
-        settings = { ...settings, petVisible: on };
-        void save();
-      } else if (key === "breakEnabled") {
-        settings = { ...settings, breakEnabled: on };
-        void save();
-      } else if (key === "sessionContextInject") {
-        settings = { ...settings, sessionContextInject: on };
-        void save();
-      } else if (key === "autostart") {
-        if (on) void enable().catch(() => undefined);
-        else void disable().catch(() => undefined);
-      }
-    });
-  });
-}
-
-/// Snapshot of the last fetched plugin config: the sidebar 'Plugin Settings' section and the per-plugin settings page share the same data
-/// (from the existing list_plugin_config + list_plugin_settings paths); no new command, no separate derivation.
-let pluginCfgSnap: { plugins: PluginConfigRow[]; views: Map<string, PluginSettingsView> } = {
-  plugins: [],
-  views: new Map(),
-};
-
-/// Plugin id -> display name: from list_plugins (fetched by both refreshPlugins and refreshPluginConfig),
-/// shared by sidebar labels and plugin settings page titles; falls back to the id only when the name is unknown.
-let pluginNameById = new Map<string, string>();
-
-/// Bad-database quarantine record (Rust writes ~/.opencapx/db-recovery.json when the DB fails to open or validate).
-/// Read once at startup; if present, a persistent notice sits at the top of the content area — making 'the database was reset' visible
-/// instead of letting the app run silently in memory as if everything were fine.
-interface DbRecoveryNotice {
-  from: string;
-  to: string;
-  reason: string;
-  at: number;
-}
-let dbRecovery: DbRecoveryNotice | null = null;
-
-/// Read once at startup (failure/absent -> null; don't bother the user).
-async function loadDbRecoveryNotice(): Promise<void> {
-  try {
-    dbRecovery = await invoke<DbRecoveryNotice | null>("db_recovery_notice");
-  } catch {
-    dbRecovery = null;
-  }
-}
-
-/// Sidebar 'Plugin Settings' section: one entry per plugin (label = display name), those declaring settings[] first,
-/// those not declaring (using the KV/JSON editor) after; the whole section is not rendered with zero plugins. Clicking an entry goes through switchTab; the sidebar
-/// is itself the entry point, so no Back is set.
-/// Defined before all call sites (render / refreshPluginConfig) — so it is never 'undefined' regardless of load order.
-function renderPluginSettingsNav(): void {
-  const host = document.getElementById("plugin-nav-section");
-  if (!host) return;
-  const entries = [...pluginCfgSnap.plugins].sort((a, b) => {
-    const da = pluginCfgSnap.views.has(a.id) ? 0 : 1;
-    const db = pluginCfgSnap.views.has(b.id) ? 0 : 1;
-    if (da !== db) return da - db;
-    return (pluginNameById.get(a.id) ?? a.id).localeCompare(pluginNameById.get(b.id) ?? b.id);
-  });
-  if (entries.length === 0) {
-    host.innerHTML = "";
-    return;
-  }
-  host.innerHTML =
-    `<p class="settings-group-title nav-section-title">${esc(t("pluginSettingsSection"))}</p>` +
-    entries
-      .map((p) => {
-        const id = `plugin:${p.id}`;
-        const active = tab === id;
-        return `<button class="nav-item${active ? " active" : ""}" data-tab="${esc(id)}" type="button"><span class="nav-icon">${ICON_PLUGINS}</span><span class="nav-label">${esc(pluginNameById.get(p.id) ?? p.id)}</span>${active ? '<span class="active-indicator"></span>' : ""}</button>`;
-      })
-      .join("");
-  host.querySelectorAll("button[data-tab]").forEach((b) => {
-    b.addEventListener("click", () => {
-      // Sidebar entries provide no Back: clear the return target left by a previous entry from the detail card
-      pluginPageReturn = null;
-      switchTab((b as HTMLElement).dataset.tab as Tab);
-    });
-  });
-}
-
-/// The single entry point for switching tabs (shared by sidebar static items and the 'Plugin Settings' section): stop streams + mark freshTab, then render.
-/// There is only this one entry point, so the plugin settings section buttons and static items cannot drift apart.
-function switchTab(next: Tab): void {
-  stopAuditStream();
-  stopLogsStream();
-  stopMetricsStream();
-  stopWorkspaceListener();
-  freshTab = true; // enter animation plays only on tab switch; redraws from settings changes do not play it
-  // Drop the Back target when leaving a plugin settings page, so the next sidebar entry doesn't leave a stale Back pointing at an old tab
-  if (!next.startsWith("plugin:")) pluginPageReturn = null;
-  tab = next;
-  render();
-}
-
-function render(): void {
-  const root = document.getElementById("settings");
-  if (!root) return;
-  root.innerHTML = `
-    <div class="op-settings">
-      <aside class="op-sidebar">
-        <div class="sidebar-header">
-          <div class="drag-handle" data-tauri-drag-region></div>
-          <div class="window-controls">
-            <button class="control-btn close" id="win-close" type="button" aria-label="Close"><svg viewBox="0 0 24 24" width="8" height="8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-            <button class="control-btn minimize" id="win-min" type="button" aria-label="Minimize"><svg viewBox="0 0 24 24" width="8" height="8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
-            <button class="control-btn maximize" id="win-max" type="button" aria-label="Maximize"><svg viewBox="0 0 24 24" width="8" height="8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
-          </div>
-        </div>
-        <nav>${TABS.map((tb) => `<button class="nav-item${tab === tb.id ? " active" : ""}" data-tab="${tb.id}" type="button"><span class="nav-icon">${tb.icon}</span><span class="nav-label">${esc(t(tb.labelKey))}</span>${tb.id === "notify" && notifUnread > 0 ? `<span class="nav-badge">${notifUnread > 99 ? "99+" : notifUnread}</span>` : ""}${tab === tb.id ? '<span class="active-indicator"></span>' : ""}</button>`).join("")}<div id="plugin-nav-section"></div></nav>
-      </aside>
-      <main class="op-content">${dbRecovery ? `<div class="db-recovery-banner" role="alert"><div class="db-recovery-text"><strong>${esc(t("dbRecoveryTitle"))}</strong><span>${esc(t("dbRecoveryBody").replace("{reason}", dbRecovery.reason).replace("{path}", dbRecovery.to))}</span></div><button class="btn ghost" id="db-recovery-dismiss" type="button">${esc(t("dbRecoveryDismiss"))}</button></div>` : ""}<div class="content-section" id="tab-body"></div></main>
-    </div>`;
-  root.querySelectorAll("button[data-tab]").forEach((b) => {
-    b.addEventListener("click", () => switchTab((b as HTMLElement).dataset.tab as Tab));
-  });
-  document.getElementById("win-close")?.addEventListener("click", () => void getCurrentWindow().hide());
-  document.getElementById("win-min")?.addEventListener("click", () => void getCurrentWindow().minimize());
-  document.getElementById("win-max")?.addEventListener("click", () => {
-    const win = getCurrentWindow();
-    void win.isMaximized().then((m) => (m ? win.unmaximize() : win.maximize()));
-  });
-  paintFocus();
-  document.getElementById("db-recovery-dismiss")?.addEventListener("click", async () => {
-    try {
-      await invoke("dismiss_db_recovery_notice");
-    } catch {
-      /* Even if deletion fails, collapse the banner first: the notice should appear only once */
-    }
-    dbRecovery = null;
-    render();
-  });
-  // Plugin settings section: redrawn on every render (data comes from the pluginCfgSnap snapshot)
-  renderPluginSettingsNav();
-  const body = document.getElementById("tab-body");
-  if (!body) return;
-  // Play the enter animation only on the render for a tab switch (avoid replaying on every settings change)
-  body.classList.toggle("fresh-tab", freshTab);
-  freshTab = false;
-
-  // Plugin settings page: if the plugin was uninstalled -> fall back to the plugin list, don't stay on an empty page.
-  // Plugins without a declared settings[] also have a settings page (a config editor there), so only check whether the plugin exists.
-  if (tab.startsWith("plugin:") && !pluginCfgSnap.plugins.some((p) => p.id === tab.slice("plugin:".length))) {
-    tab = "plugins";
-  }
-
-  if (tab === "general") {
+function renderLegacyTab(body: HTMLElement): void {
+  if (getTab() === "general") {
     // The welcome card used to clear this flag; keep clearing it here so the first-run auto-open (overlay.ts) stays one-time
-    if (!settings.onboarded) {
-      settings = { ...settings, onboarded: true };
+    if (!getSettings().onboarded) {
+      setSettings({ ...getSettings(), onboarded: true });
       void save();
     }
     body.innerHTML =
-      `<div class="settings-list"><div class="about-card"><div class="logo">${ICON_PET}</div><div><b>OpenCapX</b></div><div class="ver">${esc(t("version"))} ${esc(appVersion)}</div><p>${esc(t("aboutText"))}</p></div></div>` +
+      `<div class="settings-list"><div class="about-card"><div class="logo">${ICON_PET}</div><div><b>OpenCapX</b></div><div class="ver">${esc(t("version"))} ${esc(getAppVersion())}</div><p>${esc(t("aboutText"))}</p></div></div>` +
       group("agents", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("agentsHint"))}</span><div id="agent-list"></div></div>`) +
       group("sessions", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("sessionsHint"))}</span><div id="session-list"></div><div><button class="btn ghost" id="clear" type="button">${esc(t("clearAll"))}</button></div></div>`) +
       group("sounds",
@@ -488,10 +183,10 @@ function render(): void {
             .map((l) => `<option value="${esc(l.code)}">${esc(l.name)}</option>`)
             .join("")}</select>`,
         ) +
-        row("theme", "themeHint", segmented("theme", ["light", "dark", "system"], settings.theme)) +
-        row("breakReminder", "breakReminderHint", toggle("breakEnabled", settings.breakEnabled)) +
-        row("breakMinutes", null, `<input type="number" id="bmins" min="5" max="480" value="${settings.breakMinutes}" />`) +
-        row("sessionContext", "sessionContextHint", toggle("sessionContextInject", settings.sessionContextInject !== false)) +
+        row("theme", "themeHint", segmented("theme", ["light", "dark", "system"], getSettings().theme)) +
+        row("breakReminder", "breakReminderHint", toggle("breakEnabled", getSettings().breakEnabled)) +
+        row("breakMinutes", null, `<input type="number" id="bmins" min="5" max="480" value="${getSettings().breakMinutes}" />`) +
+        row("sessionContext", "sessionContextHint", toggle("sessionContextInject", getSettings().sessionContextInject !== false)) +
         row("channelDefault", "channelDefaultHint", `<select id="default-channel"><option value="stable">${esc(t("channelStable"))}</option><option value="beta">${esc(t("channelBeta"))}</option><option value="dev">${esc(t("channelDev"))}</option></select><span class="setting-hint" id="channel-msg"></span>`)) +
       group("cliCommand", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("cliCommandHint"))}</span><div class="ks-status" id="cli-status"></div><div><button class="btn ghost" id="cli-toggle" type="button"></button><span class="setting-hint" id="cli-msg"></span></div></div>`) +
       group("killSwitch", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("killSwitchHint"))}</span><div class="ks-status" id="ks-status"></div><div class="ks-controls"><input type="text" id="ks-reason" placeholder="${esc(t("killSwitchReasonPlaceholder"))}" maxlength="120"/><button class="btn danger" id="ks-enable" type="button">${esc(t("killSwitchEnable"))}</button><button class="btn ghost" id="ks-disable" type="button">${esc(t("killSwitchDisable"))}</button></div></div>`) +
@@ -526,7 +221,7 @@ function render(): void {
       loc.addEventListener("change", () => {
         const v = loc.value as Locale;
         setLocale(v);
-        settings = { ...settings, locale: v };
+        setSettings({ ...getSettings(), locale: v });
         void save();
         render();
       });
@@ -559,7 +254,7 @@ function render(): void {
     }
     body.querySelectorAll("button[data-seg='theme']").forEach((b) => {
       b.addEventListener("click", () => {
-        settings = { ...settings, theme: (b as HTMLElement).dataset.val ?? "system" };
+        setSettings({ ...getSettings(), theme: (b as HTMLElement).dataset.val ?? "system" });
         applyTheme();
         void save();
         render();
@@ -570,13 +265,13 @@ function render(): void {
     void refreshSafeMode();
     document.getElementById("ks-enable")?.addEventListener("click", () => void onEnableKillSwitch());
     document.getElementById("ks-disable")?.addEventListener("click", () => void onDisableKillSwitch());
-  } else if (tab === "pet") {
+  } else if (getTab() === "pet") {
     // The preview state (switched with the state chips) and the 'current appearance' decision follow the same priority as the overlay:
     // petpack > spritesheet URL > built-in logo.
     const effectiveSource = (): "pack" | "sheet" | "logo" =>
-      settings.petPack ? "pack" : settings.petSheet ? "sheet" : "logo";
+      getSettings().petPack ? "pack" : getSettings().petSheet ? "sheet" : "logo";
     // Data URLs (old local uploads) no longer stuff a long base64 string into the input; show 'Local image' + a thumbnail instead
-    const isDataUrl = settings.petSheet.startsWith("data:");
+    const isDataUrl = getSettings().petSheet.startsWith("data:");
     // 'In use / overridden by petpack': the priority is implicit, so it must be stated explicitly
     const flagHtml = (inUse: boolean, overridden: boolean): string => {
       if (inUse) return `<span class="pet-flag on">${esc(t("petInUse"))}</span>`;
@@ -609,11 +304,11 @@ function render(): void {
       // 2) Appearance: visibility + size
       `<div class="pet-sect">${group(
         "petAppearance",
-        row("petVisible", "petVisibleHint", toggle("petVisible", settings.petVisible)) +
+        row("petVisible", "petVisibleHint", toggle("petVisible", getSettings().petVisible)) +
           row(
             "petSize",
             "petSizeHint",
-            `<input type="range" id="petsize" min="70" max="130" value="${settings.petSize}" /><span id="petsize-v" class="pet-num">${settings.petSize}%</span>`,
+            `<input type="range" id="petsize" min="70" max="130" value="${getSettings().petSize}" /><span id="petsize-v" class="pet-num">${getSettings().petSize}%</span>`,
           ),
       )}</div>` +
       // 3) Appearance source: petpack (thumbnail selection) / custom spritesheet URL (advanced)
@@ -632,13 +327,13 @@ function render(): void {
           `<div class="setting-row vertical pet-adv">
            <div class="setting-info"><div class="setting-label-row"><span class="setting-label">${esc(t("petSourceSheet"))}</span><span id="pet-flag-sheet">${flagHtml(
              eff === "sheet",
-             eff === "pack" && !!settings.petSheet,
+             eff === "pack" && !!getSettings().petSheet,
            )}</span></div><span class="setting-hint">${esc(t("petUrlHint"))}</span></div>
            <div class="pet-adv-row">
              ${
                isDataUrl
                  ? `<span class="pet-local">${esc(t("petLocalImage"))}</span>`
-                 : `<input type="text" id="petsheet" value="${esc(settings.petSheet)}" placeholder="https://…" />
+                 : `<input type="text" id="petsheet" value="${esc(getSettings().petSheet)}" placeholder="https://…" />
                     <button class="btn ghost" id="petimport-url" type="button">${esc(t("petImportFromUrl"))}</button>`
              }
              <button class="btn ghost" id="petreset" type="button">${esc(t("petReset"))}</button>
@@ -654,12 +349,12 @@ function render(): void {
 
     /** The appearance that should currently be shown (same alpha slicing as the overlay). */
     const effectiveImage = async (): Promise<{ img: HTMLImageElement; frames: PackFrame[][] } | null> => {
-      if (settings.petPack) {
-        const pack = await loadPack(settings.petPack);
+      if (getSettings().petPack) {
+        const pack = await loadPack(getSettings().petPack);
         if (pack) return { img: pack.image, frames: pack.rows };
       }
-      if (settings.petSheet) {
-        const img = await loadImage(settings.petSheet).catch(() => null);
+      if (getSettings().petSheet) {
+        const img = await loadImage(getSettings().petSheet).catch(() => null);
         if (img) {
           const rows = sliceSheet(img);
           return {
@@ -681,12 +376,12 @@ function render(): void {
       if (!ctx) return;
       ctx.clearRect(0, 0, preview.width, preview.height);
       const box = preview.width;
-      const want = box * 0.72 * (settings.petSize / 100);
+      const want = box * 0.72 * (getSettings().petSize / 100);
       // 3D current pack: offscreen-render one frame of the matching state into the preview
-      if (settings.petPack) {
-        const meta = (await listPacks().catch(() => [])).find((p) => p.id === settings.petPack);
+      if (getSettings().petPack) {
+        const meta = (await listPacks().catch(() => [])).find((p) => p.id === getSettings().petPack);
         if (meta?.kind === "3d") {
-          const m = await loadModelPack(settings.petPack).catch(() => null);
+          const m = await loadModelPack(getSettings().petPack).catch(() => null);
           if (m) {
             const url = await renderModelSnapshot(
               m.data,
@@ -730,20 +425,20 @@ function render(): void {
         if (eff === "pack") {
           const packs = await listPacks().catch(() => [] as Awaited<ReturnType<typeof listPacks>>);
           el.textContent =
-            packs.find((p) => p.id === settings.petPack)?.displayName ?? settings.petPack;
+            packs.find((p) => p.id === getSettings().petPack)?.displayName ?? getSettings().petPack;
         } else {
           el.textContent = eff === "sheet" ? t("petSourceSheet") : t("petSourceLogo");
         }
       }
       document.querySelectorAll<HTMLElement>(".pet-card").forEach((card) => {
-        card.classList.toggle("active", (card.dataset.pack ?? "") === (settings.petPack ?? ""));
+        card.classList.toggle("active", (card.dataset.pack ?? "") === (getSettings().petPack ?? ""));
       });
       // The priority is implicit, so it must be stated explicitly: who is in use / who is overridden
       const packFlag = document.getElementById("pet-flag-pack");
       if (packFlag) packFlag.innerHTML = flagHtml(eff === "pack", false);
       const sheetFlag = document.getElementById("pet-flag-sheet");
       if (sheetFlag) {
-        sheetFlag.innerHTML = flagHtml(eff === "sheet", eff === "pack" && !!settings.petSheet);
+        sheetFlag.innerHTML = flagHtml(eff === "sheet", eff === "pack" && !!getSettings().petSheet);
       }
       await paintPetPreview();
       await paintSheetState();
@@ -755,12 +450,12 @@ function render(): void {
       const noteEl = document.getElementById("petsheet-note");
       if (!thumbEl) return;
       thumbEl.replaceChildren();
-      if (!settings.petSheet) {
+      if (!getSettings().petSheet) {
         if (noteEl) noteEl.textContent = t("petAdvanceHint");
         return;
       }
       try {
-        const img = await loadImage(settings.petSheet);
+        const img = await loadImage(getSettings().petSheet);
         const rows = sliceSheet(img);
         const frames = rows.length > 0 ? rows[0] : [];
         const f = frames[0] ?? { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
@@ -894,7 +589,7 @@ function render(): void {
       const grid = document.getElementById("petpack-grid");
       if (!grid) return;
       const packs = await listPacks().catch(() => [] as Awaited<ReturnType<typeof listPacks>>);
-      const cur = settings.petPack ?? "";
+      const cur = getSettings().petPack ?? "";
       const cards = [cardHtml("", t("petSourceLogo"), lightLogoThumb, !cur)];
       for (const p of packs) {
         const thumb = await packThumb(p.id);
@@ -906,7 +601,7 @@ function render(): void {
 
       grid.querySelectorAll<HTMLButtonElement>("button[data-pack]").forEach((b) => {
         b.addEventListener("click", () => {
-          settings = { ...settings, petPack: b.dataset.pack ?? "" };
+          setSettings({ ...getSettings(), petPack: b.dataset.pack ?? "" });
           void save();
           void refreshPetUi();
         });
@@ -921,8 +616,8 @@ function render(): void {
           await deletePack(id).catch(() => undefined);
           forgetPack(id);
           thumbs.delete(id);
-          if (settings.petPack === id) {
-            settings = { ...settings, petPack: "" };
+          if (getSettings().petPack === id) {
+            setSettings({ ...getSettings(), petPack: "" });
             void save();
           }
           await renderPacks();
@@ -933,19 +628,19 @@ function render(): void {
 
     const r = document.getElementById("petsize") as HTMLInputElement | null;
     r?.addEventListener("input", () => {
-      settings = { ...settings, petSize: Number(r.value) };
+      setSettings({ ...getSettings(), petSize: Number(r.value) });
       document.getElementById("petsize-v")!.textContent = `${r.value}%`;
       void save();
       void paintPetPreview();
     });
     const sheet = document.getElementById("petsheet") as HTMLInputElement | null;
     sheet?.addEventListener("change", () => {
-      settings = { ...settings, petSheet: sheet.value.trim() };
+      setSettings({ ...getSettings(), petSheet: sheet.value.trim() });
       void save();
       void refreshPetUi();
     });
     document.getElementById("petreset")?.addEventListener("click", () => {
-      settings = { ...settings, petSheet: "" };
+      setSettings({ ...getSettings(), petSheet: "" });
       if (sheet) sheet.value = "";
       void save();
       void refreshPetUi();
@@ -954,7 +649,7 @@ function render(): void {
       // Download in Rust: the WebView can't read pixels of cross-origin images (can't slice or thumbnail them),
       // and the Rust side can validate content-type first — pasting a web page URL gives a clear error.
       const input = document.getElementById("petsheet") as HTMLInputElement | null;
-      const url = (input?.value ?? settings.petSheet).trim();
+      const url = (input?.value ?? getSettings().petSheet).trim();
       const noteEl = document.getElementById("petsheet-note");
       if (!url) return;
       if (noteEl) noteEl.textContent = `${t("petImportFromUrl")}…`;
@@ -963,13 +658,13 @@ function render(): void {
         forgetPack(id);
         thumbs.delete(id);
         // Already saved locally: clear the URL to avoid confusion over 'which wins, URL or pack'
-        settings = { ...settings, petSheet: "", petPack: id };
+        setSettings({ ...getSettings(), petSheet: "", petPack: id });
         void save();
         await renderPacks();
         await refreshPetUi();
       } catch (err) {
         if (noteEl) noteEl.textContent = urlErrText(err);
-        if (settings.petSheet === url) await paintSheetState();
+        if (getSettings().petSheet === url) await paintSheetState();
       }
     });
     body.querySelectorAll<HTMLButtonElement>(".pet-mood").forEach((b) => {
@@ -1008,7 +703,7 @@ function render(): void {
       if (!id) return;
       forgetPack(id);
       thumbs.delete(id);
-      settings = { ...settings, petPack: id };
+      setSettings({ ...getSettings(), petPack: id });
       void save();
       await renderPacks();
       await refreshPetUi();
@@ -1026,7 +721,7 @@ function render(): void {
       forgetPack(id);
       forgetModelPack(id);
       thumbs.delete(id);
-      settings = { ...settings, petPack: id };
+      setSettings({ ...getSettings(), petPack: id });
       void save();
       await renderPacks();
       await refreshPetUi();
@@ -1034,7 +729,7 @@ function render(): void {
     void renderPacks().then(() => refreshPetUi());
 
 
-  } else if (tab === "bubble") {
+  } else if (getTab() === "bubble") {
     // Themes changed to a palette grid: 10 themes can't be chosen by name alone, you need to see the colors
     const THEME_I18N: Record<BubbleTheme, I18nKey> = {
       chef: "bubbleThemeChef",
@@ -1070,7 +765,7 @@ function render(): void {
     // Palettes no longer hardcode colors: the preview block carries data-bubble-theme, and bubble-themes.css renders it
     // with the same colors + shapes as the desktop bubble (corner radius/bevel/border/texture/shadow).
     const themeGrid = `<div class="bubble-theme-grid">${BUBBLE_THEMES.map((th) => {
-      const on = th === settings.bubbleTheme;
+      const on = th === getSettings().bubbleTheme;
       return `<button class="bubble-theme${on ? " active" : ""}" data-theme="${th}" type="button" aria-pressed="${on}">
         <span class="bubble-theme-swatch" data-bubble-theme="${th}">
           <i class="bse"></i><i class="bsl"></i><i class="bsl s"></i>
@@ -1079,7 +774,7 @@ function render(): void {
       </button>`;
     }).join("")}</div>`;
     const posPicker = `<div class="bubble-pos-picker">${BUBBLE_POSITIONS.map((p) => {
-      const on = p === settings.bubblePos;
+      const on = p === getSettings().bubblePos;
       return `<button class="bubble-pos${on ? " active" : ""}" data-pos="${p}" type="button" aria-pressed="${on}" title="${esc(t(POS_I18N[p]))}">
         <span class="bubble-pos-dia" data-dia="${p}"><i class="bubble-pos-pet"></i><i class="bubble-pos-bub"></i></span>
         <span class="bubble-pos-label">${esc(t(POS_I18N[p]))}</span>
@@ -1089,44 +784,44 @@ function render(): void {
     // label-left / control-right: sharing one line crushes the hint into a sliver.
     const themeRow = `<div class="setting-row vertical"><div class="setting-info"><span class="setting-label">${esc(t("bubbleTheme"))}</span><span class="setting-hint">${esc(t("bubbleThemeHint"))}</span></div>${themeGrid}</div>`;
     body.innerHTML = group("tabBubble",
-      row("bubbleEnable", "bubbleEnableHint", toggle("bubbleEnabled", settings.bubbleEnabled)) +
-      row("mode", "modeHint", segmented("mode", ["list", "carousel", "compact", "focus"], settings.mode, MODE_I18N)) +
+      row("bubbleEnable", "bubbleEnableHint", toggle("bubbleEnabled", getSettings().bubbleEnabled)) +
+      row("mode", "modeHint", segmented("mode", ["list", "carousel", "compact", "focus"], getSettings().mode, MODE_I18N)) +
       row("bubblePos", "bubblePosHint", posPicker) +
-      row("bubbleGap", "bubbleGapHint", `<input type="range" id="bgap" min="0" max="24" value="${settings.bubbleGap}" /><span id="bgap-v" class="pet-num">${settings.bubbleGap}px</span>`) +
+      row("bubbleGap", "bubbleGapHint", `<input type="range" id="bgap" min="0" max="24" value="${getSettings().bubbleGap}" /><span id="bgap-v" class="pet-num">${getSettings().bubbleGap}px</span>`) +
       themeRow +
-      row("density", "densityHint", segmented("bubbleDensity", [...BUBBLE_DENSITIES], settings.bubbleDensity, DENSITY_I18N)) +
-      row("maxRows", "maxRowsHint", `<input type="number" id="brows" min="1" max="10" value="${settings.maxRows}" />`) +
-      row("bubbleDuration", "bubbleDurationHint", `<input type="number" id="bdur" min="0" max="300" value="${settings.bubbleDuration}" />`));
+      row("density", "densityHint", segmented("bubbleDensity", [...BUBBLE_DENSITIES], getSettings().bubbleDensity, DENSITY_I18N)) +
+      row("maxRows", "maxRowsHint", `<input type="number" id="brows" min="1" max="10" value="${getSettings().maxRows}" />`) +
+      row("bubbleDuration", "bubbleDurationHint", `<input type="number" id="bdur" min="0" max="300" value="${getSettings().bubbleDuration}" />`));
     body.querySelectorAll<HTMLButtonElement>(".bubble-pos").forEach((b) => {
       b.addEventListener("click", () => {
-        settings = { ...settings, bubblePos: b.dataset.pos ?? "right" };
+        setSettings({ ...getSettings(), bubblePos: b.dataset.pos ?? "right" });
         void save();
         render();
       });
     });
     const bgap = document.getElementById("bgap") as HTMLInputElement | null;
     bgap?.addEventListener("input", () => {
-      settings = { ...settings, bubbleGap: Number(bgap.value) };
+      setSettings({ ...getSettings(), bubbleGap: Number(bgap.value) });
       document.getElementById("bgap-v")!.textContent = `${bgap.value}px`;
       void save();
     });
     body.querySelectorAll<HTMLButtonElement>(".bubble-theme").forEach((b) => {
       b.addEventListener("click", () => {
-        settings = { ...settings, bubbleTheme: b.dataset.theme ?? "chef" };
+        setSettings({ ...getSettings(), bubbleTheme: b.dataset.theme ?? "chef" });
         void save();
         render();
       });
     });
     body.querySelectorAll("button[data-seg='mode']").forEach((b) => {
       b.addEventListener("click", () => {
-        settings = { ...settings, mode: (b as HTMLElement).dataset.val ?? "carousel" };
+        setSettings({ ...getSettings(), mode: (b as HTMLElement).dataset.val ?? "carousel" });
         void save();
         render();
       });
     });
     body.querySelectorAll("button[data-seg='bubbleDensity']").forEach((b) => {
       b.addEventListener("click", () => {
-        settings = { ...settings, bubbleDensity: (b as HTMLElement).dataset.val ?? "standard" };
+        setSettings({ ...getSettings(), bubbleDensity: (b as HTMLElement).dataset.val ?? "standard" });
         void save();
         render();
       });
@@ -1135,14 +830,14 @@ function render(): void {
       const input = e.target as HTMLInputElement;
       const v = clampInt(input.value, 1, 10, DEFAULTS.maxRows);
       input.value = String(v); // show the value that actually takes effect
-      settings = { ...settings, maxRows: v };
+      setSettings({ ...getSettings(), maxRows: v });
       void save();
     });
     document.getElementById("bmins")?.addEventListener("change", (e) => {
       const input = e.target as HTMLInputElement;
       const v = clampInt(input.value, 5, 480, DEFAULTS.breakMinutes);
       input.value = String(v);
-      settings = { ...settings, breakMinutes: v };
+      setSettings({ ...getSettings(), breakMinutes: v });
       void save();
     });
     document.getElementById("bdur")?.addEventListener("change", (e) => {
@@ -1150,7 +845,7 @@ function render(): void {
       const v = clampInt(input.value, 0, 300, DEFAULTS.bubbleDuration);
       input.value = String(v);
     });
-  } else if (tab === "plugins") {
+  } else if (getTab() === "plugins") {
     body.innerHTML =
       group("tabPlugins",
         `<label class="setting-row plugin-policy-row"><div class="setting-info"><span class="setting-label">${esc(t("pluginAllowUnsigned"))}</span><span class="setting-hint">${esc(t("pluginsHint"))}</span></div><input type="checkbox" id="allow-unsigned"/></label>
@@ -1175,14 +870,14 @@ function render(): void {
     void refreshDepGraph();
     void refreshHeatmap();
     void refreshLifecyclePlan();
-  } else if (tab.startsWith("plugin:")) {
+  } else if (getTab().startsWith("plugin:")) {
     // Plugin settings page: declared settings[] -> form; not declared -> config editor.
     // Back appears only when entered from the plugin detail card — the sidebar section is itself the entry point.
     // The hero establishes identity first (letter avatar + name + id + form/JSON badges); the body fills in when it arrives asynchronously.
-    const id = tab.slice("plugin:".length);
-    const name = pluginNameById.get(id) ?? id;
+    const id = getTab().slice("plugin:".length);
+    const name = getPluginNameById().get(id) ?? id;
     const monogram = (name.trim().charAt(0) || id.charAt(0) || "?").toUpperCase();
-    const back = pluginPageReturn
+    const back = getPluginPageReturn()
       ? `<button class="btn ghost plugin-detail-back plug-back" data-plugin-page-back type="button">‹ ${esc(t("pluginDetailBack"))}</button>`
       : "";
     body.innerHTML = `<div class="plugin-page-wrap">
@@ -1200,21 +895,21 @@ function render(): void {
       <div class="plugin-page-list" id="plugin-page-body"></div>
     </div>`;
     body.querySelector("[data-plugin-page-back]")?.addEventListener("click", () => {
-      const to = pluginPageReturn;
+      const to = getPluginPageReturn();
       if (to) switchTab(to); // switchTab clears pluginPageReturn itself
     });
     void renderPluginPageSettings(id);
-  } else if (tab === "market") {
+  } else if (getTab() === "market") {
     body.innerHTML = group("tabMarket",
       `<div class="setting-row vertical"><span class="setting-hint">${esc(t("marketHint"))}</span><div><button class="btn ghost" id="market-refresh" type="button">${esc(t("marketRefresh"))}</button><span class="setting-hint" id="market-msg"></span></div><div id="market-list"></div></div>`);
     document.getElementById("market-refresh")?.addEventListener("click", () => void refreshMarket(true));
     void refreshMarket(false);
-  } else if (tab === "agents") {
+  } else if (getTab() === "agents") {
     body.innerHTML = group("tabAgents",
       `<div class="setting-row vertical"><span class="setting-hint">${esc(t("agentsViewHint"))}</span><div class="setting-hint">${esc(t("agentsPermHighRiskHint"))}</span><div><button class="btn ghost" id="agents-id-refresh" type="button">${esc(t("auditRefresh"))}</button><span class="setting-hint" id="agents-id-msg"></span></div><div id="agents-id-list"></div></div>`);
     document.getElementById("agents-id-refresh")?.addEventListener("click", () => void refreshIdAgents());
     void refreshIdAgents();
-  } else if (tab === "rpcTrace") {
+  } else if (getTab() === "rpcTrace") {
     // Request chains: grouped by project, all expanded inline (project bodies come with the full list in one shot), no dialogs.
     body.innerHTML = group("rpcTraceTitle",
       `<div class="setting-row vertical"><span class="setting-hint">${esc(t("rpcTraceTitle"))} · ${esc(t("rpcHookSessions"))}</span><div><button class="btn ghost" id="rpc-trace-refresh" type="button">${esc(t("auditRefresh"))}</button><button class="btn ghost" id="rpc-export-all-projects" type="button">${esc(t("rpcExportAllProjects"))}</button><span class="setting-hint" id="rpc-trace-msg"></span></div><div id="rpc-trace-list" class="rpc-rows"></div></div>`);
@@ -1226,12 +921,12 @@ function render(): void {
     });
     // Only here is the enter animation allowed; the refresh button and failure retry use the default (allowEnter=false) and automatically get .rpc-no-enter
     void refreshRpcTraces(true);
-  } else if (tab === "capabilities") {
+  } else if (getTab() === "capabilities") {
     body.innerHTML = group("tabCapabilities", capLegend())
       + `<div id="core-perm-list"></div>`;
     document.getElementById("core-perm-refresh")?.addEventListener("click", () => void refreshCorePerms());
     void refreshCorePerms(null, true);
-  } else if (tab === "audit") {
+  } else if (getTab() === "audit") {
     body.innerHTML = group("tabAudit",
       `<div class="setting-row vertical"><div class="audit-view-toggle"><button class="btn ghost" id="audit-view-timeline" type="button" aria-pressed="${auditView === "timeline"}">${esc(t("auditViewTimeline"))}</button><button class="btn ghost" id="audit-view-perms" type="button" aria-pressed="${auditView === "perms"}">${esc(t("auditViewPerms"))}</button></div></div>
       <div class="setting-row vertical" id="timeline-row"${auditView === "perms" ? " hidden" : ""}><div class="filter-bar"><label class="filter-field filter-field-narrow"><span class="filter-label">${esc(t("timelineAgentPlaceholder"))}</span><input type="text" id="timeline-agent" placeholder="${esc(t("timelineAgentPlaceholder"))}" aria-label="${esc(t("timelineAgentPlaceholder"))}" /></label><div class="filter-actions"><button class="btn ghost" id="timeline-refresh" type="button">${esc(t("auditRefresh"))}</button><span class="setting-hint" id="timeline-msg"></span></div></div><div id="timeline-list"></div></div>
@@ -1275,7 +970,7 @@ function render(): void {
     else void refreshAudit();
     void refreshReplay();
     startAuditStream();
-  } else if (tab === "notify") {
+  } else if (getTab() === "notify") {
     // i2 §13 Notification Center: a digest of all Agents' notifications (see nav for the notifUnread badge)
     body.innerHTML = group("tabNotify",
       `<div class="setting-row vertical"><span class="setting-hint">${esc(t("notifHint"))}</span><div class="audit-search"><input type="text" id="notif-agent" placeholder="${esc(t("notifAgentPlaceholder"))}" /><button class="btn ghost" id="notif-refresh" type="button">${esc(t("auditRefresh"))}</button><button class="btn ghost" id="notif-read-all" type="button">${esc(t("notifMarkRead"))}</button><span class="setting-hint" id="notif-msg"></span></div><div id="notif-list"></div></div>`);
@@ -1285,14 +980,14 @@ function render(): void {
       if ((ev as KeyboardEvent).key === "Enter") void refreshNotifications();
     });
     void refreshNotifications();
-  } else if (tab === "automation") {
+  } else if (getTab() === "automation") {
     // i2 §15 Automation: Event -> Rule -> Action; rules land in ~/.opencapx/automation.json (see docs/automation.md)
     // The form goes into a dialog: the tab keeps only 'Add rule' + count/errors + the rule list, so the list owns the main surface.
     body.innerHTML = group("tabAutomation",
       `<div class="setting-row vertical"><span class="setting-hint">${esc(t("automationHint"))}</span><div class="rule-toolbar"><button class="btn" id="auto-add" type="button">${esc(t("automationAdd"))}</button><span class="setting-hint" id="automation-msg"></span></div><div id="automation-list"></div></div>`);
     document.getElementById("auto-add")?.addEventListener("click", () => openAutomationDialog());
     void refreshAutomation();
-  } else if (tab === "rules") {
+  } else if (getTab() === "rules") {
     // Command rules: route an agent's shell command to a specified executor (see docs/rules.md).
     // The add form is inline in the tab (no dialog); project-level rules are read-only, their source stays in the repo file.
     // Three parts: 1) add rule (form) 2) existing rules (list) 3) trusted projects (trust management).
@@ -1332,7 +1027,7 @@ function render(): void {
     document.getElementById("rules-trust-add")?.addEventListener("click", () => void addTrustedProject());
     syncRuleXformFields();
     void refreshRules();
-  } else if (tab === "logs") {
+  } else if (getTab() === "logs") {
     body.innerHTML = group("tabLogs",
       `<div class="setting-row vertical"><span class="setting-hint">${esc(t("logsHint"))}</span><div><span class="audit-live" id="logs-live">${esc(t("logsOffline"))}</span></div><div id="logs-list"></div></div>
       <div class="setting-row vertical"><div class="logs-filter-row"><input class="logs-input" id="logs-q" placeholder="${esc(t("logsQueryPlaceholder"))}" type="text"/><select class="logs-select" id="logs-level"><option value="">${esc(t("logsLevelAll"))}</option><option value="info">${esc(t("logLevelInfo"))}</option><option value="warn">${esc(t("logLevelWarn"))}</option><option value="error">${esc(t("logLevelError"))}</option><option value="debug">${esc(t("logLevelDebug"))}</option></select><input class="logs-input" id="logs-plugin" placeholder="${esc(t("logsPluginPlaceholder"))}" type="text"/><label class="logs-tail-label"><input type="checkbox" id="logs-tail"/><span>${esc(t("logsTail"))}</span></label><button class="btn ghost" id="logs-apply" type="button">${esc(t("logsApply"))}</button><button class="btn ghost" id="logs-clear" type="button">${esc(t("logsClear"))}</button></div><span class="setting-hint" id="logs-msg"></span></div>`);
@@ -1341,12 +1036,12 @@ function render(): void {
     document.getElementById("logs-tail")?.addEventListener("change", () => void onTailToggle());
     void refreshLogs(true);
     startLogsStream();
-  } else if (tab === "stats") {
+  } else if (getTab() === "stats") {
     body.innerHTML = group("tabStats",
       `<div class="setting-row vertical"><span class="setting-hint">${esc(t("statsHint"))}</span><div><button class="btn ghost" id="stats-refresh" type="button">${esc(t("statsRefresh"))}</button><span class="setting-hint" id="stats-msg"></span></div><div id="stats-list"></div></div>`);
     document.getElementById("stats-refresh")?.addEventListener("click", () => void refreshCapabilityStats());
     void refreshCapabilityStats();
-  } else if (tab === "sla") {
+  } else if (getTab() === "sla") {
     // hero (status dot + count + refresh) + threshold card + alert card: the same depth language as the metrics/plugin settings pages,
     // no settings-list wrapper (cards carry their own ring shadow; nesting looks dirty).
     body.innerHTML = `<div class="sla-page">
@@ -1357,27 +1052,27 @@ function render(): void {
     document.getElementById("sla-refresh")?.addEventListener("click", () => void refreshSla());
     void refreshSla();
     startSlaStream();
-  } else if (tab === "hotkeys") {
+  } else if (getTab() === "hotkeys") {
     body.innerHTML = group("tabHotkeys",
       `<div class="setting-row vertical"><span class="setting-hint">${esc(t("hotkeysHint"))}</span><div><button class="btn ghost" id="hotkey-restore-defaults" type="button">${esc(t("hotkeyRestoreDefaults"))}</button><button class="btn ghost" id="hotkey-refresh" type="button">${esc(t("auditRefresh"))}</button><span class="setting-hint" id="hotkey-msg"></span></div><div id="hotkey-list"></div></div>`);
     document.getElementById("hotkey-restore-defaults")?.addEventListener("click", () => void restoreDefaultHotkeys());
     document.getElementById("hotkey-refresh")?.addEventListener("click", () => void refreshHotkeys());
     void refreshHotkeys();
     startHotkeyPaletteListener();
-  } else if (tab === "backup") {
+  } else if (getTab() === "backup") {
     body.innerHTML = group("tabBackup",
       `<div class="setting-row vertical"><span class="setting-hint">${esc(t("backupHint"))}</span><div><button class="btn" id="backup-create" type="button">${esc(t("backupCreate"))}</button><button class="btn ghost" id="backup-refresh" type="button">${esc(t("auditRefresh"))}</button><span class="setting-hint" id="backup-msg"></span></div><div id="backup-list"></div></div>`);
     document.getElementById("backup-create")?.addEventListener("click", () => void onCreateBackup());
     document.getElementById("backup-refresh")?.addEventListener("click", () => void refreshBackups());
     void refreshBackups();
-  } else if (tab === "profiles") {
+  } else if (getTab() === "profiles") {
     body.innerHTML = group("tabProfiles",
       `<div class="setting-row vertical"><span class="setting-hint">${esc(t("profilesHint"))}</span><div><button class="btn ghost" id="profiles-refresh" type="button">${esc(t("profilesRefresh"))}</button><span class="setting-hint" id="profiles-msg"></span></div><div id="profiles-grid"></div><div class="profiles-create-row"><input class="logs-input" id="profiles-name" placeholder="${esc(t("profilesCreatePlaceholder"))}" type="text"/><button class="btn" id="profiles-create" type="button">${esc(t("profilesCreate"))}</button></div></div>`);
     document.getElementById("profiles-refresh")?.addEventListener("click", () => void refreshProfiles());
     document.getElementById("profiles-create")?.addEventListener("click", () => void onCreateProfile());
     void refreshProfiles();
     startWorkspaceListener();
-  } else if (tab === "metrics") {
+  } else if (getTab() === "metrics") {
     // hero (status dot + count + refresh) + card grid + threshold card: the same depth language as the plugin settings page,
     // no settings-list wrapper (cards carry their own ring shadow; nesting looks dirty).
     body.innerHTML = `<div class="metrics-page">
@@ -1391,7 +1086,7 @@ function render(): void {
     // Persist thresholds before fetching the snapshot: the first-frame card already has usage bars and alert rings (otherwise it waits for the next sampling cycle)
     void refreshMetricsConfig().then(() => refreshMetrics());
     startMetricsStream();
-  } else if (tab === "alerting") {
+  } else if (getTab() === "alerting") {
     // hero (enable dot + title + status slot) + section cards: the same depth language as the metrics/sla/plugin settings pages,
     // no settings-list wrapper (cards carry their own ring shadow; nesting looks dirty).
     body.innerHTML = `<div class="alerting-page">
@@ -1460,7 +1155,7 @@ function render(): void {
   } else {
     // Fallback: an unknown tab doesn't white-screen, it only shows the version card.
     body.innerHTML =
-      `<div class="settings-list"><div class="about-card"><div class="logo">${ICON_PET}</div><div><b>OpenCapX</b></div><div class="ver">${esc(t("version"))} ${esc(appVersion)}</div><p>${esc(t("aboutText"))}</p></div></div>`;
+      `<div class="settings-list"><div class="about-card"><div class="logo">${ICON_PET}</div><div><b>OpenCapX</b></div><div class="ver">${esc(t("version"))} ${esc(getAppVersion())}</div><p>${esc(t("aboutText"))}</p></div></div>`;
   }
 }
 
@@ -1680,18 +1375,6 @@ function capCategory(g: { key: string; titleKey: I18nKey; rows: CorePermPolicy[]
 
 /// Whether the last override write failed: after refresh the msg area shows 'Save failed' in red, cleared on consumption.
 let corePermSaveFailed = false;
-
-/// List first-load skeleton: outlines for `cards` cards (header + 3 row bars), reusing the audit-pulse breathing animation, no new keyframes.
-/// Audit / Automation / Replay / System Capabilities all share the same set of .list-skel-* styles.
-function listSkeleton(cards: number): string {
-  const card = `<div class="list-skel-card"><div class="list-skel-bar list-skel-head" aria-hidden="true"></div><div class="list-skel-bar" aria-hidden="true"></div><div class="list-skel-bar" aria-hidden="true"></div><div class="list-skel-bar" aria-hidden="true"></div></div>`;
-  return card.repeat(cards);
-}
-
-/// List load failure block: short message + retry button; failure != empty, don't pass empty-state text off as it.
-function listError(msgKey: I18nKey, retryId: string): string {
-  return `<div class="list-error"><span class="list-error-text">${esc(t(msgKey))}</span><button class="btn ghost" id="${esc(retryId)}" type="button">${esc(t("auditRefresh"))}</button></div>`;
-}
 
 /// System Capabilities tab (docs/permissions.md 'Global policy (hard gate)'): grouped by category,
 /// control granularity = permission (matching check_agent's enforcement granularity; capabilities that share a permission are listed together,
@@ -2000,19 +1683,6 @@ function tlText(e: TimelineEntry): string {
   }
 }
 
-/// Today / yesterday / localized date. timestamp is epoch seconds.
-function dayLabel(ts: number): string {
-  const d = new Date(ts * 1000);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  const sameDay = (a: Date, b: Date): boolean =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-  if (sameDay(d, today)) return t("timelineToday");
-  if (sameDay(d, yesterday)) return t("timelineYesterday");
-  return d.toLocaleDateString();
-}
-
 /// Timeline entry: collapsed it shows a one-line summary; expand to see category/source/raw payload.
 function renderTimelineRow(e: TimelineEntry): string {
   const time = new Date(e.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -2184,7 +1854,7 @@ function renderNotificationRow(e: NotificationEntry): string {
     detailKv(t("recSeverity"), e.severity) +
     detailKv(t("auditDetailId"), e.id) +
     detailKv(t("auditDetailTime"), fullTs);
-  const unread = e.timestamp > (settings.notifLastRead ?? 0);
+  const unread = e.timestamp > (getSettings().notifLastRead ?? 0);
   return `<details class="rec${unread ? " notif-unread" : ""}"><summary class="rec-head"><span class="rec-time">${esc(time)}</span><span class="rec-icon">${icon}</span><span class="rec-text"><b>${esc(e.agent || "—")}</b> ${esc(e.title)}</span></summary><div class="rec-detail">${detail}</div></details>`;
 }
 
@@ -2194,7 +1864,7 @@ function updateNotifBadge(): void {
   const nav = document.querySelector<HTMLElement>('button[data-tab="notify"]');
   if (!nav) return;
   let badge = nav.querySelector<HTMLElement>(".nav-badge");
-  if (notifUnread <= 0) {
+  if (getNotifUnread() <= 0) {
     badge?.remove();
     return;
   }
@@ -2205,7 +1875,7 @@ function updateNotifBadge(): void {
     if (anchor) nav.insertBefore(badge, anchor);
     else nav.appendChild(badge);
   }
-  badge.textContent = notifUnread > 99 ? "99+" : String(notifUnread);
+  badge.textContent = getNotifUnread() > 99 ? "99+" : String(getNotifUnread());
 }
 
 async function refreshNotifications(): Promise<void> {
@@ -2217,7 +1887,7 @@ async function refreshNotifications(): Promise<void> {
     const entries = await invoke<NotificationEntry[]>("list_notifications", { limit: 300, agent: agent || null });
     // Unread = after notifLastRead (not filtered by agent — the badge count covers all notifications)
     if (!agent) {
-      notifUnread = entries.filter((e) => e.timestamp > (settings.notifLastRead ?? 0)).length;
+      setNotifUnread(entries.filter((e) => e.timestamp > (getSettings().notifLastRead ?? 0)).length);
       updateNotifBadge();
     }
     if (entries.length === 0) {
@@ -2245,9 +1915,9 @@ async function refreshNotifications(): Promise<void> {
 
 /// 'Mark all read': bump notifLastRead to now and persist it to settings.json.
 async function markNotificationsRead(): Promise<void> {
-  settings.notifLastRead = Math.floor(Date.now() / 1000);
-  notifUnread = 0;
-  await invoke("set_settings", { value: settings });
+  setSettings({ ...getSettings(), notifLastRead: Math.floor(Date.now() / 1000) });
+  setNotifUnread(0);
+  await invoke("set_settings", { value: getSettings() });
   updateNotifBadge();
   await refreshNotifications();
 }
@@ -2767,30 +2437,6 @@ async function exportAuditCsv(): Promise<void> {
   } catch (err) {
     if (msg) msg.textContent = `✗ ${String(err)}`;
   }
-}
-
-/// Shared 'label + value' detail item for collapsible rows; an empty value is not rendered (don't show everything).
-function detailKv(label: string, value: string): string {
-  if (!value) return "";
-  return `<div class="kv"><span class="kv-k">${esc(label)}</span><span class="kv-v">${esc(value)}</span></div>`;
-}
-
-/// Shared multi-line text block for collapsible rows (raw text, not JSON-serialized).
-function detailBlock(label: string, text: string): string {
-  if (!text) return "";
-  return `<div class="kv"><span class="kv-k">${esc(label)}</span><pre class="kv-v kv-payload">${esc(text)}</pre></div>`;
-}
-
-/// JSON details (used for timeline's raw payload).
-function detailPayload(label: string, value: unknown): string {
-  let text = "";
-  try {
-    text = JSON.stringify(value, null, 2) ?? "";
-  } catch {
-    text = String(value);
-  }
-  if (text === "{}" || text === "null") return "";
-  return detailBlock(label, text);
 }
 
 interface AuditRowData {
@@ -4124,12 +3770,6 @@ async function openHookTraceDetail(d: HTMLDetailsElement): Promise<void> {
   }
 }
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
-}
-
 function lifecycleKindLabel(kind: string): string {
   // plugin.lifecycle.starting -> starting, plugin.lifecycle.crashed -> crashed, ...
   switch (kind) {
@@ -4153,16 +3793,6 @@ function lifecycleClassFor(kind: string): string {
   if (kind.endsWith("uninstalled")) return "ev uninstalled";
   if (kind.endsWith("restarting")) return "ev restarting";
   return "ev";
-}
-
-function formatLifecycleTime(ts: number): string {
-  if (!ts) return "—";
-  try {
-    const d = new Date(ts * 1000);
-    return d.toLocaleString();
-  } catch {
-    return String(ts);
-  }
 }
 
 async function showLifecycleDialog(pluginId: string, pluginName: string): Promise<void> {
@@ -4508,15 +4138,6 @@ async function onCreateBackup(): Promise<void> {
 
 // ---- Phase 39 — Hotkeys tab (global hotkeys + command palette) ------------------------
 
-interface HotkeyAction {
-  kind: "builtin" | "plugin";
-  // builtin
-  action?: "toggle-pet" | "open-settings" | "open-palette" | "quit";
-  // plugin
-  plugin_id?: string;
-  capability?: string;
-}
-
 interface HotkeyBinding {
   combo: string;
   action: HotkeyAction;
@@ -4528,14 +4149,6 @@ interface HotkeyResult {
   binding: HotkeyBinding;
   registered: boolean;
   error?: string;
-}
-
-interface PaletteEntry {
-  id: string;
-  title: string;
-  kind: "builtin" | "plugin";
-  plugin_id: string | null;
-  capability: string | null;
 }
 
 const BUILTIN_ACTION_OPTIONS: Array<{ key: string; i18nKey: string }> = [
@@ -5833,7 +5446,7 @@ async function refreshPlugins(): Promise<void> {
   }
   // Sidebar 'Plugin Settings' section: display names come from this list_plugins call; then refresh that section along with install/uninstall/update
   // (refreshPluginConfig updates the cache and entries, even when not currently on a plugin-related tab).
-  pluginNameById = new Map(plugins.map((p) => [p.id, p.name]));
+  setPluginNameById(new Map(plugins.map((p) => [p.id, p.name])));
   void refreshPluginConfig().catch(() => undefined);
   if (!box) return;
   // Check for updates (started in parallel; on failure treat as no update)
@@ -6148,7 +5761,7 @@ async function renderPluginPageSettings(id: string): Promise<void> {
   const host = document.getElementById("plugin-page-body");
   if (!host) return;
   const live = (): boolean =>
-    tab === `plugin:${id}` && document.getElementById("plugin-page-body") === host;
+    getTab() === `plugin:${id}` && document.getElementById("plugin-page-body") === host;
   // The hero badges are in the hero (outside host): declared count / JSON mode, filled only when data arrives
   const setBadge = (text: string): void => {
     const badge = host.closest(".plugin-page-wrap")?.querySelector(".plug-hero-badge");
@@ -6218,12 +5831,6 @@ async function renderPluginPageSettings(id: string): Promise<void> {
     });
   };
   paintEditor("kv", cfg);
-}
-
-/// Attribute value escaping: esc only guards &<> — quotes in values and text would truncate `value='…'`, so guard again inside the attribute
-/// (same convention as the config index's haystack).
-function escAttr(s: string): string {
-  return esc(s).replace(/"/g, "&quot;");
 }
 
 /// One KV editor row: key is read-only (renaming = delete and re-add, avoiding accidental damage to keys the plugin reads); value is editable.
@@ -6411,71 +6018,6 @@ async function renderPluginReadme(id: string): Promise<void> {
   const html = marked.parse(md, { async: false });
   target.innerHTML = DOMPurify.sanitize(typeof html === "string" ? html : "");
 }
-
-interface PluginConfigRow {
-  id: string;
-  config: Record<string, unknown>;
-}
-
-/// Plugin text: a plain string, or a locale -> text mapping (same model as the Rust side).
-type LocalizedText = string | Record<string, string>;
-
-/** M7/F8 — plugin settings[] declaration (aligned with Rust SettingDecl) */
-interface SettingDecl {
-  key: string;
-  type: string;
-  label?: LocalizedText;
-  description?: LocalizedText;
-  default?: unknown;
-  /// A bare string (display = value) or {value, label} — label is localized for display only; storage/predicates use value.
-  options?: Array<string | { value: string; label?: LocalizedText }>;
-  /// Data-driven predicate: when false the whole row is not rendered
-  visible?: Cond;
-  /// Data-driven predicate: when true the control is disabled (the row remains, so the reason it is disabled is visible)
-  disabled?: Cond;
-  /// Validation rules before writing to disk (data, not closures)
-  validate?: ValidateRule[];
-  /// Consecutive declarations with the same section share a heading (comparing raw values, not resolved text)
-  section?: LocalizedText;
-  /// Only for path: pick a file or a directory (default is still directory, preserving existing behavior)
-  pick?: "file" | "directory";
-  /// Only for number / slider
-  min?: number;
-  max?: number;
-  step?: number;
-  /// Search keywords (used for search only, never displayed)
-  aliases?: string[];
-  /// Display order: smaller first; those without it fall back to declaration order (stable sort, affects the form only).
-  order?: number;
-  /// Deprecation note (localized): the control stays usable; the row carries a 'Deprecated' marker and reason.
-  deprecated?: LocalizedText;
-}
-
-interface PluginSettingsView {
-  settings: SettingDecl[];
-  values: Record<string, unknown>;
-  secretsSet: string[];
-}
-
-/// Predicates are data (cross-process: Python plugin -> Rust -> this UI), not closures; they depend only on stored values,
-/// so the host can recompute after any write — no manual sync like update()/refresh.
-type Cond =
-  | { op: "equals"; key: string; value: unknown }
-  | { op: "notEquals"; key: string; value: unknown }
-  | { op: "in"; key: string; values: unknown[] }
-  | { op: "isSet"; key: string; value: true }
-  | { op: "all"; conds: Cond[] }
-  | { op: "any"; conds: Cond[] }
-  | { op: "not"; cond: Cond };
-
-/// Validation rules (also data).
-type ValidateRule =
-  | { type: "required"; message?: LocalizedText }
-  | { type: "minLength"; value: number; message?: LocalizedText }
-  | { type: "maxLength"; value: number; message?: LocalizedText }
-  | { type: "min"; value: number; message?: LocalizedText }
-  | { type: "max"; value: number; message?: LocalizedText }
-  | { type: "pattern"; regex: string; message?: LocalizedText };
 
 /// Localization resolution for plugin text (frozen order, same as the Rust side): current language -> en -> lexicographically smallest key.
 /// Do not write fallback logic elsewhere — both sides must use exactly the same order.
@@ -6788,7 +6330,7 @@ async function saveDeclaredSetting(
     }
     // On success re-render with the new values: visible/disabled predicates recompute automatically, no manual update() needed
     await refreshPluginConfig();
-    // The plugin settings page shares this data: the `if (tab.startsWith("plugin:")) render()` inside refreshPluginConfig
+    // The plugin settings page shares this data: the `if (getTab().startsWith("plugin:")) render()` inside refreshPluginConfig
     // re-renders it instead of calling the detail-page render separately
     return true;
   } catch (err) {
@@ -6991,83 +6533,25 @@ function wireDeclaredSettings(box: HTMLElement): void {
 /// Kept at module level — operations inside the detail (toggle/update/permissions) re-render the whole card, so the selected state must not be lost.
 let pluginDetailId: string | null = null;
 
-/// Back target for the plugin settings page: only recorded when entered from the plugins detail card; entering from the sidebar leaves it null
-/// (the sidebar section is itself the entry point, so no Back is placed on the page). Cleared automatically when switchTab goes to a non-plugin: tab.
-let pluginPageReturn: "plugins" | null = null;
-
-/// Open a plugin's settings page (the detail card / sidebar both land on the same page).
-function openPluginSettingsPage(id: string, from: "plugins"): void {
-  pluginPageReturn = from;
-  switchTab(`plugin:${id}`);
-}
-
-/// Plugin settings snapshot: the sidebar 'Plugin Settings' section and the per-plugin settings page share the same data
-/// (from the existing list_plugin_config + list_plugin_settings paths); no new command.
-async function refreshPluginConfig(): Promise<void> {
-  let snap: { plugins: PluginConfigRow[] } = { plugins: [] };
-  try {
-    const raw = await invoke<{ plugins: PluginConfigRow[] } | null>("list_plugin_config");
-    // The backend or a test stub may return null / missing fields: accept only responses with a plugins array
-    if (raw && Array.isArray(raw.plugins)) snap = raw;
-  } catch {
-    /* commands unavailable */
-  }
-  // Declaration view: badges need to count declared keys, and the plugin settings page also consumes this cache
-  const views = new Map<string, PluginSettingsView>();
-  await Promise.all(
-    snap.plugins.map(async (p) => {
-      try {
-        const v = await invoke<PluginSettingsView>("list_plugin_settings", { id: p.id });
-        if (v && Array.isArray(v.settings) && v.settings.length > 0) views.set(p.id, v);
-      } catch {
-        /* no declarations */
-      }
-    })
-  );
-  // Display name: list_plugins is the only source; if unavailable, keep the existing mapping (labels fall back to id)
-  try {
-    const plugins = await invoke<PluginStatus[] | null>("list_plugins");
-    if (Array.isArray(plugins)) pluginNameById = new Map(plugins.map((p) => [p.id, p.name]));
-  } catch {
-    /* Name unavailable: keep the existing mapping */
-  }
-  // Update the cache + sidebar 'Plugin Settings' section first: even when not currently on this tab, entries must follow install/uninstall/update
-  pluginCfgSnap = { plugins: snap.plugins, views };
-  renderPluginSettingsNav();
-  // Currently sitting on a plugin settings page: re-render the body with the new data (after saving, predicates/validation recompute accordingly)
-  if (tab.startsWith("plugin:")) render();
-}
-
-/** CSS.escape isn't always available (old browsers); fall back to regex replacement. */
-function cssEscape(s: string): string {
-  if (typeof (window as unknown as { CSS?: { escape?: (s: string) => string } }).CSS?.escape === "function") {
-    return (window as unknown as { CSS: { escape: (s: string) => string } }).CSS.escape(s);
-  }
-  return s.replace(/[^a-zA-Z0-9_-]/g, "\\$&");
-}
-
-if (window.matchMedia) {
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-    if (settings.theme === "system") applyTheme();
-  });
-}
-
-let windowFocused = true;
-
-function paintFocus(): void {
-  document.querySelector(".op-settings")?.classList.toggle("unfocused", !windowFocused);
-}
+startThemeListener();
 
 void getCurrentWindow()
   .onFocusChanged(({ payload: focused }) => {
-    windowFocused = focused;
-    paintFocus();
+    setWindowFocused(focused);
   })
   .catch(() => undefined);
 
+registerLegacyCleanup(() => {
+  stopAuditStream();
+  stopLogsStream();
+  stopMetricsStream();
+  stopWorkspaceListener();
+});
+registerLegacyRenderer(renderLegacyTab);
+
 void load()
   .then(loadDbRecoveryNotice)
-  .then(() => getVersion().then((v) => { appVersion = v; }).catch(() => undefined))
+  .then(() => getVersion().then((v) => { setAppVersion(v); }).catch(() => undefined))
   .then(() => {
     startInstallAskListener();
     render();
