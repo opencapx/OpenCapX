@@ -120,7 +120,7 @@ function startSlaStream(): void {
   });
 }
 
-function stopSlaStream(): void {
+export function stopSlaStream(): void {
   slaStreamOnEvent?.();
   slaStreamOnEvent = null;
 }

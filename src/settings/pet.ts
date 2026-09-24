@@ -15,15 +15,7 @@ import {
 } from "../petpack";
 import { renderModelSnapshot } from "../pet3d";
 import { MOOD_ROWS } from "../sprite";
-import {
-  esc,
-  getSettings,
-  group,
-  row,
-  save,
-  setSettings,
-  toggle,
-} from "./shared";
+import { esc, escAttr, getSettings, group, row, save, setSettings, toggle } from "./shared";
 
 // Settings · Pet tab preview state and thumbnail cache.
 // Preview state is UI state (not persisted to settings): switching just shows the same pet in different states.
@@ -107,7 +99,7 @@ export function renderPet(body: HTMLElement): void {
            ${
              isDataUrl
                ? `<span class="pet-local">${esc(t("petLocalImage"))}</span>`
-               : `<input type="text" id="petsheet" value="${esc(getSettings().petSheet)}" placeholder="https://…" />
+               : `<input type="text" id="petsheet" value="${escAttr(getSettings().petSheet)}" placeholder="https://…" />
                   <button class="btn ghost" id="petimport-url" type="button">${esc(t("petImportFromUrl"))}</button>`
            }
            <button class="btn ghost" id="petreset" type="button">${esc(t("petReset"))}</button>
@@ -290,18 +282,18 @@ export function renderPet(body: HTMLElement): void {
     kind = "2d",
   ): string =>
     `<div class="pet-card-wrap">
-       <button class="pet-card${active ? " active" : ""}${broken ? " broken" : ""}" data-pack="${esc(
+       <button class="pet-card${active ? " active" : ""}${broken ? " broken" : ""}" data-pack="${escAttr(
          id,
        )}" type="button" title="${esc(broken ? `${name} — ${t("petPackBroken")}` : name)}">
          <span class="pet-thumb">${
-           thumb ? `<img src="${esc(thumb)}" alt="" />` : ""
+           thumb ? `<img src="${escAttr(thumb)}" alt="" />` : ""
          }${kind === "3d" ? `<span class="pet-kind">3D</span>` : ""}</span>
          <span class="pet-card-name">${esc(name)}</span>
        </button>
        <span class="pet-badge pet-badge-check" aria-hidden="true">${broken ? "!" : "✓"}</span>
        ${
          id
-           ? `<button class="pet-del" data-del="${esc(id)}" type="button" title="${esc(t("petPackDelete"))}">✕</button>`
+           ? `<button class="pet-del" data-del="${escAttr(id)}" type="button" title="${esc(t("petPackDelete"))}">✕</button>`
            : ""
        }
      </div>`;

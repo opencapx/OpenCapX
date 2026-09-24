@@ -4,22 +4,7 @@ import { availableLocales, getLocale, setLocale, t, type Locale } from "../i18n"
 import { ICON_PET } from "../icons";
 import { isSoundEnabled, setCustomSound, type SoundKind } from "../sounds";
 import { refreshPlugins } from "./plugins";
-import {
-  applyTheme,
-  bindToggles,
-  esc,
-  getAppVersion,
-  getSettings,
-  group,
-  paintSessions,
-  refreshSessions,
-  render,
-  row,
-  save,
-  segmented,
-  setSettings,
-  toggle,
-} from "./shared";
+import { applyTheme, bindToggles, esc, escAttr, getAppVersion, getSettings, group, paintSessions, refreshSessions, render, row, save, segmented, setSettings, toggle } from "./shared";
 
 interface AgentInfo {
   kind: string;
@@ -51,7 +36,7 @@ export function renderGeneral(body: HTMLElement): void {
         "locale",
         "localeHint",
         `<select id="locale">${availableLocales()
-          .map((l) => `<option value="${esc(l.code)}">${esc(l.name)}</option>`)
+          .map((l) => `<option value="${escAttr(l.code)}">${esc(l.name)}</option>`)
           .join("")}</select>`,
       ) +
       row("theme", "themeHint", segmented("theme", ["light", "dark", "system"], getSettings().theme)) +
@@ -160,7 +145,7 @@ async function refreshAgents(): Promise<void> {
   box.innerHTML = agents
     .map(
       (a) =>
-        `<div class="sess"><b>${esc(a.display_name)}</b><span class="msg">${esc(a.note ?? "")}</span><button data-kind="${esc(a.kind)}" type="button">${esc(a.installed ? t("remove") : t("install"))}</button></div>`,
+        `<div class="sess"><b>${esc(a.display_name)}</b><span class="msg">${esc(a.note ?? "")}</span><button data-kind="${escAttr(a.kind)}" type="button">${esc(a.installed ? t("remove") : t("install"))}</button></div>`,
     )
     .join("");
   box.querySelectorAll("button[data-kind]").forEach((b) => {

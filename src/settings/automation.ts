@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { t } from "../i18n";
-import { esc, group, listError, listSkeleton } from "./shared";
+import { esc, escAttr, group, listError, listSkeleton } from "./shared";
 
 // ─── i2 §15 Automation ───────────────────────────────────────────────────────
 
@@ -43,7 +43,7 @@ function automationRuleRow(r: AutomationRule): string {
   const match = r.when?.match ? Object.entries(r.when.match).map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(" · ") : "";
   const actionName = r.then?.action === "say" ? t("automationActionSay") : t("automationActionNotify");
   const detail = r.then?.action === "say" ? (r.then.text ?? "") : [r.then?.title, r.then?.body].filter(Boolean).join(" · ");
-  return `<div class="sess rule-row"><span class="dot ${on ? "done" : "idle"}"></span><div class="rule-text"><div class="rule-event">${esc(r.when?.event ?? "—")}</div>${match ? `<div class="rule-cond">${esc(match)}</div>` : ""}<div class="rule-action">${esc(actionName)}${detail ? ` · ${esc(detail)}` : ""}</div></div><div class="rule-btns"><button class="btn ghost" data-auto-toggle="${esc(r.id)}" type="button">${esc(on ? t("automationEnabled") : t("automationDisabled"))}</button><button class="btn ghost danger" data-auto-del="${esc(r.id)}" type="button">${esc(t("automationRemove"))}</button></div></div>`;
+  return `<div class="sess rule-row"><span class="dot ${on ? "done" : "idle"}"></span><div class="rule-text"><div class="rule-event">${esc(r.when?.event ?? "—")}</div>${match ? `<div class="rule-cond">${esc(match)}</div>` : ""}<div class="rule-action">${esc(actionName)}${detail ? ` · ${esc(detail)}` : ""}</div></div><div class="rule-btns"><button class="btn ghost" data-auto-toggle="${escAttr(r.id)}" type="button">${esc(on ? t("automationEnabled") : t("automationDisabled"))}</button><button class="btn ghost danger" data-auto-del="${escAttr(r.id)}" type="button">${esc(t("automationRemove"))}</button></div></div>`;
 }
 
 async function refreshAutomation(): Promise<void> {

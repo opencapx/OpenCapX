@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { t } from "../i18n";
 import { showWarningConfirmDialog } from "./dialogs";
-import { esc, formatLifecycleTime, group } from "./shared";
+import { esc, escAttr, formatLifecycleTime, group } from "./shared";
 
 export function renderMarket(body: HTMLElement): void {
   body.innerHTML = group("tabMarket",
@@ -26,7 +26,7 @@ interface PluginRatingSummaryDto {
 
 function starRowHtml(pluginId: string, current: number): string {
   // 5 stars: each is a button; hover/click selects the score. current is 0..5, default 0.
-  let html = `<div class="star-row" data-plugin-id="${esc(pluginId)}">`;
+  let html = `<div class="star-row" data-plugin-id="${escAttr(pluginId)}">`;
   for (let i = 1; i <= 5; i++) {
     const filled = i <= current ? " filled" : "";
     html += `<button class="star-btn${filled}" type="button" data-star="${i}" aria-label="${i}">★</button>`;
@@ -75,13 +75,13 @@ async function refreshMarket(refresh: boolean): Promise<void> {
     box.innerHTML = enriched
       .map(
         ({ e, summary, list }) =>
-          `<div class="market-card"><div class="sess"><b>${esc(e.name)}</b><span class="msg">${esc(e.id)} · v${esc(e.version)}</span><button data-market-install="${esc(e.id)}" type="button">${esc(t("marketInstall"))}</button></div>` +
+          `<div class="market-card"><div class="sess"><b>${esc(e.name)}</b><span class="msg">${esc(e.id)} · v${esc(e.version)}</span><button data-market-install="${escAttr(e.id)}" type="button">${esc(t("marketInstall"))}</button></div>` +
           (e.description ? `<div class="setting-hint">${esc(e.description)}</div>` : "") +
           (e.capabilities.length || e.permissions.length
             ? `<div class="setting-hint">${esc(e.capabilities.join(" · "))}${e.permissions.length ? " (" + e.permissions.join(", ") + ")" : ""}</div>`
             : "") +
           `<div class="market-rating"><span class="market-avg">${summary.count > 0 ? `★ ${summary.avg.toFixed(2)} · ${summary.count} ${esc(t("marketRatings"))}` : esc(t("marketNoRatings"))}</span></div>` +
-          `<div class="market-rate-form"><span class="market-rate-label">${esc(t("marketRate"))}</span>${starRowHtml(e.id, 0)}<input class="market-rate-comment" type="text" placeholder="${esc(t("marketRatePlaceholder"))}" maxlength="280"/><button class="btn ghost" data-market-rate-submit="${esc(e.id)}" type="button">${esc(t("marketRateSubmit"))}</button></div>` +
+          `<div class="market-rate-form"><span class="market-rate-label">${esc(t("marketRate"))}</span>${starRowHtml(e.id, 0)}<input class="market-rate-comment" type="text" placeholder="${esc(t("marketRatePlaceholder"))}" maxlength="280"/><button class="btn ghost" data-market-rate-submit="${escAttr(e.id)}" type="button">${esc(t("marketRateSubmit"))}</button></div>` +
           `<div class="market-ratings-list">${ratingListHtml(list)}</div>` +
           `</div>`,
       )

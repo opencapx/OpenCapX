@@ -293,7 +293,7 @@ export function segmented(
   labels?: Partial<Record<string, I18nKey>>,
 ): string {
   return `<div class="segmented-control">${options
-    .map((o) => `<button class="segment-btn${o === current ? " active" : ""}" data-seg="${name}" data-val="${esc(o)}" type="button">${esc(labels?.[o] ? t(labels[o] as I18nKey) : o)}</button>`)
+    .map((o) => `<button class="segment-btn${o === current ? " active" : ""}" data-seg="${name}" data-val="${escAttr(o)}" type="button">${esc(labels?.[o] ? t(labels[o] as I18nKey) : o)}</button>`)
     .join("")}</div>`;
 }
 
@@ -307,7 +307,7 @@ export function paintSessions(): void {
   box.innerHTML = sessions
     .map(
       (s) =>
-        `<div class="sess"><span class="dot ${esc(s.state)}"></span><b>${esc(s.agent)}</b><span>${esc(s.project)}</span><span class="msg">${esc(s.message)}</span><button data-id="${esc(s.id)}" type="button">${esc(t("dismiss"))}</button></div>`,
+        `<div class="sess"><span class="dot ${escAttr(s.state)}"></span><b>${esc(s.agent)}</b><span>${esc(s.project)}</span><span class="msg">${esc(s.message)}</span><button data-id="${escAttr(s.id)}" type="button">${esc(t("dismiss"))}</button></div>`,
     )
     .join("");
   box.querySelectorAll("button[data-id]").forEach((b) => {
@@ -445,7 +445,7 @@ export function renderPluginSettingsNav(): void {
       .map((p) => {
         const id = `plugin:${p.id}`;
         const active = tab === id;
-        return `<button class="nav-item${active ? " active" : ""}" data-tab="${esc(id)}" type="button"><span class="nav-icon">${ICON_PLUGINS}</span><span class="nav-label">${esc(pluginNameById.get(p.id) ?? p.id)}</span>${active ? '<span class="active-indicator"></span>' : ""}</button>`;
+        return `<button class="nav-item${active ? " active" : ""}" data-tab="${escAttr(id)}" type="button"><span class="nav-icon">${ICON_PLUGINS}</span><span class="nav-label">${esc(pluginNameById.get(p.id) ?? p.id)}</span>${active ? '<span class="active-indicator"></span>' : ""}</button>`;
       })
       .join("");
   host.querySelectorAll("button[data-tab]").forEach((b) => {
@@ -479,10 +479,7 @@ function findTabModule(next: Tab): TabModule | undefined {
 /// The single entry point for switching tabs (shared by sidebar static items and the 'Plugin Settings' section): stop streams + mark freshTab, then render.
 /// There is only this one entry point, so the plugin settings section buttons and static items cannot drift apart.
 export function switchTab(next: Tab): void {
-  tabModules.get("audit")?.stop?.();
-  tabModules.get("logs")?.stop?.();
-  tabModules.get("metrics")?.stop?.();
-  tabModules.get("profiles")?.stop?.();
+  for (const m of tabModules.values()) m.stop?.();
   setFreshTab(true); // enter animation plays only on tab switch; redraws from settings changes do not play it
   // Drop the Back target when leaving a plugin settings page, so the next sidebar entry doesn't leave a stale Back pointing at an old tab
   if (!next.startsWith("plugin:")) setPluginPageReturn(null);
@@ -614,7 +611,7 @@ export function listSkeleton(cards: number): string {
 
 /// List load failure block: short message + retry button; failure != empty, don't pass empty-state text off as it.
 export function listError(msgKey: I18nKey, retryId: string): string {
-  return `<div class="list-error"><span class="list-error-text">${esc(t(msgKey))}</span><button class="btn ghost" id="${esc(retryId)}" type="button">${esc(t("auditRefresh"))}</button></div>`;
+  return `<div class="list-error"><span class="list-error-text">${esc(t(msgKey))}</span><button class="btn ghost" id="${escAttr(retryId)}" type="button">${esc(t("auditRefresh"))}</button></div>`;
 }
 
 /// Shared 'label + value' detail item for collapsible rows; an empty value is not rendered (don't show everything).

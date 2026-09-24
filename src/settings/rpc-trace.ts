@@ -1,14 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { t } from "../i18n";
-import {
-  esc,
-  formatBytes,
-  formatLifecycleTime,
-  group,
-  listError,
-  listSkeleton,
-} from "./shared";
+import { esc, escAttr, formatBytes, formatLifecycleTime, group, listError, listSkeleton } from "./shared";
 
 /// One row of list_all_traces / list_all_hook_sessions (one line per trace file; pending requests have no endedAt).
 /// An empty project string = this trace was written before the project field existed (legacy data); grouped under 'Untagged project'.
@@ -98,7 +91,7 @@ export async function showTraceDialog(pluginId: string, pluginName: string): Pro
   const sessionList = sessions
     .map(
       (s) =>
-        `<li class="trace-session-row" data-session="${esc(s.sessionId)}"><span class="trace-session-id">${esc(s.sessionId)}</span><span class="trace-session-meta">${s.lineCount} ${esc(t("traceLines"))} · ${formatBytes(s.sizeBytes)}</span></li>`,
+        `<li class="trace-session-row" data-session="${escAttr(s.sessionId)}"><span class="trace-session-id">${esc(s.sessionId)}</span><span class="trace-session-meta">${s.lineCount} ${esc(t("traceLines"))} · ${formatBytes(s.sizeBytes)}</span></li>`,
     )
     .join("");
   overlay.innerHTML = `
@@ -132,7 +125,7 @@ export async function showTraceDialog(pluginId: string, pluginName: string): Pro
         ? `<ul class="trace-lines">${lines
             .map(
               (l) =>
-                `<li><span class="trace-dir trace-dir-${esc(l.dir)}">${l.dir === "in" ? "←" : "→"}</span><span class="trace-ts">${esc(formatLifecycleTime(l.ts))}</span><code class="trace-payload">${esc(JSON.stringify(l.payload))}</code></li>`,
+                `<li><span class="trace-dir trace-dir-${escAttr(l.dir)}">${l.dir === "in" ? "←" : "→"}</span><span class="trace-ts">${esc(formatLifecycleTime(l.ts))}</span><code class="trace-payload">${esc(JSON.stringify(l.payload))}</code></li>`,
             )
             .join("")}</ul>`
         : `<p class="muted">${esc(t("traceEmpty"))}</p>`;
@@ -306,7 +299,7 @@ function rpcProjectGroup(g: RpcProjectGroup, open: boolean): string {
   const title = g.key === "" ? t("rpcTraceNoProject") : g.key;
   const failed = g.traces.filter((e) => e.status === "error").length;
   const failSuffix = failed > 0 ? ` · ${failed} ${esc(t("rpcTraceFailed"))}` : "";
-  return `<details class="rec" data-rpc-project="${esc(g.key)}"${open ? " open" : ""}><summary class="rec-head"><span class="rec-title">${esc(title)}</span><span class="rec-sub">${g.traces.length} ${esc(t("rpcTraceSectionRpc"))} · ${g.hooks.length} ${esc(t("rpcHookSessions"))}${failSuffix}</span><span class="rec-time seconds">${esc(formatLifecycleTime(Math.floor(g.lastTs / 1000)))}</span><button class="btn ghost rpc-export-all" type="button" data-rpc-export-all="${esc(g.key)}">${esc(t("rpcExportAll"))}</button></summary><div class="rec-detail"><p class="settings-group-title">${esc(t("rpcTraceSectionRpc"))}</p>${rpcBody}<p class="settings-group-title">${esc(t("rpcHookSessions"))}</p>${hookBody}</div></details>`;
+  return `<details class="rec" data-rpc-project="${escAttr(g.key)}"${open ? " open" : ""}><summary class="rec-head"><span class="rec-title">${esc(title)}</span><span class="rec-sub">${g.traces.length} ${esc(t("rpcTraceSectionRpc"))} · ${g.hooks.length} ${esc(t("rpcHookSessions"))}${failSuffix}</span><span class="rec-time seconds">${esc(formatLifecycleTime(Math.floor(g.lastTs / 1000)))}</span><button class="btn ghost rpc-export-all" type="button" data-rpc-export-all="${escAttr(g.key)}">${esc(t("rpcExportAll"))}</button></summary><div class="rec-detail"><p class="settings-group-title">${esc(t("rpcTraceSectionRpc"))}</p>${rpcBody}<p class="settings-group-title">${esc(t("rpcHookSessions"))}</p>${hookBody}</div></details>`;
 }
 
 /// Lazy-load wiring for a row's first expand; re-opening is guarded by the row's own dataset.loaded, so it doesn't refetch.
@@ -466,14 +459,14 @@ function rpcTraceRow(e: TraceEntry): string {
   // startedAt/endedAt are milliseconds (list_traces takes the row's ts, produced by now_ms), so the unit is ms
   // — consistent with the tree's `dur` of `Nms`; pending (no endedAt) shows ... (not the string undefined).
   const dur = e.endedAt ? `${e.endedAt - e.startedAt}ms` : "…";
-  return `<details class="rec" data-rpc-trace="${esc(e.traceId)}" data-rpc-agent="${esc(e.agentId)}"><summary class="rec-head rec-mono"><span class="rec-title">${esc(e.traceId)}</span>${rpcStatusChip(e.status)}<span class="rec-sub">${esc(e.agentId)} · ${e.lineCount} ${esc(t("traceLines"))} · ${esc(formatBytes(e.sizeBytes))} · ${esc(dur)}</span></summary><div class="rec-detail" data-rpc-trace-body></div></details>`;
+  return `<details class="rec" data-rpc-trace="${escAttr(e.traceId)}" data-rpc-agent="${escAttr(e.agentId)}"><summary class="rec-head rec-mono"><span class="rec-title">${esc(e.traceId)}</span>${rpcStatusChip(e.status)}<span class="rec-sub">${esc(e.agentId)} · ${e.lineCount} ${esc(t("traceLines"))} · ${esc(formatBytes(e.sizeBytes))} · ${esc(dur)}</span></summary><div class="rec-detail" data-rpc-trace-body></div></details>`;
 }
 
 /// hook session row: same as above; hook files have only event rows and no root end -> endedAt is always absent,
 /// so the row header shows the last activity time instead (lastTs is ms, formatLifecycleTime takes seconds, so it must be /1000).
 function rpcHookRow(e: TraceEntry): string {
   const last = formatLifecycleTime(Math.floor((e.lastTs ?? e.endedAt ?? e.startedAt) / 1000));
-  return `<details class="rec" data-hook-trace="${esc(e.traceId)}" data-rpc-agent="${esc(e.agentId)}"><summary class="rec-head rec-mono"><span class="rec-title">${esc(e.traceId)}</span><span class="rec-sub">${esc(e.agentId)} · ${e.lineCount} ${esc(t("traceLines"))} · ${esc(formatBytes(e.sizeBytes))} · ${esc(last)}</span></summary><div class="rec-detail" data-hook-trace-body></div></details>`;
+  return `<details class="rec" data-hook-trace="${escAttr(e.traceId)}" data-rpc-agent="${escAttr(e.agentId)}"><summary class="rec-head rec-mono"><span class="rec-title">${esc(e.traceId)}</span><span class="rec-sub">${esc(e.agentId)} · ${e.lineCount} ${esc(t("traceLines"))} · ${esc(formatBytes(e.sizeBytes))} · ${esc(last)}</span></summary><div class="rec-detail" data-hook-trace-body></div></details>`;
 }
 
 /// Whole chain -> pasteable plain text: one line per record, two spaces per indent level, event prefix `· `,

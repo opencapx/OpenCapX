@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { onEvent } from "../events";
 import { t } from "../i18n";
-import { esc } from "./shared";
+import { esc, escAttr } from "./shared";
 
 export function renderMetricsTab(body: HTMLElement): void {
   // hero (status dot + count + refresh) + card grid + threshold card: the same depth language as the plugin settings page,
@@ -142,7 +142,7 @@ function renderMetricsGrid(): void {
       const fds = s.fds !== null ? String(s.fds) : "—";
       const cpuUsage = cfg && cfg.cpuPctMax > 0 && s.cpuPct !== null ? Math.min(100, Math.max(0, (s.cpuPct / cfg.cpuPctMax) * 100)) : null;
       const rssUsage = cfg && cfg.rssBytesMax > 0 && s.rssBytes !== null ? Math.min(100, Math.max(0, (s.rssBytes / cfg.rssBytesMax) * 100)) : null;
-      return `<div class="metrics-card metrics-${status}" data-pid="${esc(s.pluginId)}">
+      return `<div class="metrics-card metrics-${status}" data-pid="${escAttr(s.pluginId)}">
         <div class="metrics-card-head"><b>${esc(s.pluginId)}</b><span class="metrics-pid">pid ${s.pid}</span></div>
         <div class="metrics-row"><span class="metrics-label">${esc(t("metricsCpu"))}</span><span class="metrics-value">${cpu}</span></div>
         ${barFor(cpuUsage)}
@@ -150,8 +150,8 @@ function renderMetricsGrid(): void {
         ${barFor(rssUsage)}
         <div class="metrics-row"><span class="metrics-label">${esc(t("metricsThreads"))}</span><span class="metrics-value">${threads}</span></div>
         <div class="metrics-row"><span class="metrics-label">${esc(t("metricsFds"))}</span><span class="metrics-value">${fds}</span></div>
-        <canvas class="metrics-spark" data-spark="${esc(s.pluginId)}" width="220" height="40" aria-hidden="true"></canvas>
-        <div class="metrics-card-foot"><button class="btn ghost metrics-chart-btn" data-pid="${esc(s.pluginId)}" type="button">${esc(t("metricsChart"))}</button></div>
+        <canvas class="metrics-spark" data-spark="${escAttr(s.pluginId)}" width="220" height="40" aria-hidden="true"></canvas>
+        <div class="metrics-card-foot"><button class="btn ghost metrics-chart-btn" data-pid="${escAttr(s.pluginId)}" type="button">${esc(t("metricsChart"))}</button></div>
       </div>`;
     })
     .join("");
@@ -246,7 +246,7 @@ function drawMetricsOverview(): void {
       .map((s) => {
         const latest = s.points.slice().reverse().find((p) => p.cpu !== null)?.cpu ?? null;
         const val = latest !== null ? `${latest.toFixed(1)}%` : "—";
-        return `<span class="metrics-ov-chip" title="${esc(s.id)}"><i class="metrics-ov-dot" style="background:${s.color}"></i><span class="metrics-ov-name">${esc(s.id)}</span><span class="metrics-ov-val">${val}</span></span>`;
+        return `<span class="metrics-ov-chip" title="${escAttr(s.id)}"><i class="metrics-ov-dot" style="background:${s.color}"></i><span class="metrics-ov-name">${esc(s.id)}</span><span class="metrics-ov-val">${val}</span></span>`;
       })
       .join("");
   }
@@ -289,7 +289,7 @@ async function openMetricsChart(pluginId: string): Promise<void> {
   const modal = document.createElement("div");
   modal.id = modalId;
   modal.className = "metrics-modal";
-  modal.innerHTML = `<div class="metrics-modal-card" role="dialog" aria-modal="true" aria-label="${esc(pluginId)} · ${esc(t("metricsChart"))}">
+  modal.innerHTML = `<div class="metrics-modal-card" role="dialog" aria-modal="true" aria-label="${escAttr(pluginId)} · ${esc(t("metricsChart"))}">
     <div class="metrics-modal-head">
       <div class="metrics-modal-title"><b>${esc(pluginId)}</b><span class="metrics-modal-legend"><span class="metrics-legend-chip"><i></i>CPU%</span><span class="metrics-legend-chip rss"><i></i>RSS</span></span></div>
       <button class="btn ghost metrics-modal-close" id="metrics-modal-close" type="button" aria-label="${esc(t("dismiss"))}">×</button>

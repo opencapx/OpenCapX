@@ -479,8 +479,8 @@ function renderDeclaredRow(id: string, s: SettingDecl, view: PluginSettingsView)
   // secret values live in the keychain and the frontend can't get them — don't evaluate at mount (otherwise required would always false-positive)
   const stored = view.values[s.key] ?? s.default;
   const mountFail = s.type === "secret" ? null : evalRules(s.validate ?? [], stored);
-  const msg = `<span class="setting-hint${mountFail ? " cfg-err" : ""}" data-set-msg="${esc(pair)}">${mountFail ? esc(mountFail) : ""}</span>`;
-  const save = `<button class="btn" data-set-save="${esc(pair)}" data-set-kind="${esc(s.type)}" type="button"${dis}>${esc(t("pluginConfigSave"))}</button>`;
+  const msg = `<span class="setting-hint${mountFail ? " cfg-err" : ""}" data-set-msg="${escAttr(pair)}">${mountFail ? esc(mountFail) : ""}</span>`;
+  const save = `<button class="btn" data-set-save="${escAttr(pair)}" data-set-kind="${escAttr(s.type)}" type="button"${dis}>${esc(t("pluginConfigSave"))}</button>`;
   // Modified marker + per-key restore default: value present and != default -> marker;
   // the restore button appears only when a default exists (keys without a default have no 'default value' to write back, only the marker).
   // secret/button/list never enter settings_view.values -> hasVal is always false, so the marker naturally never appears.
@@ -488,12 +488,12 @@ function renderDeclaredRow(id: string, s: SettingDecl, view: PluginSettingsView)
   const modified = hasVal && JSON.stringify(view.values[s.key]) !== JSON.stringify(s.default);
   const mod = modified ? `<span class="cfg-mod" title="${esc(t("pluginSettingModified"))}">●</span>` : "";
   const rst = modified && s.default !== undefined
-    ? `<button class="btn ghost" data-set-reset-default="${esc(pair)}" type="button"${dis} title="${esc(t("pluginSettingResetDefault"))}">${esc(t("pluginSettingResetDefault"))}</button>`
+    ? `<button class="btn ghost" data-set-reset-default="${escAttr(pair)}" type="button"${dis} title="${esc(t("pluginSettingResetDefault"))}">${esc(t("pluginSettingResetDefault"))}</button>`
     : "";
   switch (s.type) {
     case "toggle": {
       const checked = view.values[s.key] === true ? " checked" : "";
-      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><input type="checkbox" data-set-toggle="${esc(pair)}"${checked}${dis}/>${msg}${mod}${rst}</div>`;
+      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><input type="checkbox" data-set-toggle="${escAttr(pair)}"${checked}${dis}/>${msg}${mod}${rst}</div>`;
     }
     case "dropdown": {
       const cur = String(view.values[s.key] ?? "");
@@ -501,10 +501,10 @@ function renderDeclaredRow(id: string, s: SettingDecl, view: PluginSettingsView)
         .map((o) => {
           const value = typeof o === "string" ? o : o.value;
           const text = typeof o === "string" ? o : (resolveText(o.label, locale) || o.value);
-          return `<option value="${esc(value)}"${value === cur ? " selected" : ""}>${esc(text)}</option>`;
+          return `<option value="${escAttr(value)}"${value === cur ? " selected" : ""}>${esc(text)}</option>`;
         })
         .join("");
-      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><select data-set-select="${esc(pair)}"${dis}>${opts}</select>${msg}${mod}${rst}</div>`;
+      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><select data-set-select="${escAttr(pair)}"${dis}>${opts}</select>${msg}${mod}${rst}</div>`;
     }
     case "radio-group": {
       const cur = String(view.values[s.key] ?? "");
@@ -513,14 +513,14 @@ function renderDeclaredRow(id: string, s: SettingDecl, view: PluginSettingsView)
         .map((o) => {
           const value = typeof o === "string" ? o : o.value;
           const text = typeof o === "string" ? o : (resolveText(o.label, locale) || o.value);
-          return `<label class="cfg-radio"><input type="radio" name="${esc(pair)}" value="${esc(value)}" data-set-select="${esc(pair)}"${value === cur ? " checked" : ""}${dis}/><span>${esc(text)}</span></label>`;
+          return `<label class="cfg-radio"><input type="radio" name="${escAttr(pair)}" value="${escAttr(value)}" data-set-select="${escAttr(pair)}"${value === cur ? " checked" : ""}${dis}/><span>${esc(text)}</span></label>`;
         })
         .join("");
       return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><div class="cfg-radio-group">${radios}</div>${msg}${mod}${rst}</div>`;
     }
     case "color": {
       const val = typeof view.values[s.key] === "string" ? String(view.values[s.key]) : "#000000";
-      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><input type="color" data-set-input="${esc(pair)}" value="${esc(val)}"${dis}/>${save}${msg}${mod}${rst}</div>`;
+      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><input type="color" data-set-input="${escAttr(pair)}" value="${escAttr(val)}"${dis}/>${save}${msg}${mod}${rst}</div>`;
     }
     case "slider": {
       const min = s.min ?? 0;
@@ -529,32 +529,32 @@ function renderDeclaredRow(id: string, s: SettingDecl, view: PluginSettingsView)
       const v = view.values[s.key];
       const val = typeof v === "number" && Number.isFinite(v) ? v : min;
       // The readout updates live while dragging (without persisting); persisting uses the same save button, and validation takes the same path
-      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><div class="cfg-slider"><input type="range" min="${esc(String(min))}" max="${esc(String(max))}" step="${esc(String(step))}" data-set-input="${esc(pair)}" value="${esc(String(val))}"${dis}/><span class="setting-hint" data-set-readout="${esc(pair)}">${esc(String(val))}</span></div>${save}${msg}${mod}${rst}</div>`;
+      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><div class="cfg-slider"><input type="range" min="${escAttr(String(min))}" max="${escAttr(String(max))}" step="${escAttr(String(step))}" data-set-input="${escAttr(pair)}" value="${escAttr(String(val))}"${dis}/><span class="setting-hint" data-set-readout="${escAttr(pair)}">${esc(String(val))}</span></div>${save}${msg}${mod}${rst}</div>`;
     }
     case "secret": {
       const set = view.secretsSet.includes(s.key);
       const hint = set ? t("pluginSettingSecretSet") : t("pluginSettingSecretUnset");
-      return `${rowOpen}<div class="setting-info">${labelLine}${desc}<span class="setting-hint" data-set-mask="${esc(pair)}">${esc(hint)}</span></div><input type="password" data-set-input="${esc(pair)}" placeholder="********" spellcheck="false"${dis}/>${save}${msg}${mod}${rst}</div>`;
+      return `${rowOpen}<div class="setting-info">${labelLine}${desc}<span class="setting-hint" data-set-mask="${escAttr(pair)}">${esc(hint)}</span></div><input type="password" data-set-input="${escAttr(pair)}" placeholder="********" spellcheck="false"${dis}/>${save}${msg}${mod}${rst}</div>`;
     }
     case "button": {
-      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><button class="btn ghost" data-set-action="${esc(pair)}" type="button"${dis}>${label}</button>${msg}${mod}${rst}</div>`;
+      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><button class="btn ghost" data-set-action="${escAttr(pair)}" type="button"${dis}>${label}</button>${msg}${mod}${rst}</div>`;
     }
     case "textarea": {
       const val = typeof view.values[s.key] === "string" ? String(view.values[s.key]) : "";
-      return `${rowOpenV}<div class="setting-info">${labelLine}${desc}</div><textarea class="cfg-textarea" rows="3" spellcheck="false" data-set-input="${esc(pair)}"${dis}>${esc(val)}</textarea>${save}${msg}${mod}${rst}</div>`;
+      return `${rowOpenV}<div class="setting-info">${labelLine}${desc}</div><textarea class="cfg-textarea" rows="3" spellcheck="false" data-set-input="${escAttr(pair)}"${dis}>${esc(val)}</textarea>${save}${msg}${mod}${rst}</div>`;
     }
     case "number": {
       const v = view.values[s.key];
       const val = typeof v === "number" ? String(v) : "";
-      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><input type="number" step="1" data-set-input="${esc(pair)}" value="${esc(val)}"${dis}/>${save}${msg}${mod}${rst}</div>`;
+      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><input type="number" step="1" data-set-input="${escAttr(pair)}" value="${escAttr(val)}"${dis}/>${save}${msg}${mod}${rst}</div>`;
     }
     case "list": {
       // P3 — items belong to the plugin process: fetched at mount (op:list), row actions forwarded immediately;
       // no save button (each op makes the plugin persist and return a new array). msg still renders like other types:
       // an op failure writes an inline hint rather than firing an alert (the only modal in the settings window).
       return `${rowOpenV}<div class="setting-info">${labelLine}${desc}</div>
-        <div class="kv-editor" data-list-body="${esc(pair)}"><span class="setting-hint">${esc(t("pluginSettingListLoading"))}</span></div>
-        <div class="kv-row kv-add"><input class="kv-val" data-list-new type="text" placeholder="${esc(t("pluginSettingListAddPlaceholder"))}"${dis}/><button class="btn ghost" data-list-add="${esc(pair)}" type="button" title="${escAttr(t("pluginSettingListAdd"))}" aria-label="${escAttr(t("pluginSettingListAdd"))}"${dis}>+</button></div>${msg}${mod}${rst}</div>`;
+        <div class="kv-editor" data-list-body="${escAttr(pair)}"><span class="setting-hint">${esc(t("pluginSettingListLoading"))}</span></div>
+        <div class="kv-row kv-add"><input class="kv-val" data-list-new type="text" placeholder="${esc(t("pluginSettingListAddPlaceholder"))}"${dis}/><button class="btn ghost" data-list-add="${escAttr(pair)}" type="button" title="${escAttr(t("pluginSettingListAdd"))}" aria-label="${escAttr(t("pluginSettingListAdd"))}"${dis}>+</button></div>${msg}${mod}${rst}</div>`;
     }
     default: {
       // text / path
@@ -562,9 +562,9 @@ function renderDeclaredRow(id: string, s: SettingDecl, view: PluginSettingsView)
       // pick takes effect only on path: file -> pick a file; default/other -> pick a directory (preserving existing behavior)
       const browse =
         s.type === "path"
-          ? `<button class="btn ghost" data-set-browse="${esc(pair)}" data-set-pick="${esc(s.pick === "file" ? "file" : "directory")}" type="button"${dis}>${esc(t("pluginSettingBrowse"))}</button>`
+          ? `<button class="btn ghost" data-set-browse="${escAttr(pair)}" data-set-pick="${esc(s.pick === "file" ? "file" : "directory")}" type="button"${dis}>${esc(t("pluginSettingBrowse"))}</button>`
           : "";
-      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><input type="text" spellcheck="false" data-set-input="${esc(pair)}" value="${esc(val)}"${dis}/>${browse}${save}${msg}${mod}${rst}</div>`;
+      return `${rowOpen}<div class="setting-info">${labelLine}${desc}</div><input type="text" spellcheck="false" data-set-input="${escAttr(pair)}" value="${escAttr(val)}"${dis}/>${browse}${save}${msg}${mod}${rst}</div>`;
     }
   }
 }

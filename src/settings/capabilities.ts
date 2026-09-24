@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { t, type I18nKey } from "../i18n";
-import { esc, group, listError, listSkeleton } from "./shared";
+import { esc, escAttr, group, listError, listSkeleton } from "./shared";
 
 export function renderCapabilities(body: HTMLElement): void {
   body.innerHTML = group("tabCapabilities", capLegend())
@@ -60,15 +60,15 @@ function corePermRow(e: CorePermPolicy): string {
   if (!e.highRisk) opts.push(["granted", "permGranted"]);
   opts.push(["ask", "permAsk"]);
   opts.push(["denied", "permDenied"]);
-  const sel = `<select data-cap-perm="${esc(e.permission)}" data-cur="${current}" aria-label="${esc(e.permission)}">${opts
-    .map(([v, k]) => `<option value="${esc(v)}"${v === current ? " selected" : ""}>${esc(t(k))}</option>`)
+  const sel = `<select data-cap-perm="${escAttr(e.permission)}" data-cur="${current}" aria-label="${escAttr(e.permission)}">${opts
+    .map(([v, k]) => `<option value="${escAttr(v)}"${v === current ? " selected" : ""}>${esc(t(k))}</option>`)
     .join("")}</select>`;
   const chips = e.capabilities.map((c) => `<span class="cap-badge">${esc(c)}</span>`).join("");
   const chipsRow = e.capabilities.length > 0 ? `<span class="cap-chips">${chips}</span>` : "";
   const badge = e.highRisk ? ` <span class="cap-flag">${esc(t("permHighRisk"))}</span>` : "";
   // Rows whose effective tier is denied get a red dot: rows whose built-in default is denied were previously indistinguishable from ask rows; purely decorative, the semantics are carried by the text
   const gateDot = e.effective === "denied" ? `<span class="cap-dot" data-state="denied" aria-hidden="true"></span>` : "";
-  const def = `<span class="cap-def" data-state="${esc(e.effective)}">${esc(decisionLabel(e.builtinDefault))}</span>`;
+  const def = `<span class="cap-def" data-state="${escAttr(e.effective)}">${esc(decisionLabel(e.builtinDefault))}</span>`;
   return `<div class="setting-row cap-row" role="listitem" data-override="${current}"><div class="setting-info"><span class="setting-label cap-name">${gateDot}${esc(e.permission)}${badge}</span>${chipsRow}<span class="setting-hint">${esc(t("corePermBuiltinDefault"))}: ${def}</span></div><div class="perm-controls">${sel}</div></div>`;
 }
 
@@ -81,12 +81,12 @@ function capBulkGroup(key: string, titleKey: I18nKey, rows: CorePermPolicy[]): s
   const opts: string[] = [];
   if (mixed) opts.push(`<option value="__mixed__" disabled selected>${esc(t("corePermMixed"))}</option>`);
   const opt = (val: string, labelKey: I18nKey): string =>
-    `<option value="${esc(val)}"${!mixed && val === uniform ? " selected" : ""}>${esc(t(labelKey))}</option>`;
+    `<option value="${escAttr(val)}"${!mixed && val === uniform ? " selected" : ""}>${esc(t(labelKey))}</option>`;
   opts.push(opt("", "corePermFollowDefault"));
   opts.push(opt("granted", "permGranted"));
   opts.push(opt("ask", "permAsk"));
   opts.push(opt("denied", "permDenied"));
-  return `<div class="cap-bulk"><span class="setting-hint">${esc(t("corePermBulk"))}</span><select data-cap-bulk="${esc(key)}" data-cur="${esc(uniform)}" aria-label="${esc(t(titleKey))} · ${esc(t("corePermBulk"))}">${opts.join("")}</select></div>`;
+  return `<div class="cap-bulk"><span class="setting-hint">${esc(t("corePermBulk"))}</span><select data-cap-bulk="${escAttr(key)}" data-cur="${escAttr(uniform)}" aria-label="${escAttr(t(titleKey))} · ${esc(t("corePermBulk"))}">${opts.join("")}</select></div>`;
 }
 
 /// Category card: one header row (category name + count + bulk tier), with the nested permission surface below (concentric radius 12 - 4 = 8).
