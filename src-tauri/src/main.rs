@@ -3119,7 +3119,13 @@ fn combined_rewrite(cmd: &str, set: &core::rules::RuleSet) -> core::rules::Rewri
                 // audit it as `danger/guard-disabled` with the command unchanged. The env
                 // var in particular is the same injection surface that made project rules
                 // trust-gated, so its effect stays on the record.
-                return match core::sandbox::guard(cmd, &bin, settings.profile, settings.env) {
+                return match core::sandbox::guard(
+                    cmd,
+                    &bin,
+                    settings.profile,
+                    settings.env,
+                    settings.require,
+                ) {
                     Some(_) => RewriteOutcome::Rewritten {
                         rule_id: "danger/guard-disabled".to_string(),
                         command: cmd.to_string(),
@@ -3127,7 +3133,8 @@ fn combined_rewrite(cmd: &str, set: &core::rules::RuleSet) -> core::rules::Rewri
                     None => RewriteOutcome::Unchanged,
                 };
             }
-            match core::sandbox::guard(cmd, &bin, settings.profile, settings.env) {
+            match core::sandbox::guard(cmd, &bin, settings.profile, settings.env, settings.require)
+            {
                 Some(hit) => RewriteOutcome::Rewritten {
                     rule_id: hit.rule_id.to_string(),
                     command: hit.command,

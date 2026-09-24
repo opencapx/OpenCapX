@@ -8,6 +8,14 @@ proxy, container) is the executor's responsibility. OpenCapX does not judge "sho
 [permissions.md](permissions.md)'s capability gate, which governs another pipeline (`/rpc` capability calls)
 and cannot see the agent's own shell commands.
 
+**Platform note — the bundled `sandbox` executor.** `opencapx sandbox` has a real backend on
+macOS (seatbelt) and Linux (bubblewrap); on Windows there is no backend yet (a microVM tier is
+planned). Its contract is fail-open: with no backend available it warns, emits a
+`sandbox.unguarded` audit event, and runs the command as-is. If your stance is "rather refuse
+than run unguarded", pass `--require` (exit code 99 + a `sandbox.blocked` audit instead of the
+passthrough) — e.g. `"prepend": "~/.opencapx/bin/opencapx sandbox --require"`, or
+`opencapx guard require on` to bake it into the danger-guard's download-and-run rewrites.
+
 ## Where It Takes Effect
 
 The agent's **Bash tool call**, via the `PreToolUse` hook:

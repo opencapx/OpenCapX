@@ -9,6 +9,8 @@ Packaging — deferred until there is a commercial reason to buy signing certifi
 
 Before the plugin ecosystem scales:
 
+- [ ] A real Windows sandbox backend for `opencapx sandbox` (the microVM tier via WHP, or a restricted-token approximation) — until then `--require` gives rules the fail-closed stance
+
 - [ ] Extend OS-permission preflight beyond read-only macOS probes (Windows/Linux status, first-use guidance to System Settings)
 - [ ] Enforce network.request domain scopes (the structure is reserved in the permission model; the matcher is not wired for domains yet)
 - [ ] Rotate the registry official key to the offline ceremony key ([key-ceremony.md](docs/key-ceremony.md)) — the add-then-retire window contract is pinned by a test; execution waits until external publishers actually exist
