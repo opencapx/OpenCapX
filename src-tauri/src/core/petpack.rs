@@ -65,7 +65,7 @@ struct Manifest {
 }
 
 pub fn pets_dir() -> PathBuf {
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = crate::core::home_dir() {
         return home.join(".opencapx").join("pets");
     }
     std::env::temp_dir().join("opencapx-pets")
@@ -543,11 +543,20 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("opencapx-pets-{}-{}", std::process::id(), tag));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let old = std::env::var("HOME").ok();
+        // OPENCAPX_HOME is the override core::home_dir() honors on every platform; HOME alone
+        // cannot isolate on Windows (dirs::home_dir() there is the Known Folder API, env-blind).
+        let old_home = std::env::var_os("HOME");
+        let old_override = std::env::var_os("OPENCAPX_HOME");
+        std::env::set_var("OPENCAPX_HOME", &dir);
         std::env::set_var("HOME", &dir);
         let out = f();
-        if let Some(h) = old {
-            std::env::set_var("HOME", h);
+        match old_override {
+            Some(h) => std::env::set_var("OPENCAPX_HOME", h),
+            None => std::env::remove_var("OPENCAPX_HOME"),
+        }
+        match old_home {
+            Some(h) => std::env::set_var("HOME", h),
+            None => std::env::remove_var("HOME"),
         }
         let _ = std::fs::remove_dir_all(&dir);
         out

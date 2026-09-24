@@ -113,6 +113,16 @@ mod tests {
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     #[test]
     fn print_reports_platform_limit() {
-        assert!(print(&json!({ "path": "/x.pdf" })).unwrap_err().contains("macOS/Linux-only"));
+        // validate() runs before the platform branch and requires an existing absolute
+        // file, so a made-up "/x.pdf" trips path validation on Windows before the
+        // platform limit is ever reported. Use a real per-OS temp file.
+        let dir = std::env::temp_dir().join(format!("opencapx-print-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("x.pdf");
+        std::fs::write(&f, b"%PDF-1.4\n%%EOF\n").unwrap();
+        assert!(print(&json!({ "path": f.to_str().unwrap() }))
+            .unwrap_err()
+            .contains("macOS/Linux-only"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

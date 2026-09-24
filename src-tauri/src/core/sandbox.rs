@@ -25,7 +25,7 @@ pub fn plugin_data_root() -> PathBuf {
     if let Ok(dir) = std::env::var("OPENCAPX_PLUGIN_DATA_DIR") {
         return PathBuf::from(dir);
     }
-    dirs::home_dir()
+    crate::core::home_dir()
         .map(|h| h.join(".opencapx").join("plugin-data"))
         .unwrap_or_else(|| std::env::temp_dir().join("opencapx-plugin-data"))
 }
@@ -281,7 +281,7 @@ pub fn guard_file() -> PathBuf {
     if let Ok(p) = std::env::var("OPEN_CAPX_GUARD_FILE") {
         return PathBuf::from(p);
     }
-    dirs::home_dir()
+    crate::core::home_dir()
         .map(|h| h.join(".opencapx").join("guard.json"))
         .unwrap_or_else(|| std::env::temp_dir().join("opencapx-guard.json"))
 }
@@ -1122,7 +1122,7 @@ pub fn run_cli(args: &[String]) -> i32 {
 fn print_profile(parsed: &Parsed) -> i32 {
     #[cfg(target_os = "macos")]
     {
-        let Some(home) = dirs::home_dir() else {
+        let Some(home) = crate::core::home_dir() else {
             eprintln!("opencapx sandbox: cannot resolve home");
             return 1;
         };
@@ -1273,7 +1273,7 @@ fn kill_group(leader_pid: u32) {
 /// (HOME, `~/Library/LaunchAgents`, dotfiles) and the network stay closed.
 #[cfg(target_os = "macos")]
 fn run_seatbelt(parsed: &Parsed, scratch: &Path) -> std::io::Result<i32> {
-    let home = dirs::home_dir()
+    let home = crate::core::home_dir()
         .map(|h| canonicalize_lossy(&h))
         .unwrap_or_else(|| PathBuf::from("/"));
     let tmpdir = std::env::var_os("TMPDIR").map(PathBuf::from);
@@ -1375,7 +1375,7 @@ fn bwrap_probe() -> bool {
 fn run_bwrap(parsed: &Parsed, scratch: &Path) -> std::io::Result<i32> {
     let bwrap = which("bwrap")
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "bwrap not found"))?;
-    let home = dirs::home_dir().map(|h| canonicalize_lossy(&h));
+    let home = crate::core::home_dir().map(|h| canonicalize_lossy(&h));
     let mut cmd = std::process::Command::new(bwrap);
     for a in bwrap_args(&parsed.policy, parsed.profile, scratch, home.as_deref(), &parsed.command) {
         cmd.arg(a);
@@ -1843,6 +1843,7 @@ mod tests {
 
     /// Installer profile shape: network open, $HOME writable, and the deny list comes AFTER the
     /// allows — seatbelt last-match-wins, so the ordering is the enforcement.
+    #[cfg(target_os = "macos")] // seatbelt profile text exists only on macOS
     #[test]
     fn installer_profile_denies_after_allowing() {
         let home = PathBuf::from("/Users/test");

@@ -2083,7 +2083,7 @@ fn core_permission_reset(permission: String) -> Result<bool, String> {
 }
 
 fn settings_path() -> std::path::PathBuf {
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = crate::core::home_dir() {
         return home.join(".opencapx").join("settings.json");
     }
     std::env::temp_dir().join("opencapx-settings.json")

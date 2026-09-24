@@ -134,20 +134,25 @@ mod tests {
 
     #[test]
     fn registry_subscribe_unsubscribe_list() {
+        // The registry is a process-global singleton shared by every test in the binary;
+        // plain kind names ("k1"/"k2") collide with subscribe_enforces_per_plugin_kind_cap's
+        // entries when thread scheduling interleaves them (seen on the Windows runner).
+        let tag = std::process::id();
+        let (k1, k2) = (format!("k1-{tag}"), format!("k2-{tag}"));
         let r = SubscriptionRegistry::shared();
-        r.subscribe("a", "k1");
-        r.subscribe("b", "k1");
-        r.subscribe("a", "k2");
-        let mut s1 = r.subscribers("k1");
+        r.subscribe("a", &k1);
+        r.subscribe("b", &k1);
+        r.subscribe("a", &k2);
+        let mut s1 = r.subscribers(&k1);
         s1.sort();
         assert_eq!(s1, vec!["a".to_string(), "b".to_string()]);
-        let s2 = r.subscribers("k2");
+        let s2 = r.subscribers(&k2);
         assert_eq!(s2, vec!["a".to_string()]);
-        r.unsubscribe("a", "k1");
-        let s1 = r.subscribers("k1");
+        r.unsubscribe("a", &k1);
+        let s1 = r.subscribers(&k1);
         assert_eq!(s1, vec!["b".to_string()]);
-        r.unsubscribe("b", "k1");
-        assert!(r.subscribers("k1").is_empty(), "empty set entry should be removed");
+        r.unsubscribe("b", &k1);
+        assert!(r.subscribers(&k1).is_empty(), "empty set entry should be removed");
     }
 
     #[test]

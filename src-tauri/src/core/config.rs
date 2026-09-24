@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 /// Config directory: `~/.opencapx/config` (avoiding a storage::path conflict; it has its own directory here).
 pub fn config_dir() -> PathBuf {
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = crate::core::home_dir() {
         return home.join(".opencapx").join("config");
     }
     std::env::temp_dir().join("opencapx-config")

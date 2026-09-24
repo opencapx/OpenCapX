@@ -3088,7 +3088,7 @@ pub fn open_default() -> StoreEnum {
 }
 
 pub fn data_dir() -> std::path::PathBuf {
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = crate::core::home_dir() {
         return home.join(".opencapx").join("data");
     }
     std::env::temp_dir().join("opencapx-data")

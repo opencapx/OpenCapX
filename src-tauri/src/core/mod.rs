@@ -1,6 +1,18 @@
 //! OpenCapX Core: agent state, event bus, storage, capability routing, permissions, plugin runtime.
 //! See the protocol docs under docs/.
 
+use std::path::PathBuf;
+
+/// Resolve the OpenCapX home directory: `OPENCAPX_HOME` overrides, otherwise the OS home.
+/// `dirs::home_dir()` is the Known Folder API on Windows and ignores env vars, so this
+/// override is also what makes home-isolated tests (and portable installs) work there.
+pub fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("OPENCAPX_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(dirs::home_dir)
+}
+
 pub mod agent;
 pub mod alerting;
 pub mod backup;

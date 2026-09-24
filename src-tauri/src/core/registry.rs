@@ -379,7 +379,7 @@ pub fn registry_root() -> PathBuf {
     if let Ok(dir) = std::env::var("OPENCAPX_REGISTRY_DIR") {
         return PathBuf::from(dir);
     }
-    dirs::home_dir()
+    crate::core::home_dir()
         .map(|h| h.join(".opencapx").join("registry"))
         .unwrap_or_else(|| std::env::temp_dir().join("opencapx-registry"))
 }

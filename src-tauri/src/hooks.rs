@@ -105,7 +105,7 @@ pub fn display_name(kind: &str) -> String {
 }
 
 fn config_path(kind: &str) -> Option<PathBuf> {
-    let mut p = dirs::home_dir()?;
+    let mut p = crate::core::home_dir()?;
     for part in spec(kind)?.rel_path { p.push(part); }
     Some(p)
 }
@@ -119,7 +119,7 @@ fn config_path(kind: &str) -> Option<PathBuf> {
 
 /// The stable CLI path that every hook and MCP config points at.
 pub fn shim_path() -> PathBuf {
-    dirs::home_dir()
+    crate::core::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".opencapx")
         .join("bin")
@@ -305,7 +305,7 @@ fn stale_plugin_file(kind: &str) -> bool {
 // without credentials — same principle as hooks.
 
 fn mcp_config_target(kind: &str) -> Option<(PathBuf, &'static str)> {
-    let home = dirs::home_dir()?;
+    let home = crate::core::home_dir()?;
     Some(match kind {
         // Claude Code: the global MCP table lives in ~/.claude.json (separate from the hooks settings.json)
         "claude" => (home.join(".claude.json"), "json"),
@@ -866,7 +866,7 @@ fn pi_extension(binary: &str) -> String {
 }
 
 fn enable_codex_hooks() {
-    let Some(home) = dirs::home_dir() else { return };
+    let Some(home) = crate::core::home_dir() else { return };
     let path = home.join(".codex").join("config.toml");
     let text = std::fs::read_to_string(&path).unwrap_or_default();
     let already = text.lines().any(|l| {
@@ -896,6 +896,13 @@ mod tests {
 
     static HOME_LOCK: Mutex<()> = Mutex::new(());
 
+    /// Escape a filesystem path the way the TOML/JSON config writers do. On Windows the
+    /// shim path is full of backslashes; raw comparisons against written (correctly
+    /// escaped) config text used to fail, and raw fixtures made valid repairs look stale.
+    fn esc_path(p: &str) -> String {
+        p.replace('\\', "\\\\").replace('"', "\\\"")
+    }
+
     fn with_temp_home(tag: &str, f: impl FnOnce()) {
         // Proceed even when poisoned: otherwise one panicking test leaves the rest of
         // the group stuck on lock() (observed: 1 flake amplified into 4 reds).
@@ -903,10 +910,21 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("opencapx-home-{}-{}", std::process::id(), tag));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let old = std::env::var("HOME").ok();
+        // OPENCAPX_HOME is honored by core::home_dir() on every platform; HOME alone cannot
+        // isolate on Windows (dirs::home_dir() there is the Known Folder API, env-blind).
+        let old_home = std::env::var_os("HOME");
+        let old_override = std::env::var_os("OPENCAPX_HOME");
+        std::env::set_var("OPENCAPX_HOME", &dir);
         std::env::set_var("HOME", &dir);
         f();
-        if let Some(h) = old { std::env::set_var("HOME", h); }
+        match old_override {
+            Some(h) => std::env::set_var("OPENCAPX_HOME", h),
+            None => std::env::remove_var("OPENCAPX_HOME"),
+        }
+        match old_home {
+            Some(h) => std::env::set_var("HOME", h),
+            None => std::env::remove_var("HOME"),
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1032,7 +1050,7 @@ mod tests {
     #[test]
     fn ensure_mcp_omp_preserves_existing_servers() {
         with_temp_home("omp-mcp-keep", || {
-            let path = dirs::home_dir().unwrap().join(".omp").join("agent").join("mcp.json");
+            let path = crate::core::home_dir().unwrap().join(".omp").join("agent").join("mcp.json");
             write_json(&path, &json!({"mcpServers": {"other": {"command": "/x/other"}}})).unwrap();
             let (_, w) = ensure_mcp("omp").unwrap();
             assert!(w);
@@ -1048,7 +1066,7 @@ mod tests {
     #[test]
     fn ensure_mcp_omp_backfills_the_identity_env() {
         with_temp_home("omp-mcp-env", || {
-            let path = dirs::home_dir().unwrap().join(".omp").join("agent").join("mcp.json");
+            let path = crate::core::home_dir().unwrap().join(".omp").join("agent").join("mcp.json");
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             let shim = shim_path().to_string_lossy().to_string();
             write_json(&path, &json!({"mcpServers": {"opencapx": {
@@ -1067,7 +1085,7 @@ mod tests {
     #[test]
     fn refresh_repoints_a_stale_omp_mcp_command() {
         with_temp_home("omp-mcp-repoint", || {
-            let path = dirs::home_dir().unwrap().join(".omp").join("agent").join("mcp.json");
+            let path = crate::core::home_dir().unwrap().join(".omp").join("agent").join("mcp.json");
             write_json(&path, &json!({"mcpServers": {"opencapx": {"command": "/gone/debug/opencapx", "args": ["mcp"]}}})).unwrap();
             assert!(refresh_installations() >= 1);
             let v = read_json(&path);
@@ -1106,7 +1124,7 @@ mod tests {
     #[test]
     fn connect_ensure_mcp_preserves_existing_config() {
         with_temp_home("mcp-keep", || {
-            let path = dirs::home_dir().unwrap().join(".claude.json");
+            let path = crate::core::home_dir().unwrap().join(".claude.json");
             write_json(&path, &json!({
                 "other": { "keep": 1 },
                 "mcpServers": { "fs": { "command": "/x/fs" } }
@@ -1179,7 +1197,7 @@ mod tests {
             let path = config_path("omp").unwrap();
             assert_eq!(
                 path,
-                dirs::home_dir().unwrap().join(".omp").join("agent").join("extensions").join("opencapx.ts")
+                crate::core::home_dir().unwrap().join(".omp").join("agent").join("extensions").join("opencapx.ts")
             );
             assert!(!stale_plugin_file("omp"), "freshly installed content is current");
             assert_eq!(toggle("omp"), Ok(false));
@@ -1230,7 +1248,7 @@ mod tests {
             std::fs::write(&path, omp_extension("/gone/debug/opencapx")).unwrap();
             assert!(refresh_installations() >= 1);
             let text = std::fs::read_to_string(&path).unwrap();
-            assert!(text.contains(&shim_path().to_string_lossy().to_string()));
+            assert!(text.contains(&esc_path(&shim_path().to_string_lossy())));
             assert_eq!(refresh_installations(), 0, "idempotent");
         });
     }
@@ -1347,7 +1365,7 @@ mod tests {
 
             assert!(refresh_installations() >= 1);
             let text = std::fs::read_to_string(&path).unwrap();
-            assert!(text.contains(&format!("command = \"{}\"", shim_path().to_string_lossy())));
+            assert!(text.contains(&format!("command = \"{}\"", esc_path(&shim_path().to_string_lossy()))));
             assert!(text.contains("args = [\"mcp\"]"), "block body preserved");
             assert!(
                 text.contains("env = { OPEN_CAPX_AGENT = \"codex\" }"),
@@ -1367,7 +1385,7 @@ mod tests {
         with_temp_home("toml-env", || {
             let path = mcp_config_target("codex").unwrap().0;
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            let current = shim_path().to_string_lossy().to_string();
+            let current = esc_path(&shim_path().to_string_lossy());
             std::fs::write(
                 &path,
                 format!("[mcp_servers.opencapx]\ncommand = \"{}\"\nargs = [\"mcp\"]\n", current),
@@ -1391,7 +1409,7 @@ mod tests {
         with_temp_home("toml-env-merge", || {
             let path = mcp_config_target("codex").unwrap().0;
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            let current = shim_path().to_string_lossy().to_string();
+            let current = esc_path(&shim_path().to_string_lossy());
             std::fs::write(
                 &path,
                 format!(

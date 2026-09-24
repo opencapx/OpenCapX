@@ -1192,9 +1192,17 @@ mod tests {
         p.to_string_lossy().into_owned()
     }
 
+    /// JSON-escape a filesystem path for embedding in a raw-string hook payload fixture.
+    /// On Windows the temp path is full of backslashes; unescaped, `\U`/`\A` are invalid
+    /// JSON escapes and the whole payload silently fails to parse.
+    fn json_path(p: &str) -> String {
+        p.replace('\\', "\\\\")
+    }
+
     fn stop_body(path: &str) -> String {
         format!(
-            r#"{{"agent":"claude","hook_event_name":"Stop","session_id":"s1","transcript_path":"{path}"}}"#
+            r#"{{"agent":"claude","hook_event_name":"Stop","session_id":"s1","transcript_path":"{}"}}"#,
+            json_path(path)
         )
     }
 
@@ -1247,7 +1255,8 @@ mod tests {
             "{\"type\":\"assistant\",\"message\":{\"model\":\"claude-sonnet-4-5\",\"content\":[{\"type\":\"text\",\"text\":\"Let me first look at the bubble render path.\"}]}}\n",
         );
         let body = format!(
-            r#"{{"agent":"claude","hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{{"file_path":"src/bubble.ts"}},"session_id":"speech-w1","transcript_path":"{path}"}}"#
+            r#"{{"agent":"claude","hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{{"file_path":"src/bubble.ts"}},"session_id":"speech-w1","transcript_path":"{}"}}"#,
+            json_path(&path)
         );
         let mut dto = process_body(&body, "unknown");
         enrich_from_transcript(&mut dto, &body);
@@ -1399,7 +1408,8 @@ mod tests {
             "{\"type\":\"assistant\",\"message\":{\"model\":\"claude-haiku-4-5\",\"content\":[{\"type\":\"text\",\"text\":\"ok\"}]}}\n",
         );
         let body = format!(
-            r#"{{"agent":"claude","hook_event_name":"PreToolUse","tool_name":"Read","session_id":"m-sess-1","transcript_path":"{path}"}}"#
+            r#"{{"agent":"claude","hook_event_name":"PreToolUse","tool_name":"Read","session_id":"m-sess-1","transcript_path":"{}"}}"#,
+            json_path(&path)
         );
         let mut dto = process_body(&body, "unknown");
         assert_eq!(dto.state, "working");

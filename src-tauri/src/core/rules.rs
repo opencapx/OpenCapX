@@ -184,7 +184,7 @@ pub struct RuleSet {
 
 /// Global rules file `~/.opencapx/rules.json`.
 pub fn global_path() -> PathBuf {
-    dirs::home_dir()
+    crate::core::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".opencapx")
         .join("rules.json")
@@ -197,7 +197,7 @@ pub fn project_path(project_dir: &Path) -> PathBuf {
 
 /// Trust registry `~/.opencapx/trusted-projects.json` (0600).
 pub fn trust_registry_path() -> PathBuf {
-    dirs::home_dir()
+    crate::core::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".opencapx")
         .join("trusted-projects.json")

@@ -26,7 +26,7 @@ const VISION_TIMEOUT: Duration = Duration::from_secs(180);
 /// Screenshot cache directory `~/.opencapx/cache/` (auto-created).
 /// Since v1.2 clipboard images / speech audio also land here, hence pub(crate).
 pub(crate) fn cache_dir() -> Result<std::path::PathBuf, String> {
-    let Some(home) = dirs::home_dir() else {
+    let Some(home) = crate::core::home_dir() else {
         return Err("cannot resolve home directory".into());
     };
     let dir = home.join(".opencapx").join("cache");

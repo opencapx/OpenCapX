@@ -116,7 +116,7 @@ pub fn trusted_keys_path() -> PathBuf {
     if let Ok(p) = std::env::var("OPENCAPX_TRUSTED_KEYS") {
         return PathBuf::from(p);
     }
-    dirs::home_dir()
+    crate::core::home_dir()
         .map(|h| h.join(".opencapx").join("trusted-keys.json"))
         .unwrap_or_else(|| std::env::temp_dir().join("opencapx-trusted-keys.json"))
 }

@@ -44,8 +44,21 @@ impl Default for EnvPolicy {
 /// `plugin_env_isolation=false` is a one-switch rollback).
 const BASE_ENV_ALLOW: &[&str] = &["PATH", "HOME", "TMPDIR", "TZ", "LANG"];
 
+/// Windows equivalents: python.exe (and anything on the CRT) aborts without SYSTEMROOT,
+/// and temp/home resolve through TEMP/USERPROFILE rather than TMPDIR/HOME. Without these,
+/// every process plugin on Windows died instantly with "timeout waiting for plugin.initialize"
+/// while the same plugin ran fine under the unix allowlist.
+#[cfg(windows)]
+const PLATFORM_ENV_ALLOW: &[&str] = &[
+    "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC", "WINDIR", "PATHEXT", "TEMP", "TMP", "USERPROFILE",
+    "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
+];
+#[cfg(not(windows))]
+const PLATFORM_ENV_ALLOW: &[&str] = &[];
+
 fn env_is_allowed(key: &str, extra: &[String]) -> bool {
     BASE_ENV_ALLOW.contains(&key)
+        || PLATFORM_ENV_ALLOW.contains(&key)
         || key.starts_with("LC_")
         || key.starts_with("XDG_")
         || extra.iter().any(|k| k == key)
@@ -94,6 +107,41 @@ enum LineOutcome {
 }
 
 /// P3 — bounded line read: a whole line exceeding `cap` (excluding the newline) is dropped, and the stream advances to the next start.
+/// Line outcome with CRLF normalized: a plugin's stderr on Windows ends every line with
+/// `\r\n`, and the `\r` must not ride along into plugin.log events and log files.
+fn finalize_line(mut buf: Vec<u8>) -> LineOutcome {
+    if buf.last() == Some(&b'\r') {
+        buf.pop();
+    }
+    LineOutcome::Line(buf)
+}
+
+/// Windows python3 trap: `python3.exe` there is a Microsoft Store alias that exits without
+/// running any Python. Plugin manifests declare `"command": "python3"` (the portable unix
+/// name), so when the literal command cannot actually run, fall back to `python` before
+/// giving up. Unix keeps the exact command the manifest declared.
+fn resolve_command(cmd: &str) -> String {
+    if cmd != "python3" || cfg!(not(target_os = "windows")) {
+        return cmd.to_string();
+    }
+    let runs = |c: &str| {
+        std::process::Command::new(c)
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    };
+    if runs("python3") {
+        cmd.to_string()
+    } else if runs("python") {
+        "python".to_string()
+    } else {
+        cmd.to_string()
+    }
+}
+
 fn read_line_capped<R: std::io::BufRead>(r: &mut R, cap: usize) -> LineOutcome {
     let mut buf: Vec<u8> = Vec::new();
     let mut over = false;
@@ -103,7 +151,7 @@ fn read_line_capped<R: std::io::BufRead>(r: &mut R, cap: usize) -> LineOutcome {
                 return match (over, buf.is_empty()) {
                     (true, _) => LineOutcome::Dropped,
                     (false, true) => LineOutcome::Eof,
-                    (false, false) => LineOutcome::Line(buf),
+                    (false, false) => finalize_line(buf),
                 };
             }
             Ok(chunk) => {
@@ -119,7 +167,7 @@ fn read_line_capped<R: std::io::BufRead>(r: &mut R, cap: usize) -> LineOutcome {
                     return if over {
                         LineOutcome::Dropped
                     } else {
-                        LineOutcome::Line(buf)
+                        finalize_line(buf)
                     };
                 }
                 if over {
@@ -194,7 +242,7 @@ impl PluginProcess {
         #[cfg(not(target_os = "macos"))]
         let (spawn_cmd, spawn_args) = {
             let _ = sandbox; // enforcement layer out of scope (Linux bubblewrap / Windows AppContainer = roadmap)
-            (spec.command.clone(), spec.args.clone())
+            (resolve_command(&spec.command), spec.args.clone())
         };
         let mut cmd = Command::new(&spawn_cmd);
         cmd.args(&spawn_args)
@@ -551,13 +599,16 @@ mod tests {
     }
 
     fn python3() -> Option<String> {
+        // Require a *successful* --version: on Windows `python3.exe` is a Microsoft Store
+        // alias that spawns fine and then exits nonzero without running any Python.
         for c in ["python3", "python"] {
             if Command::new(c)
                 .arg("--version")
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .status()
-                .is_ok()
+                .map(|s| s.success())
+                .unwrap_or(false)
             {
                 return Some(c.to_string());
             }
@@ -689,6 +740,16 @@ mod tests {
         assert_eq!(read_line_capped(&mut r, 16), LineOutcome::Dropped);
         assert_eq!(read_line_capped(&mut r, 16), LineOutcome::Line(b"ok-2".to_vec()));
         assert_eq!(read_line_capped(&mut r, 16), LineOutcome::Eof);
+    }
+
+    /// CRLF: Windows plugin stderr is `\r\n`-terminated; the trailing `\r` must be stripped
+    /// (it used to ride into every published plugin.log message and break exact matching).
+    #[test]
+    fn read_line_capped_strips_crlf_carriage_return() {
+        let mut r = std::io::BufReader::new(&b"a\r\nb\nno-eol\r"[..]);
+        assert_eq!(read_line_capped(&mut r, 16), LineOutcome::Line(b"a".to_vec()));
+        assert_eq!(read_line_capped(&mut r, 16), LineOutcome::Line(b"b".to_vec()));
+        assert_eq!(read_line_capped(&mut r, 16), LineOutcome::Line(b"no-eol".to_vec()));
     }
 
     /// P3 — the plugin first spews a 5 MiB giant line, and the handshake still succeeds (the reader neither OOMs nor blocks); the giant line is counted and dropped.

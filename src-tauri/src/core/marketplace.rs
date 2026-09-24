@@ -117,7 +117,7 @@ pub fn marketplace_root() -> PathBuf {
     if let Ok(dir) = std::env::var("OPENCAPX_MARKETPLACE_DIR") {
         return PathBuf::from(dir);
     }
-    dirs::home_dir()
+    crate::core::home_dir()
         .map(|h| h.join(".opencapx").join("marketplace"))
         .unwrap_or_else(|| std::env::temp_dir().join("opencapx-marketplace"))
 }

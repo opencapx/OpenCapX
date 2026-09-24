@@ -12,8 +12,16 @@ use std::sync::Arc;
 pub const LISTEN_ADDR: &str = "127.0.0.1:47628";
 
 /// dev skips auth (local development only, docs/permissions.md "Request Authentication").
+/// Compile-time gated: the env lookup only exists in debug builds, so no runtime
+/// environment can re-enable the bypass in a release binary.
+#[cfg(debug_assertions)]
 fn dev_mode() -> bool {
     std::env::var("OPEN_CAPX_DEV").map(|v| v == "1").unwrap_or(false)
+}
+
+#[cfg(not(debug_assertions))]
+fn dev_mode() -> bool {
+    false
 }
 
 fn pick_str(v: &serde_json::Value, keys: &[&str]) -> Option<String> {
@@ -34,18 +42,21 @@ pub fn parse_hook_payload(stdin: &str) -> (String, String) {
 }
 
 pub fn queue_dir() -> PathBuf {
-    if let Some(home) = dirs::home_dir() {
+    if let Some(home) = crate::core::home_dir() {
         return home.join(".opencapx").join("queue");
     }
     std::env::temp_dir().join("opencapx-queue")
 }
 
 /// Client auth headers (two lines with a CRLF prefix). Empty string when there are no credentials.
+/// Values pass through `ascii_header_value`: a CR/LF inside the on-disk token or agent_id
+/// would otherwise split the header block (header injection / request smuggling).
 fn auth_header_lines(creds: Option<&Credentials>) -> String {
     match creds {
         Some(c) => format!(
             "Authorization: Bearer {}\r\nX-OpenCapX-Agent: {}\r\n",
-            c.token, c.agent_id
+            ascii_header_value(&c.token),
+            ascii_header_value(&c.agent_id)
         ),
         None => String::new(),
     }
@@ -79,7 +90,7 @@ fn post_route_with_body(route: &str, payload: &str, creds: Option<&Credentials>)
     use std::io::Write;
     let req = format!(
         "POST {} HTTP/1.1\r\nHost: 127.0.0.1:47628\r\nContent-Type: application/json\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
-        route,
+        ascii_header_value(route),
         auth_header_lines(creds),
         payload.len(),
         payload
@@ -233,12 +244,19 @@ fn cli_project() -> &'static str {
     })
 }
 
-/// Header values must stay ASCII: `short_path` yields a multibyte `…` for deep paths, and a non-ASCII
-/// byte in a raw header line makes the server drop the connection (the CLI then misreports "app is not
-/// running"). The pretty ellipsis stays for UI display; here it degrades to `...`.
+/// Header values must stay printable ASCII (visible chars + space + tab): CR/LF would split the
+/// header block (header injection / request smuggling), and a non-ASCII byte in a raw header line
+/// makes the server drop the connection (the CLI then misreports "app is not running"). Control
+/// characters are stripped rather than rejected: the values (token, agent_id, project path, conn id)
+/// are local inputs, and a stripped value that fails auth is safe and debuggable.
+/// `short_path` yields a multibyte `…` for deep paths; the pretty ellipsis stays for UI display,
+/// here it degrades to `...`.
 fn ascii_header_value(s: &str) -> String {
     let fixed = s.replace('…', "...");
-    fixed.chars().filter(|c| c.is_ascii()).collect()
+    fixed
+        .chars()
+        .filter(|c| *c == ' ' || *c == '\t' || c.is_ascii_graphic())
+        .collect()
 }
 
 /// /rpc request headers: auth + owning project (the viewer groups request chains by project).
@@ -298,7 +316,7 @@ fn events_request(creds: Option<&Credentials>, conn_id: &str) -> String {
     format!(
         "GET /events HTTP/1.1\r\nHost: 127.0.0.1:47628\r\n{}X-OpenCapX-Conn: {}\r\nConnection: close\r\n\r\n",
         auth_header_lines(creds),
-        conn_id
+        ascii_header_value(conn_id)
     )
 }
 
@@ -753,6 +771,25 @@ mod tests {
             if line.starts_with("X-OpenCapX-Project:") {
                 assert!(line.is_ascii(), "non-ASCII project header: {line:?}");
             }
+        }
+    }
+
+    #[test]
+    fn header_values_strip_crlf_and_control_chars() {
+        // A CR/LF inside any header value would split the header block (header injection /
+        // request smuggling); a tampered token file or a newline in a project/conn value
+        // must never reach the wire raw.
+        assert_eq!(ascii_header_value("tok\r\nX-Evil: 1"), "tokX-Evil: 1");
+        assert_eq!(ascii_header_value("agent\u{0}\n1"), "agent1");
+        assert_eq!(ascii_header_value("keep spaces\tand-tabs"), "keep spaces\tand-tabs");
+        let creds = Credentials { agent_id: "a\r\nX-Evil: 1".into(), token: "t".into() };
+        let lines = auth_header_lines(Some(&creds));
+        for line in lines.split("\r\n") {
+            assert!(!line.starts_with("X-Evil"), "smuggled header line survived: {lines:?}");
+        }
+        let req = events_request(None, "conn\r\nX-Evil: 1");
+        for line in req.split("\r\n") {
+            assert!(!line.starts_with("X-Evil"), "smuggled header line survived: {req:?}");
         }
     }
 
