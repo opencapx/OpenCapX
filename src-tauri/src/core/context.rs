@@ -78,7 +78,10 @@ end tell"#;
 /// ② lsappinfo path (no TCC): frontmost app bundle id.
 #[cfg(target_os = "macos")]
 fn lsappinfo_frontmost() -> Option<String> {
-    let front = std::process::Command::new("lsappinfo").arg("front").output().ok()?;
+    let front = std::process::Command::new("lsappinfo")
+        .arg("front")
+        .output()
+        .ok()?;
     let asn = String::from_utf8_lossy(&front.stdout).trim().to_string();
     if asn.is_empty() {
         return None;
@@ -149,7 +152,10 @@ mod tests {
         assert_eq!(short["truncated"], json!(false));
         let long: String = "x".repeat(CLIPBOARD_CAP + 10);
         let capped = cap_clipboard(&long);
-        assert_eq!(capped["text"].as_str().unwrap().chars().count(), CLIPBOARD_CAP);
+        assert_eq!(
+            capped["text"].as_str().unwrap().chars().count(),
+            CLIPBOARD_CAP
+        );
         assert_eq!(capped["truncated"], json!(true));
     }
 
@@ -170,6 +176,10 @@ mod tests {
     fn current_real_machine_manual() {
         let out = current(&json!({})).unwrap();
         // A real machine always has a frontmost app (at least one of AppleScript or lsappinfo works)
-        assert!(!out["active_app"].as_str().unwrap_or("").is_empty(), "{}", out);
+        assert!(
+            !out["active_app"].as_str().unwrap_or("").is_empty(),
+            "{}",
+            out
+        );
     }
 }

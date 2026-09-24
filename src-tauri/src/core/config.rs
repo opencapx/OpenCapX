@@ -46,7 +46,9 @@ fn sanitize(plugin_id: &str) -> String {
 /// Resolve the plugin ID to an absolute path, preventing escape (jumping up directories).
 fn ensure_inside(child: &Path, parent: &Path) -> std::io::Result<()> {
     let child = child.canonicalize().unwrap_or_else(|_| child.to_path_buf());
-    let parent = parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf());
+    let parent = parent
+        .canonicalize()
+        .unwrap_or_else(|_| parent.to_path_buf());
     if !child.starts_with(&parent) {
         Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -151,7 +153,10 @@ pub fn list_plugins() -> Vec<String> {
 /// Wholesale replace (for the settings page). value must be an object, otherwise error.
 pub fn replace(plugin_id: &str, value: &Value) -> std::io::Result<()> {
     let obj = value.as_object().ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, "config root must be an object")
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "config root must be an object",
+        )
     })?;
     let p = config_path(plugin_id);
     write_atomic(&p, &Value::Object(obj.clone()))
@@ -357,7 +362,9 @@ pub fn dispatch(plugin_id: &str, op: &str, params: &Value) -> Result<Value, Stri
             Ok(Value::Null)
         }
         "all" => Ok(Value::Object(all(plugin_id))),
-        "list" => Ok(Value::Array(list_plugins().into_iter().map(Value::String).collect())),
+        "list" => Ok(Value::Array(
+            list_plugins().into_iter().map(Value::String).collect(),
+        )),
         _ => Err(format!("unknown config op {}", op)),
     }
 }
@@ -388,11 +395,7 @@ mod tests {
     /// Each test gets its own tmp dir (avoids parallel interference).
     fn fresh_dir() -> PathBuf {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "opencapx-cfg-{}-{}",
-            std::process::id(),
-            n
-        ));
+        let dir = std::env::temp_dir().join(format!("opencapx-cfg-{}-{}", std::process::id(), n));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -417,14 +420,26 @@ mod tests {
         // An id containing a slash/.. must be sanitized into a single file and not escape config_dir
         let dir = fresh_dir();
         let p = config_path_in("../escape", &dir);
-        assert!(p.file_name().unwrap().to_string_lossy().contains("__escape") || p.file_name().unwrap().to_string_lossy().contains("_escape"));
+        assert!(
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains("__escape")
+                || p.file_name().unwrap().to_string_lossy().contains("_escape")
+        );
         assert!(!p.to_string_lossy().contains(".."));
     }
 
     #[test]
     fn dispatch_get_returns_default_when_missing() {
         let dir = fresh_dir();
-        let got = dispatch_with("com.x", "get", &json!({"key": "missing", "default": 42}), &dir).unwrap();
+        let got = dispatch_with(
+            "com.x",
+            "get",
+            &json!({"key": "missing", "default": 42}),
+            &dir,
+        )
+        .unwrap();
         assert_eq!(got, json!(42));
     }
 
@@ -438,28 +453,17 @@ mod tests {
             &dir,
         )
         .unwrap();
-        let got = dispatch_with(
-            "com.x",
-            "get",
-            &json!({"key": "apiKey"}),
-            &dir,
-        )
-        .unwrap();
+        let got = dispatch_with("com.x", "get", &json!({"key": "apiKey"}), &dir).unwrap();
         assert_eq!(got, json!("secret-123"));
     }
 
     #[test]
     fn dispatch_delete_removes_key() {
         let dir = fresh_dir();
-        dispatch_with(
-            "com.x",
-            "set",
-            &json!({"key": "a", "value": 1}),
-            &dir,
-        )
-        .unwrap();
+        dispatch_with("com.x", "set", &json!({"key": "a", "value": 1}), &dir).unwrap();
         dispatch_with("com.x", "delete", &json!({"key": "a"}), &dir).unwrap();
-        let got = dispatch_with("com.x", "get", &json!({"key": "a", "default": null}), &dir).unwrap();
+        let got =
+            dispatch_with("com.x", "get", &json!({"key": "a", "default": null}), &dir).unwrap();
         assert_eq!(got, Value::Null);
     }
 
@@ -474,7 +478,12 @@ mod tests {
     }
 
     /// Temporarily redirect dispatch to a given directory (avoid polluting home config).
-    fn dispatch_with(plugin_id: &str, op: &str, params: &Value, dir: &Path) -> Result<Value, String> {
+    fn dispatch_with(
+        plugin_id: &str,
+        op: &str,
+        params: &Value,
+        dir: &Path,
+    ) -> Result<Value, String> {
         // Use force_write / read_from directly against dir, simulating dispatch
         let path = config_path_in(plugin_id, dir);
         let mut map = read_from(&path).unwrap_or_default();
@@ -485,14 +494,22 @@ mod tests {
                 Ok(map.get(key).cloned().unwrap_or(default))
             }
             "set" => {
-                let key = params.get("key").and_then(|x| x.as_str()).unwrap().to_string();
+                let key = params
+                    .get("key")
+                    .and_then(|x| x.as_str())
+                    .unwrap()
+                    .to_string();
                 let value = params.get("value").cloned().unwrap_or(Value::Null);
                 map.insert(key, value.clone());
                 write_atomic(&path, &Value::Object(map)).map_err(|e| e.to_string())?;
                 Ok(value)
             }
             "delete" => {
-                let key = params.get("key").and_then(|x| x.as_str()).unwrap().to_string();
+                let key = params
+                    .get("key")
+                    .and_then(|x| x.as_str())
+                    .unwrap()
+                    .to_string();
                 map.remove(&key);
                 write_atomic(&path, &Value::Object(map)).map_err(|e| e.to_string())?;
                 Ok(Value::Null)

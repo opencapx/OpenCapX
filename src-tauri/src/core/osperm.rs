@@ -129,14 +129,27 @@ mod tests {
         assert!(!out["os"].as_str().unwrap_or("").is_empty());
         // v1.5 guidance contract: only denied areas appear; entries carry settingsUrl + steps
         let guidance = out["guidance"].as_object().expect("guidance object");
-        for (area, st) in [("screen_recording", screen_recording()), ("accessibility", accessibility())] {
+        for (area, st) in [
+            ("screen_recording", screen_recording()),
+            ("accessibility", accessibility()),
+        ] {
             match st {
                 "denied" => {
                     let g = guidance.get(area).expect("denied area carries guidance");
-                    assert!(g["settingsUrl"].as_str().unwrap_or("").starts_with("x-apple.systempreferences:"), "{}", g);
+                    assert!(
+                        g["settingsUrl"]
+                            .as_str()
+                            .unwrap_or("")
+                            .starts_with("x-apple.systempreferences:"),
+                        "{}",
+                        g
+                    );
                     assert!(!g["steps"].as_str().unwrap_or("").is_empty());
                 }
-                _ => assert!(!guidance.contains_key(area), "non-denied area must not carry guidance"),
+                _ => assert!(
+                    !guidance.contains_key(area),
+                    "non-denied area must not carry guidance"
+                ),
             }
         }
     }

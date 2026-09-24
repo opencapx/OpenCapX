@@ -277,7 +277,8 @@ pub fn agent_view(store: &SharedStore, agent_id: &str) -> Vec<PermissionEntryDto
             continue;
         }
         entries.push(PermissionEntryDto {
-            decision: decision_str(super::identity::check_agent(store, agent_id, &perm)).to_string(),
+            decision: decision_str(super::identity::check_agent(store, agent_id, &perm))
+                .to_string(),
             default: decision_str(default).to_string(),
             high_risk: HIGH_RISK.contains(&perm.as_str()),
             declared: true,
@@ -306,26 +307,26 @@ pub const PERMISSIONS: &[(&str, &str)] = &[
     ("filesystem.write", "denied"),
     ("process.execute", "denied"),
     // v1.3 high/medium-value batch (docs/permissions.md v1.3)
-    ("automation.control", "ask"),   // launch/drive other apps (AppleScript), high-risk
-    ("input.control", "denied"),     // synthesize keyboard/mouse events, high-risk
-    ("plugin.install", "denied"),    // v1.3 vocabulary placeholder: no capability mapping yet, high-risk
+    ("automation.control", "ask"), // launch/drive other apps (AppleScript), high-risk
+    ("input.control", "denied"),   // synthesize keyboard/mouse events, high-risk
+    ("plugin.install", "denied"), // v1.3 vocabulary placeholder: no capability mapping yet, high-risk
     ("photos.read", "ask"),
     ("contacts.read", "ask"),
     ("calendar.read", "ask"),
     ("location.read", "ask"),
-    ("audio.output", "ask"),         // audio output channel, same tier as notification.post
-    ("url.scheme.open", "ask"),      // registered schemes such as mailto:/zoommtg:
+    ("audio.output", "ask"), // audio output channel, same tier as notification.post
+    ("url.scheme.open", "ask"), // registered schemes such as mailto:/zoommtg:
     // v1.4 high-value batch (docs/permissions.md v1.4)
     ("media.control", "ask"),        // playback control (play/pause/skip)
-    ("messages.read", "denied"),     // iMessage chat history (needs machine-wide Full Disk Access), high-risk
+    ("messages.read", "denied"), // iMessage chat history (needs machine-wide Full Disk Access), high-risk
     ("window.management", "denied"), // list/focus windows (computer-use foundation), high-risk
-    ("power.control", "denied"),     // sleep/lock screen (irreversible actions), high-risk
+    ("power.control", "denied"), // sleep/lock screen (irreversible actions), high-risk
     // v1.4 medium-value batch
     ("notes.read", "ask"),
     ("reminders.read", "ask"),
-    ("reminders.write", "ask"),      // record reminders for the user; write surface but confined to the Reminders app
-    ("mail.read", "ask"),            // mail metadata (large phishing surface), high-risk
-    ("system.settings", "ask"),      // dark mode/wallpaper/volume
+    ("reminders.write", "ask"), // record reminders for the user; write surface but confined to the Reminders app
+    ("mail.read", "ask"),       // mail metadata (large phishing surface), high-risk
+    ("system.settings", "ask"), // dark mode/wallpaper/volume
     ("printer.control", "ask"),
     // v1.5 Things data surface (docs/permissions.md v1.5): reads and writes both ask, not high-risk
     ("things.read", "ask"),
@@ -392,11 +393,13 @@ pub fn reserved_domain(domain: &str) -> bool {
 }
 
 pub fn default_decision(permission: &str) -> Decision {
-    parse_decision(PERMISSIONS
-        .iter()
-        .find(|(p, _)| *p == permission)
-        .map(|(_, d)| *d)
-        .unwrap_or("denied"))
+    parse_decision(
+        PERMISSIONS
+            .iter()
+            .find(|(p, _)| *p == permission)
+            .map(|(_, d)| *d)
+            .unwrap_or("denied"),
+    )
 }
 
 pub fn parse_decision(s: &str) -> Decision {
@@ -472,13 +475,21 @@ pub fn check(store: &SharedStore, plugin_id: &str, permission: &str) -> Decision
             })
         })
         .flatten();
-    found.as_deref().map(parse_decision).unwrap_or_else(|| default_decision_for(store, permission))
+    found
+        .as_deref()
+        .map(parse_decision)
+        .unwrap_or_else(|| default_decision_for(store, permission))
 }
 
 /// Explicit grant/revoke (settings page, install confirmation, runtime Always writeback).
 /// §4.3 enforcement point 3: declared-derived permissions **refuse to be written as granted** — the settings page can only set ask / denied,
 /// closeable but not permanently openable (the other half of Always-laundering H2).
-pub fn set_decision(store: &SharedStore, plugin_id: &str, permission: &str, decision: &str) -> bool {
+pub fn set_decision(
+    store: &SharedStore,
+    plugin_id: &str,
+    permission: &str,
+    decision: &str,
+) -> bool {
     if !known_or_declared(store, permission) || !["granted", "denied", "ask"].contains(&decision) {
         return false;
     }
@@ -547,7 +558,11 @@ pub fn global_override_str(store: &SharedStore, permission: &str) -> &'static st
 
 /// Write global policy. Only permissions within the static vocabulary; high-risk permissions reject global granted (high-risk allows only once-at-a-time grants).
 /// On success emits a `permission.policy.changed` audit event.
-pub fn set_global_override(store: &SharedStore, permission: &str, decision: &str) -> Result<(), String> {
+pub fn set_global_override(
+    store: &SharedStore,
+    permission: &str,
+    decision: &str,
+) -> Result<(), String> {
     if !known(permission) {
         return Err(format!("unknown permission: {}", permission));
     }
@@ -701,7 +716,10 @@ pub fn can_always(store: &SharedStore, permission: &str) -> bool {
 ///   returns a `(permission, decision)` list; the caller swaps the directory then persists in a single transaction;
 ///   deny / timeout → Err, and the caller must not produce any effective change (the installed version is unaffected)
 /// - UI absent (test process): collect per the default table (review 4); persistence is likewise left to the commit phase
-pub fn confirm_install(plugin_id: &str, plan: &[InstallAsk]) -> Result<Vec<(String, String)>, String> {
+pub fn confirm_install(
+    plugin_id: &str,
+    plan: &[InstallAsk],
+) -> Result<Vec<(String, String)>, String> {
     confirm_install_with(default_asker(), plugin_id, plan)
 }
 
@@ -719,8 +737,16 @@ pub fn confirm_install_with(
     for ask in plan {
         let perm = &ask.permission;
         if !ask.declared && !known(perm) {
-            audit("denied", plugin_id, perm, json!({ "reason": "unknown-permission", "caller": "install" }));
-            return Err(format!("unknown permission {} (plugin declares unknown capability?)", perm));
+            audit(
+                "denied",
+                plugin_id,
+                perm,
+                json!({ "reason": "unknown-permission", "caller": "install" }),
+            );
+            return Err(format!(
+                "unknown permission {} (plugin declares unknown capability?)",
+                perm
+            ));
         }
         // review 3 + 7: declared-derived permissions **must not be Always** (the install dialog must block it too,
         // otherwise H2's once-only only blocks the runtime prompt)
@@ -747,7 +773,12 @@ pub fn confirm_install_with(
         }) {
             AskOutcome::Answered(a) => match a.as_str() {
                 "always" if can_always => {
-                    audit("granted", plugin_id, perm, json!({ "decision": "always", "caller": "install" }));
+                    audit(
+                        "granted",
+                        plugin_id,
+                        perm,
+                        json!({ "decision": "always", "caller": "install" }),
+                    );
                     "granted"
                 }
                 // §4.3 enforcement point 4: answering Always when Always is not allowed (high-risk / declared-derived) →
@@ -762,29 +793,57 @@ pub fn confirm_install_with(
                     "ask"
                 }
                 "once" => {
-                    audit("granted", plugin_id, perm, json!({ "decision": "once", "caller": "install" }));
+                    audit(
+                        "granted",
+                        plugin_id,
+                        perm,
+                        json!({ "decision": "once", "caller": "install" }),
+                    );
                     "ask"
                 }
                 "deny" => {
-                    audit("denied", plugin_id, perm, json!({ "reason": "user", "caller": "install" }));
+                    audit(
+                        "denied",
+                        plugin_id,
+                        perm,
+                        json!({ "reason": "user", "caller": "install" }),
+                    );
                     // the user denying one item at install → the whole plugin install fails (aligned with the docs install flow: item-by-item confirmation).
                     // at this point the directory has not been swapped / nothing persisted, so the installed version is intact (consent-before-commit).
                     return Err(format!("install denied: {} {}", plugin_id, perm));
                 }
                 _ => {
-                    audit("denied", plugin_id, perm, json!({ "reason": "invalid-answer", "caller": "install" }));
+                    audit(
+                        "denied",
+                        plugin_id,
+                        perm,
+                        json!({ "reason": "invalid-answer", "caller": "install" }),
+                    );
                     return Err(format!("install aborted: {} {}", plugin_id, perm));
                 }
             },
             AskOutcome::Timeout => {
                 if let Some(app) = super::app_handle() {
-                    let _ = app.emit("opencapx-install-ask-done", json!({ "id": id, "answer": null }));
+                    let _ = app.emit(
+                        "opencapx-install-ask-done",
+                        json!({ "id": id, "answer": null }),
+                    );
                 }
-                audit("denied", plugin_id, perm, json!({ "reason": "timeout", "caller": "install" }));
+                audit(
+                    "denied",
+                    plugin_id,
+                    perm,
+                    json!({ "reason": "timeout", "caller": "install" }),
+                );
                 return Err(format!("install timed out: {} {}", plugin_id, perm));
             }
             AskOutcome::NoUi => {
-                audit("denied", plugin_id, perm, json!({ "reason": "no-ui", "caller": "install" }));
+                audit(
+                    "denied",
+                    plugin_id,
+                    perm,
+                    json!({ "reason": "no-ui", "caller": "install" }),
+                );
                 return Err(format!("install aborted (no ui): {} {}", plugin_id, perm));
             }
         };
@@ -795,12 +854,20 @@ pub fn confirm_install_with(
 
 /// Non-interactive confirmation (no UI: tests / CI). §4.4 review 4: collect per "declared default / static-table default",
 /// **does not write to the DB** — persistence is likewise left to the commit phase. audit is marked `install-no-ui` to distinguish it.
-fn confirm_install_noninteractive(plugin_id: &str, plan: &[InstallAsk]) -> Result<Vec<(String, String)>, String> {
+fn confirm_install_noninteractive(
+    plugin_id: &str,
+    plan: &[InstallAsk],
+) -> Result<Vec<(String, String)>, String> {
     let mut decisions: Vec<(String, String)> = Vec::with_capacity(plan.len());
     for ask in plan {
         let perm = &ask.permission;
         if !ask.declared && !known(perm) {
-            audit("denied", plugin_id, perm, json!({ "reason": "unknown-permission", "caller": "install-no-ui" }));
+            audit(
+                "denied",
+                plugin_id,
+                perm,
+                json!({ "reason": "unknown-permission", "caller": "install-no-ui" }),
+            );
             return Err(format!("unknown permission {}", perm));
         }
         let d = if ask.declared {
@@ -810,7 +877,11 @@ fn confirm_install_noninteractive(plugin_id: &str, plan: &[InstallAsk]) -> Resul
         };
         decisions.push((perm.clone(), decision_str(d).to_string()));
         audit(
-            if d == Decision::Denied { "denied" } else { "granted" },
+            if d == Decision::Denied {
+                "denied"
+            } else {
+                "granted"
+            },
             plugin_id,
             perm,
             json!({
@@ -881,7 +952,14 @@ pub fn gate(
     caller: &str,
     reason: Option<&str>,
 ) -> Decision {
-    gate_with(default_asker(), store, plugin_id, permission, caller, reason)
+    gate_with(
+        default_asker(),
+        store,
+        plugin_id,
+        permission,
+        caller,
+        reason,
+    )
 }
 
 /// F12 — injectable version of gate: identical behavior to [`gate`], only the "ask" channel is replaceable.
@@ -906,7 +984,10 @@ pub fn gate_with(
         let mut extra = json!({ "reason": "no-ui", "caller": caller });
         if let Some(r) = reason {
             if let Some(o) = extra.as_object_mut() {
-                o.insert("requestReason".to_string(), serde_json::Value::String(r.to_string()));
+                o.insert(
+                    "requestReason".to_string(),
+                    serde_json::Value::String(r.to_string()),
+                );
             }
         }
         audit("denied", plugin_id, permission, extra);
@@ -915,7 +996,10 @@ pub fn gate_with(
     let id = format!("perm-{}", nanos());
     let mut requested_extra = json!({ "scope": null, "caller": caller });
     if let Some(r) = reason {
-        if let (Some(o), Some(e)) = (requested_extra.as_object_mut(), json!({ "requestReason": r }).as_object()) {
+        if let (Some(o), Some(e)) = (
+            requested_extra.as_object_mut(),
+            json!({ "requestReason": r }).as_object(),
+        ) {
             for (k, v) in e {
                 o.insert(k.clone(), v.clone());
             }
@@ -932,7 +1016,10 @@ pub fn gate_with(
     });
     if let Some(r) = reason {
         if let Some(o) = payload.as_object_mut() {
-            o.insert("reason".to_string(), serde_json::Value::String(r.to_string()));
+            o.insert(
+                "reason".to_string(),
+                serde_json::Value::String(r.to_string()),
+            );
         }
     }
     match asker.ask(&AskRequest {
@@ -943,16 +1030,31 @@ pub fn gate_with(
     }) {
         AskOutcome::Answered(a) => match a.as_str() {
             "once" => {
-                audit("granted", plugin_id, permission, json!({ "decision": "once" }));
+                audit(
+                    "granted",
+                    plugin_id,
+                    permission,
+                    json!({ "decision": "once" }),
+                );
                 Decision::Granted
             }
             "always" => {
                 if can_always {
                     set_decision(store, plugin_id, permission, "granted");
-                    audit("granted", plugin_id, permission, json!({ "decision": "always" }));
+                    audit(
+                        "granted",
+                        plugin_id,
+                        permission,
+                        json!({ "decision": "always" }),
+                    );
                 } else {
                     // high-risk is not persisted; grant for this call only
-                    audit("granted", plugin_id, permission, json!({ "decision": "once" }));
+                    audit(
+                        "granted",
+                        plugin_id,
+                        permission,
+                        json!({ "decision": "once" }),
+                    );
                 }
                 Decision::Granted
             }
@@ -960,29 +1062,56 @@ pub fn gate_with(
                 // v1.5 third tier: in-process memory grant, cleared on restart. Declared-derived (once-only) does not accept it,
                 // downgraded to once; high-risk allows it (pressure valve, not persisted).
                 if super::declaration::is_declared_permission(store, permission) {
-                    audit("granted", plugin_id, permission,
-                        json!({ "decision": "once", "downgradedFrom": "session" }));
+                    audit(
+                        "granted",
+                        plugin_id,
+                        permission,
+                        json!({ "decision": "once", "downgradedFrom": "session" }),
+                    );
                 } else {
                     session_grant(&format!("plugin:{}", plugin_id), permission);
-                    audit("granted", plugin_id, permission, json!({ "decision": "session" }));
+                    audit(
+                        "granted",
+                        plugin_id,
+                        permission,
+                        json!({ "decision": "session" }),
+                    );
                 }
                 Decision::Granted
             }
             _ => {
-                audit("denied", plugin_id, permission, json!({ "reason": "user", "caller": caller }));
+                audit(
+                    "denied",
+                    plugin_id,
+                    permission,
+                    json!({ "reason": "user", "caller": caller }),
+                );
                 Decision::Denied
             }
         },
         AskOutcome::Timeout => {
             // timeout: notify the frontend to dismiss the bubble
             if let Some(app) = super::app_handle() {
-                let _ = app.emit("opencapx-permission-ask-done", json!({ "id": id, "answer": null }));
+                let _ = app.emit(
+                    "opencapx-permission-ask-done",
+                    json!({ "id": id, "answer": null }),
+                );
             }
-            audit("denied", plugin_id, permission, json!({ "reason": "timeout", "caller": caller }));
+            audit(
+                "denied",
+                plugin_id,
+                permission,
+                json!({ "reason": "timeout", "caller": caller }),
+            );
             Decision::Denied
         }
         AskOutcome::NoUi => {
-            audit("denied", plugin_id, permission, json!({ "reason": "no-ui", "caller": caller }));
+            audit(
+                "denied",
+                plugin_id,
+                permission,
+                json!({ "reason": "no-ui", "caller": caller }),
+            );
             Decision::Denied
         }
     }
@@ -1030,11 +1159,21 @@ pub fn gate_agent_with(
     }
     if !asker.is_available() {
         // UI absent (test process/frontend not started): fast deny, no pending request left behind. Same behavior as gate().
-        audit_agent("denied", agent_id, permission, json!({ "reason": "no-ui", "caller": caller }));
+        audit_agent(
+            "denied",
+            agent_id,
+            permission,
+            json!({ "reason": "no-ui", "caller": caller }),
+        );
         return Decision::Denied;
     }
     let id = format!("agentperm-{}", nanos());
-    audit_agent("requested", agent_id, permission, json!({ "caller": caller }));
+    audit_agent(
+        "requested",
+        agent_id,
+        permission,
+        json!({ "caller": caller }),
+    );
     // §4.3 enforcement points 1/2: declared-derived permissions are always once-only (Always-laundering H2)
     let can_always = can_always(store, permission);
     let payload = json!({
@@ -1052,45 +1191,86 @@ pub fn gate_agent_with(
     }) {
         AskOutcome::Answered(a) => match a.as_str() {
             "once" => {
-                audit_agent("granted", agent_id, permission, json!({ "decision": "once", "caller": caller }));
+                audit_agent(
+                    "granted",
+                    agent_id,
+                    permission,
+                    json!({ "decision": "once", "caller": caller }),
+                );
                 Decision::Granted
             }
             "session" => {
                 // v1.5 third tier (same semantics as the plugin layer): declared-derived downgrades to once, otherwise grant in-process memory
                 if super::declaration::is_declared_permission(store, permission) {
-                    audit_agent("granted", agent_id, permission,
-                        json!({ "decision": "once", "caller": caller, "downgradedFrom": "session" }));
+                    audit_agent(
+                        "granted",
+                        agent_id,
+                        permission,
+                        json!({ "decision": "once", "caller": caller, "downgradedFrom": "session" }),
+                    );
                 } else {
                     session_grant(&format!("agent:{}", agent_id), permission);
-                    audit_agent("granted", agent_id, permission,
-                        json!({ "decision": "session", "caller": caller }));
+                    audit_agent(
+                        "granted",
+                        agent_id,
+                        permission,
+                        json!({ "decision": "session", "caller": caller }),
+                    );
                 }
                 Decision::Granted
             }
             "always" => {
                 if can_always {
                     super::identity::set_agent_decision(store, agent_id, permission, "granted");
-                    audit_agent("granted", agent_id, permission, json!({ "decision": "always", "caller": caller }));
+                    audit_agent(
+                        "granted",
+                        agent_id,
+                        permission,
+                        json!({ "decision": "always", "caller": caller }),
+                    );
                 } else {
                     // high-risk is not persisted; grant for this call only
-                    audit_agent("granted", agent_id, permission, json!({ "decision": "once", "caller": caller }));
+                    audit_agent(
+                        "granted",
+                        agent_id,
+                        permission,
+                        json!({ "decision": "once", "caller": caller }),
+                    );
                 }
                 Decision::Granted
             }
             _ => {
-                audit_agent("denied", agent_id, permission, json!({ "reason": "user", "caller": caller }));
+                audit_agent(
+                    "denied",
+                    agent_id,
+                    permission,
+                    json!({ "reason": "user", "caller": caller }),
+                );
                 Decision::Denied
             }
         },
         AskOutcome::Timeout => {
             if let Some(app) = super::app_handle() {
-                let _ = app.emit("opencapx-agent-permission-ask-done", json!({ "id": id, "answer": null }));
+                let _ = app.emit(
+                    "opencapx-agent-permission-ask-done",
+                    json!({ "id": id, "answer": null }),
+                );
             }
-            audit_agent("denied", agent_id, permission, json!({ "reason": "timeout", "caller": caller }));
+            audit_agent(
+                "denied",
+                agent_id,
+                permission,
+                json!({ "reason": "timeout", "caller": caller }),
+            );
             Decision::Denied
         }
         AskOutcome::NoUi => {
-            audit_agent("denied", agent_id, permission, json!({ "reason": "no-ui", "caller": caller }));
+            audit_agent(
+                "denied",
+                agent_id,
+                permission,
+                json!({ "reason": "no-ui", "caller": caller }),
+            );
             Decision::Denied
         }
     }
@@ -1137,12 +1317,18 @@ pub struct PermissionHeatmapDto {
 pub fn heatmap() -> PermissionHeatmapDto {
     use super::shared_store;
     let Some(store) = shared_store() else {
-        return PermissionHeatmapDto { cells: Vec::new(), top_denied: Vec::new() };
+        return PermissionHeatmapDto {
+            cells: Vec::new(),
+            top_denied: Vec::new(),
+        };
     };
     // (1) hold the lock only to read raw rows; do nothing inside the lock that would re-acquire it
     let raw: Vec<(String, String, String)> = {
         let Ok(s) = store.lock() else {
-            return PermissionHeatmapDto { cells: Vec::new(), top_denied: Vec::new() };
+            return PermissionHeatmapDto {
+                cells: Vec::new(),
+                top_denied: Vec::new(),
+            };
         };
         let mut out: Vec<(String, String, String)> = Vec::new();
         let _ = s.with_conn_ref(|c| {
@@ -1166,13 +1352,15 @@ pub fn heatmap() -> PermissionHeatmapDto {
     let declared = super::declaration::declared_permission_set(&store);
     let cells: Vec<PermissionHeatmapCellDto> = raw
         .into_iter()
-        .map(|(plugin_id, permission, decision)| PermissionHeatmapCellDto {
-            high_risk: HIGH_RISK.contains(&permission.as_str()),
-            declared: declared.contains(&permission),
-            plugin_id,
-            permission,
-            decision,
-        })
+        .map(
+            |(plugin_id, permission, decision)| PermissionHeatmapCellDto {
+                high_risk: HIGH_RISK.contains(&permission.as_str()),
+                declared: declared.contains(&permission),
+                plugin_id,
+                permission,
+                decision,
+            },
+        )
         .collect();
     // aggregate by permission (granted / denied / ask counts)
     use std::collections::BTreeMap;
@@ -1216,7 +1404,8 @@ mod tests {
     static SESSION_LOCK: Mutex<()> = Mutex::new(());
 
     fn gate_store(tag: &str) -> SharedStore {
-        let dir = std::env::temp_dir().join(format!("opencapx-session-{}-{}", tag, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("opencapx-session-{}-{}", tag, std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         Arc::new(Mutex::new(super::super::storage::StoreEnum::Db(
@@ -1224,8 +1413,8 @@ mod tests {
         )))
     }
 
-    use crate::core::storage::StoreEnum;
     use crate::core::agent::SessionStore;
+    use crate::core::storage::StoreEnum;
     use std::sync::{Arc, Mutex};
 
     fn mem_store() -> SharedStore {
@@ -1237,7 +1426,10 @@ mod tests {
     #[test]
     fn await_answer_pins_timeout_semantics() {
         let (_tx, rx) = mpsc::channel::<String>();
-        assert_eq!(await_answer(&rx, Duration::from_millis(30)), AskOutcome::Timeout);
+        assert_eq!(
+            await_answer(&rx, Duration::from_millis(30)),
+            AskOutcome::Timeout
+        );
         let (tx, rx2) = mpsc::channel::<String>();
         tx.send("once".to_string()).unwrap();
         assert_eq!(
@@ -1251,18 +1443,26 @@ mod tests {
     #[test]
     fn name_lexicon_accepts_and_rejects() {
         for ok in [
-            "weather.fetch", "things.add", "image.analyze", "a.b", "x2.y-z_w",
+            "weather.fetch",
+            "things.add",
+            "image.analyze",
+            "a.b",
+            "x2.y-z_w",
         ] {
             assert!(valid_name(ok), "{ok:?} should be valid");
         }
         for bad in [
-            "", "weather",            // single segment
-            ".weather.fetch", "weather.fetch.", "weather..fetch", // leading/trailing/double dot
-            "Weather.fetch", "weather.Fetch", // case
-            "2eather.fetch",          // digit-leading segment
-            "weather.fetch ",         // whitespace
-            "ｗeather.fetch",          // full-width homoglyph (non-ASCII on the NFKC surface)
-            "wéather.fetch",          // diacritic
+            "",
+            "weather", // single segment
+            ".weather.fetch",
+            "weather.fetch.",
+            "weather..fetch", // leading/trailing/double dot
+            "Weather.fetch",
+            "weather.Fetch",  // case
+            "2eather.fetch",  // digit-leading segment
+            "weather.fetch ", // whitespace
+            "ｗeather.fetch", // full-width homoglyph (non-ASCII on the NFKC surface)
+            "wéather.fetch",  // diacritic
             "weather.fetch\n",
             &format!("{}.b", "a".repeat(63)), // over 64
         ] {
@@ -1275,10 +1475,16 @@ mod tests {
     fn reserved_sets_cover_builtin_domains() {
         for c in super::super::capability::CAPABILITY_IDS {
             assert!(reserved_capability(c), "{c} should be reserved capability");
-            assert!(reserved_domain(first_segment(c)), "domain of {c} should be reserved");
+            assert!(
+                reserved_domain(first_segment(c)),
+                "domain of {c} should be reserved"
+            );
         }
         for (p, _) in PERMISSIONS {
-            assert!(reserved_domain(first_segment(p)), "domain of {p} should be reserved");
+            assert!(
+                reserved_domain(first_segment(p)),
+                "domain of {p} should be reserved"
+            );
         }
         assert!(reserved_domain("opencapx"));
         assert!(!reserved_capability("weather.fetch"));
@@ -1319,40 +1525,94 @@ mod tests {
     #[test]
     fn capability_mapping() {
         assert_eq!(capability_permission("image.analyze"), Some("image.read"));
-        assert_eq!(capability_permission("browser.read"), Some("browser.control"));
-        assert_eq!(capability_permission("clipboard.write"), Some("clipboard.write"));
-        assert_eq!(capability_permission("file.write"), Some("filesystem.write"));
+        assert_eq!(
+            capability_permission("browser.read"),
+            Some("browser.control")
+        );
+        assert_eq!(
+            capability_permission("clipboard.write"),
+            Some("clipboard.write")
+        );
+        assert_eq!(
+            capability_permission("file.write"),
+            Some("filesystem.write")
+        );
         assert_eq!(capability_permission("file.search"), Some("file.read"));
         // v1.2: speech = human-facing channel, tightened to notification.post (ask)
-        assert_eq!(capability_permission("speech.synthesize"), Some("notification.post"));
+        assert_eq!(
+            capability_permission("speech.synthesize"),
+            Some("notification.post")
+        );
         // A7: the reply includes clipboard fragments, take the strictest component
-        assert_eq!(capability_permission("context.get_current"), Some("clipboard.read"));
+        assert_eq!(
+            capability_permission("context.get_current"),
+            Some("clipboard.read")
+        );
         // v1.2: OS permission probing is read-only, no gate needed
         assert_eq!(capability_permission("system.permission_status"), None);
         // v1.3: high/medium-value batch
-        assert_eq!(capability_permission("automation.run"), Some("automation.control"));
+        assert_eq!(
+            capability_permission("automation.run"),
+            Some("automation.control")
+        );
         assert_eq!(capability_permission("input.send"), Some("input.control"));
         assert_eq!(capability_permission("photos.read"), Some("photos.read"));
-        assert_eq!(capability_permission("contacts.search"), Some("contacts.read"));
-        assert_eq!(capability_permission("calendar.events"), Some("calendar.read"));
+        assert_eq!(
+            capability_permission("contacts.search"),
+            Some("contacts.read")
+        );
+        assert_eq!(
+            capability_permission("calendar.events"),
+            Some("calendar.read")
+        );
         assert_eq!(capability_permission("location.get"), Some("location.read"));
         assert_eq!(capability_permission("audio.play"), Some("audio.output"));
-        assert_eq!(capability_permission("url.scheme.open"), Some("url.scheme.open"));
+        assert_eq!(
+            capability_permission("url.scheme.open"),
+            Some("url.scheme.open")
+        );
         // v1.3: subscription screenshot diff is the same tier as screen.capture
-        assert_eq!(capability_permission("screen.watch"), Some("screen.capture"));
+        assert_eq!(
+            capability_permission("screen.watch"),
+            Some("screen.capture")
+        );
         // v1.4: high/medium-value batch
-        assert_eq!(capability_permission("media.playback"), Some("media.control"));
-        assert_eq!(capability_permission("messages.recent"), Some("messages.read"));
-        assert_eq!(capability_permission("window.list"), Some("window.management"));
-        assert_eq!(capability_permission("window.focus"), Some("window.management"));
+        assert_eq!(
+            capability_permission("media.playback"),
+            Some("media.control")
+        );
+        assert_eq!(
+            capability_permission("messages.recent"),
+            Some("messages.read")
+        );
+        assert_eq!(
+            capability_permission("window.list"),
+            Some("window.management")
+        );
+        assert_eq!(
+            capability_permission("window.focus"),
+            Some("window.management")
+        );
         assert_eq!(capability_permission("system.sleep"), Some("power.control"));
         assert_eq!(capability_permission("system.lock"), Some("power.control"));
         assert_eq!(capability_permission("notes.read"), Some("notes.read"));
-        assert_eq!(capability_permission("reminders.read"), Some("reminders.read"));
-        assert_eq!(capability_permission("reminders.write"), Some("reminders.write"));
+        assert_eq!(
+            capability_permission("reminders.read"),
+            Some("reminders.read")
+        );
+        assert_eq!(
+            capability_permission("reminders.write"),
+            Some("reminders.write")
+        );
         assert_eq!(capability_permission("mail.recent"), Some("mail.read"));
-        assert_eq!(capability_permission("system.settings"), Some("system.settings"));
-        assert_eq!(capability_permission("printer.print"), Some("printer.control"));
+        assert_eq!(
+            capability_permission("system.settings"),
+            Some("system.settings")
+        );
+        assert_eq!(
+            capability_permission("printer.print"),
+            Some("printer.control")
+        );
         // v1.5 Things data surface: the three reads → things.read, the three writes → things.write
         assert_eq!(capability_permission("things.list"), Some("things.read"));
         assert_eq!(capability_permission("things.show"), Some("things.read"));
@@ -1362,7 +1622,12 @@ mod tests {
         assert_eq!(capability_permission("things.delete"), Some("things.write"));
         // plugin.install is a vocabulary placeholder: no capability maps to it
         for cap in super::super::capability::CAPABILITY_IDS {
-            assert_ne!(capability_permission(cap), Some("plugin.install"), "{} maps to plugin.install", cap);
+            assert_ne!(
+                capability_permission(cap),
+                Some("plugin.install"),
+                "{} maps to plugin.install",
+                cap
+            );
         }
         assert_eq!(capability_permission("nope.nope"), None);
     }
@@ -1372,14 +1637,18 @@ mod tests {
         let s = mem_store();
         assert_eq!(check(&s, "p", "image.read"), Decision::Ask);
         assert!(!set_decision(&s, "p", "image.read", "granted")); // mem has no DB
-        assert_eq!(gate(&s, "p", "image.read", "capability", None), Decision::Denied); // ask + no UI → fast deny
-        assert_eq!(gate(&s, "p", "pet.animation", "capability", None), Decision::Granted);
+        assert_eq!(
+            gate(&s, "p", "image.read", "capability", None),
+            Decision::Denied
+        ); // ask + no UI → fast deny
+        assert_eq!(
+            gate(&s, "p", "pet.animation", "capability", None),
+            Decision::Granted
+        );
     }
 
     #[test]
-
     // ===== v1.5 session tier =====
-
     #[test]
     fn session_tier_plugin_gate_lasts_for_process_and_db_beats_it() {
         let _guard = SESSION_LOCK.lock().unwrap();
@@ -1387,18 +1656,30 @@ mod tests {
         let s = gate_store("plugin");
         // first ask: answer session → Granted, not persisted
         let asker = ScriptAsker::new(true, vec![AskOutcome::Answered("session".into())]);
-        assert_eq!(gate_with(&asker, &s, "sp1", "image.read", "capability", None), Decision::Granted);
+        assert_eq!(
+            gate_with(&asker, &s, "sp1", "image.read", "capability", None),
+            Decision::Granted
+        );
         assert_eq!(check(&s, "sp1", "image.read"), Decision::Ask);
         // second ask: passes even with UI absent (overlay hit, no prompt again)
         let no_ui = ScriptAsker::new(false, vec![]);
-        assert_eq!(gate_with(&no_ui, &s, "sp1", "image.read", "capability", None), Decision::Granted);
+        assert_eq!(
+            gate_with(&no_ui, &s, "sp1", "image.read", "capability", None),
+            Decision::Granted
+        );
         // explicit denied persisted → DB wins, overlay is void
         assert!(set_decision(&s, "sp1", "image.read", "denied"));
-        assert_eq!(gate_with(&no_ui, &s, "sp1", "image.read", "capability", None), Decision::Denied);
+        assert_eq!(
+            gate_with(&no_ui, &s, "sp1", "image.read", "capability", None),
+            Decision::Denied
+        );
         // revoke all sessions: back to the ask path (no UI → fast deny, proving the overlay is cleared)
         assert!(set_decision(&s, "sp1", "image.read", "ask"));
         session_revoke_all();
-        assert_eq!(gate_with(&no_ui, &s, "sp1", "image.read", "capability", None), Decision::Denied);
+        assert_eq!(
+            gate_with(&no_ui, &s, "sp1", "image.read", "capability", None),
+            Decision::Denied
+        );
         assert_eq!(check(&s, "sp1", "image.read"), Decision::Ask);
         session_revoke_all();
     }
@@ -1409,11 +1690,20 @@ mod tests {
         session_revoke_all();
         let s = gate_store("agent");
         let asker = ScriptAsker::new(true, vec![AskOutcome::Answered("session".into())]);
-        assert_eq!(gate_agent_with(&asker, &s, "ag_s1", "file.read", "mcp"), Decision::Granted);
+        assert_eq!(
+            gate_agent_with(&asker, &s, "ag_s1", "file.read", "mcp"),
+            Decision::Granted
+        );
         let no_ui = ScriptAsker::new(false, vec![]);
-        assert_eq!(gate_agent_with(&no_ui, &s, "ag_s1", "file.read", "mcp"), Decision::Granted);
+        assert_eq!(
+            gate_agent_with(&no_ui, &s, "ag_s1", "file.read", "mcp"),
+            Decision::Granted
+        );
         // subject isolation: another agent does not receive this session grant
-        assert_eq!(gate_agent_with(&no_ui, &s, "ag_s2", "file.read", "mcp"), Decision::Denied);
+        assert_eq!(
+            gate_agent_with(&no_ui, &s, "ag_s2", "file.read", "mcp"),
+            Decision::Denied
+        );
         session_revoke_all();
     }
 
@@ -1431,12 +1721,21 @@ mod tests {
             ).unwrap_or(0));
             assert_eq!(n, Some(1));
         }
-        assert!(crate::core::declaration::is_declared_permission(&s, "third.weather"));
+        assert!(crate::core::declaration::is_declared_permission(
+            &s,
+            "third.weather"
+        ));
         // answer session → superficially Granted, but treated as once: not entered into the overlay
         let asker = ScriptAsker::new(true, vec![AskOutcome::Answered("session".into())]);
-        assert_eq!(gate_with(&asker, &s, "dp1", "third.weather", "capability", None), Decision::Granted);
+        assert_eq!(
+            gate_with(&asker, &s, "dp1", "third.weather", "capability", None),
+            Decision::Granted
+        );
         let no_ui = ScriptAsker::new(false, vec![]);
-        assert_eq!(gate_with(&no_ui, &s, "dp1", "third.weather", "capability", None), Decision::Denied);
+        assert_eq!(
+            gate_with(&no_ui, &s, "dp1", "third.weather", "capability", None),
+            Decision::Denied
+        );
         session_revoke_all();
     }
 
@@ -1592,12 +1891,20 @@ mod tests {
 
     /// Test helper: confirmation item for a built-in permission.
     fn ask_builtin(p: &str) -> InstallAsk {
-        InstallAsk { permission: p.to_string(), declared: false, declared_default: "ask".into() }
+        InstallAsk {
+            permission: p.to_string(),
+            declared: false,
+            declared_default: "ask".into(),
+        }
     }
 
     /// Test helper: confirmation item for a declared-derived permission (the default written in the manifest).
     fn ask_declared(p: &str, default: &str) -> InstallAsk {
-        InstallAsk { permission: p.to_string(), declared: true, declared_default: default.into() }
+        InstallAsk {
+            permission: p.to_string(),
+            declared: true,
+            declared_default: default.into(),
+        }
     }
 
     #[test]
@@ -1613,10 +1920,13 @@ mod tests {
             &[ask_builtin("pet.animation"), ask_builtin("image.read")],
         )
         .expect("noninteractive confirm");
-        assert_eq!(d, vec![
-            ("pet.animation".to_string(), "granted".to_string()),
-            ("image.read".to_string(), "ask".to_string()),
-        ]);
+        assert_eq!(
+            d,
+            vec![
+                ("pet.animation".to_string(), "granted".to_string()),
+                ("image.read".to_string(), "ask".to_string()),
+            ]
+        );
         // §4.4 consent-before-commit: the confirmation phase **does not write to the DB**
         assert_eq!(check(&s, "com.x", "pet.animation"), Decision::Granted); // still the default-table answer
         let rows_before = permission_row_count(&s, "com.x");
@@ -1637,13 +1947,19 @@ mod tests {
     fn declared_permission_uses_manifest_default() {
         let d = confirm_install_noninteractive(
             "com.weather",
-            &[ask_declared("weather.read", "ask"), ask_declared("weather.admin", "denied")],
+            &[
+                ask_declared("weather.read", "ask"),
+                ask_declared("weather.admin", "denied"),
+            ],
         )
         .expect("noninteractive confirm");
-        assert_eq!(d, vec![
-            ("weather.read".to_string(), "ask".to_string()),
-            ("weather.admin".to_string(), "denied".to_string()),
-        ]);
+        assert_eq!(
+            d,
+            vec![
+                ("weather.read".to_string(), "ask".to_string()),
+                ("weather.admin".to_string(), "denied".to_string()),
+            ]
+        );
         // declared items are never persisted as granted
         assert!(d.iter().all(|(_, dec)| dec != "granted"));
     }
@@ -1662,7 +1978,10 @@ mod tests {
         assert!(!can_always(&s, "filesystem.write"));
         // declared-derived → not allowed (even when absent from HIGH_RISK)
         declare_for_test(&s, "com.weather", "weather.fetch", "weather.read", "ask");
-        assert!(!can_always(&s, "weather.read"), "declared permission must be once-only");
+        assert!(
+            !can_always(&s, "weather.read"),
+            "declared permission must be once-only"
+        );
         // §4.3 enforcement point 3: neither settings page nor install writeback may write it as granted
         assert!(!set_decision(&s, "com.weather", "weather.read", "granted"));
         assert!(set_decision(&s, "com.weather", "weather.read", "denied"));
@@ -1726,7 +2045,7 @@ mod tests {
     /// Deduplicated in-tx helper: writes two decisions in an explicit transaction and reads them back after commit.
     #[test]
     fn upsert_install_decisions_in_tx_writes_and_overwrites() {
-        use crate::core::storage::{StoreEnum, Storage};
+        use crate::core::storage::{Storage, StoreEnum};
         let dir = std::env::temp_dir().join(format!("opencapx-upsert-tx-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut s = StoreEnum::Db(Storage::open(&dir.join("t.db")).unwrap());
@@ -1742,7 +2061,12 @@ mod tests {
         // overwrite write: same-key update does not insert
         s.try_with_conn(|c| {
             let tx = c.unchecked_transaction().map_err(|e| e.to_string())?;
-            upsert_install_decisions_in_tx(&tx, "com.x", &[("image.read".into(), "denied".into())], 2)?;
+            upsert_install_decisions_in_tx(
+                &tx,
+                "com.x",
+                &[("image.read".into(), "denied".into())],
+                2,
+            )?;
             tx.commit().map_err(|e| e.to_string())?;
             Ok(())
         })
@@ -1750,8 +2074,12 @@ mod tests {
         .unwrap();
         let count: i64 = s
             .try_with_conn(|c| {
-                c.query_row("SELECT COUNT(*) FROM plugin_permissions WHERE plugin_id = 'com.x'", [], |r| r.get(0))
-                    .map_err(|e| e.to_string())
+                c.query_row(
+                    "SELECT COUNT(*) FROM plugin_permissions WHERE plugin_id = 'com.x'",
+                    [],
+                    |r| r.get(0),
+                )
+                .map_err(|e| e.to_string())
             })
             .unwrap()
             .unwrap();
@@ -1786,9 +2114,15 @@ mod tests {
         assert_eq!(check(&s, "com.x", "image.read"), Decision::Ask);
         assert!(set_decision(&s, "com.x", "image.read", "granted"));
         assert_eq!(check(&s, "com.x", "image.read"), Decision::Granted);
-        assert_eq!(gate(&s, "com.x", "image.read", "capability", None), Decision::Granted);
+        assert_eq!(
+            gate(&s, "com.x", "image.read", "capability", None),
+            Decision::Granted
+        );
         assert!(set_decision(&s, "com.x", "image.read", "denied"));
-        assert_eq!(gate(&s, "com.x", "image.read", "capability", None), Decision::Denied);
+        assert_eq!(
+            gate(&s, "com.x", "image.read", "capability", None),
+            Decision::Denied
+        );
         assert!(!set_decision(&s, "com.x", "nope.nope", "granted"));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1846,7 +2180,8 @@ mod tests {
         let s: SharedStore = Arc::new(Mutex::new(StoreEnum::Db(
             super::super::storage::Storage::open(&dir.join("t.db")).unwrap(),
         )));
-        let (agent_id, _) = super::super::identity::register(&s, "claude", "mcp").expect("register");
+        let (agent_id, _) =
+            super::super::identity::register(&s, "claude", "mcp").expect("register");
         let v = agent_view(&s, &agent_id);
         assert_eq!(v.len(), PERMISSIONS.len(), "full vocabulary");
         let pet = v.iter().find(|e| e.permission == "pet.animation").unwrap();
@@ -1857,7 +2192,9 @@ mod tests {
         assert_eq!(cam.decision, "denied", "default table denied");
         assert!(cam.high_risk);
         // after override the decision changes but default does not
-        assert!(super::super::identity::set_agent_decision(&s, &agent_id, "camera", "ask"));
+        assert!(super::super::identity::set_agent_decision(
+            &s, &agent_id, "camera", "ask"
+        ));
         let v2 = agent_view(&s, &agent_id);
         let cam2 = v2.iter().find(|e| e.permission == "camera").unwrap();
         assert_eq!(cam2.decision, "ask");
@@ -1871,7 +2208,13 @@ mod tests {
     fn gate_no_ui_emits_audit_with_reason() {
         let rx = super::super::event::EventBus::shared().subscribe();
         let s = mem_store();
-        let d = gate(&s, "com.x", "image.read", "plugin.reverse", Some("analyze screenshot"));
+        let d = gate(
+            &s,
+            "com.x",
+            "image.read",
+            "plugin.reverse",
+            Some("analyze screenshot"),
+        );
         assert_eq!(d, Decision::Denied);
         // the shared bus sees other events under parallel tests (including sibling tests also using com.x); filter by pluginId + caller.
         let ev = loop {
@@ -1879,7 +2222,8 @@ mod tests {
                 Ok(e)
                     if e.kind == "permission.denied"
                         && e.payload.get("pluginId").and_then(|v| v.as_str()) == Some("com.x")
-                        && e.payload.get("caller").and_then(|v| v.as_str()) == Some("plugin.reverse") =>
+                        && e.payload.get("caller").and_then(|v| v.as_str())
+                            == Some("plugin.reverse") =>
                 {
                     break e;
                 }
@@ -1887,14 +2231,26 @@ mod tests {
                 Err(_) => panic!("no permission.denied audit for com.x in 500ms"),
             }
         };
-        assert_eq!(ev.payload.get("pluginId").and_then(|v| v.as_str()), Some("com.x"));
-        assert_eq!(ev.payload.get("permission").and_then(|v| v.as_str()), Some("image.read"));
+        assert_eq!(
+            ev.payload.get("pluginId").and_then(|v| v.as_str()),
+            Some("com.x")
+        );
+        assert_eq!(
+            ev.payload.get("permission").and_then(|v| v.as_str()),
+            Some("image.read")
+        );
         assert_eq!(
             ev.payload.get("requestReason").and_then(|v| v.as_str()),
             Some("analyze screenshot"),
         );
-        assert_eq!(ev.payload.get("reason").and_then(|v| v.as_str()), Some("no-ui"));
-        assert_eq!(ev.payload.get("caller").and_then(|v| v.as_str()), Some("plugin.reverse"));
+        assert_eq!(
+            ev.payload.get("reason").and_then(|v| v.as_str()),
+            Some("no-ui")
+        );
+        assert_eq!(
+            ev.payload.get("caller").and_then(|v| v.as_str()),
+            Some("plugin.reverse")
+        );
     }
 
     /// When no reason is passed, the audit payload must not contain a requestReason field.
@@ -1908,7 +2264,8 @@ mod tests {
                 Ok(e)
                     if e.kind == "permission.denied"
                         && e.payload.get("pluginId").and_then(|v| v.as_str()) == Some("com.x")
-                        && e.payload.get("caller").and_then(|v| v.as_str()) == Some("capability") =>
+                        && e.payload.get("caller").and_then(|v| v.as_str())
+                            == Some("capability") =>
                 {
                     break e;
                 }
@@ -1917,7 +2274,10 @@ mod tests {
             }
         };
         assert!(ev.payload.get("requestReason").is_none());
-        assert_eq!(ev.payload.get("caller").and_then(|v| v.as_str()), Some("capability"));
+        assert_eq!(
+            ev.payload.get("caller").and_then(|v| v.as_str()),
+            Some("capability")
+        );
     }
 
     /// Phase 33 — heatmap() must correctly read the whole plugin_permissions table + flag high_risk + aggregate top_denied.
@@ -2018,11 +2378,17 @@ mod tests {
         assert_eq!(camera.3, 1, "camera ask=1");
         assert!(camera.4, "camera high_risk");
 
-        let mic = top.iter().find(|(p, _, _, _, _)| p == "microphone").unwrap();
+        let mic = top
+            .iter()
+            .find(|(p, _, _, _, _)| p == "microphone")
+            .unwrap();
         assert_eq!(mic.3, 1, "microphone ask=1");
         assert!(mic.4, "microphone high_risk");
 
-        let browser = top.iter().find(|(p, _, _, _, _)| p == "browser.open").unwrap();
+        let browser = top
+            .iter()
+            .find(|(p, _, _, _, _)| p == "browser.open")
+            .unwrap();
         assert_eq!(browser.1, 1);
         assert!(!browser.4, "browser.open is not high_risk");
 
@@ -2036,7 +2402,9 @@ mod tests {
     #[test]
     fn heatmap_with_db_rows_and_declarations_does_not_deadlock() {
         use crate::core::storage::{SharedStore, StoreEnum};
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("opencapx-hm-deadlock-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(StoreEnum::Db(
@@ -2077,7 +2445,8 @@ mod tests {
 
     /// DB store used by global policy tests (tag-isolated to avoid parallel tests colliding on the DB).
     fn policy_store(tag: &str) -> SharedStore {
-        let dir = std::env::temp_dir().join(format!("opencapx-policy-{}-{}", tag, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("opencapx-policy-{}-{}", tag, std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         Arc::new(Mutex::new(StoreEnum::Db(
             super::super::storage::Storage::open(&dir.join("t.db")).unwrap(),
@@ -2097,7 +2466,10 @@ mod tests {
         assert_eq!(global_override(&s, "clipboard.read"), None);
         assert_eq!(global_override_str(&s, "clipboard.read"), "");
         assert!(set_global_override(&s, "clipboard.read", "denied").is_ok());
-        assert_eq!(global_override(&s, "clipboard.read"), Some(Decision::Denied));
+        assert_eq!(
+            global_override(&s, "clipboard.read"),
+            Some(Decision::Denied)
+        );
         assert_eq!(global_override_str(&s, "clipboard.read"), "denied");
         // writing again = overwrite the same row, not insert
         assert!(set_global_override(&s, "clipboard.read", "ask").is_ok());
@@ -2131,8 +2503,14 @@ mod tests {
         assert_eq!(v["override"], "denied");
         assert_eq!(v["effective"], "denied");
         assert_eq!(v["highRisk"], false);
-        assert!(v.get("overrideDecision").is_none(), "the key name must be override");
-        let none = CorePermPolicyDto { override_decision: None, ..dto.clone() };
+        assert!(
+            v.get("overrideDecision").is_none(),
+            "the key name must be override"
+        );
+        let none = CorePermPolicyDto {
+            override_decision: None,
+            ..dto.clone()
+        };
         assert!(serde_json::to_value(&none).unwrap()["override"].is_null());
         // key-set check: extra keys / missing keys / renames must all fail (a wrong name silently yields undefined on the frontend).
         // compare sets, not order — serde_json outputs in BTreeMap alphabetical order by default, so key order is not part of the contract.
@@ -2190,7 +2568,10 @@ mod tests {
         let cb = find("clipboard.read").expect("clipboard.read should be listed");
         assert_eq!(
             cb.capabilities,
-            vec!["clipboard.read".to_string(), "context.get_current".to_string()]
+            vec![
+                "clipboard.read".to_string(),
+                "context.get_current".to_string()
+            ]
         );
         assert_eq!(cb.builtin_default, "ask");
         assert_eq!(cb.override_decision.as_deref(), Some("denied"));
@@ -2219,12 +2600,11 @@ mod tests {
         assert_eq!(got, sorted);
         // the listing = the full set of "permissions with a mapping": neither extra (fake switches) nor missing (omitted switches).
         // do not hardcode the count — this invariant follows automatically when capabilities are added.
-        let mapped: std::collections::BTreeSet<String> =
-            super::super::capability::CAPABILITY_IDS
-                .iter()
-                .filter_map(|c| capability_permission(c))
-                .map(|p| p.to_string())
-                .collect();
+        let mapped: std::collections::BTreeSet<String> = super::super::capability::CAPABILITY_IDS
+            .iter()
+            .filter_map(|c| capability_permission(c))
+            .map(|p| p.to_string())
+            .collect();
         let listed: std::collections::BTreeSet<String> =
             list.iter().map(|e| e.permission.clone()).collect();
         assert_eq!(listed, mapped);

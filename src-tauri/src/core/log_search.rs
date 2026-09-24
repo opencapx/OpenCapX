@@ -50,19 +50,18 @@ impl Default for LogFilter {
 
 fn event_to_log(e: OpencapxEvent) -> LogEntryDto {
     let p = &e.payload;
-    let get = |k: &str| -> String {
-        p.get(k)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string()
-    };
+    let get = |k: &str| -> String { p.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string() };
     LogEntryDto {
         id: e.id,
         kind: e.kind,
         plugin_id: get("pluginId"),
         level: {
             let l = get("level");
-            if l.is_empty() { "info".to_string() } else { l }
+            if l.is_empty() {
+                "info".to_string()
+            } else {
+                l
+            }
         },
         source: get("source"),
         message: get("message"),
@@ -242,7 +241,10 @@ mod tests {
 
     #[test]
     fn default_level_falls_back_to_info() {
-        let dir = std::env::temp_dir().join(format!("opencapx-logsearch-default-level-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "opencapx-logsearch-default-level-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         let store = std::sync::Arc::new(std::sync::Mutex::new(StoreEnum::Db(
             Storage::open(&dir.join("t.db")).unwrap(),
@@ -262,7 +264,10 @@ mod tests {
     #[test]
     fn limit_caps_results() {
         let store = fresh_store("limit_caps");
-        let f = LogFilter { limit: 3, ..Default::default() };
+        let f = LogFilter {
+            limit: 3,
+            ..Default::default()
+        };
         let out = search_logs(&store, f);
         assert_eq!(out.len(), 3);
     }

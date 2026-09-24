@@ -65,16 +65,28 @@ impl Default for MetricsConfig {
 
 pub fn validate(cfg: &MetricsConfig) -> Result<(), String> {
     if cfg.poll_secs > 3600 {
-        return Err(format!("poll_secs out of range (0..=3600): {}", cfg.poll_secs));
+        return Err(format!(
+            "poll_secs out of range (0..=3600): {}",
+            cfg.poll_secs
+        ));
     }
     if cfg.cpu_pct_max > 100 {
-        return Err(format!("cpu_pct_max out of range (0..=100): {}", cfg.cpu_pct_max));
+        return Err(format!(
+            "cpu_pct_max out of range (0..=100): {}",
+            cfg.cpu_pct_max
+        ));
     }
     if cfg.rss_bytes_max > 64 * 1024 * 1024 * 1024 {
-        return Err(format!("rss_bytes_max too large (max 64 GiB): {}", cfg.rss_bytes_max));
+        return Err(format!(
+            "rss_bytes_max too large (max 64 GiB): {}",
+            cfg.rss_bytes_max
+        ));
     }
     if cfg.thread_count_max > 100_000 {
-        return Err(format!("thread_count_max out of range: {}", cfg.thread_count_max));
+        return Err(format!(
+            "thread_count_max out of range: {}",
+            cfg.thread_count_max
+        ));
     }
     if cfg.keep_samples == 0 || cfg.keep_samples > 50_000 {
         return Err(format!("keep_samples out of range: {}", cfg.keep_samples));
@@ -100,7 +112,9 @@ struct Inner {
 static SHARED: OnceLock<Arc<Mutex<Inner>>> = OnceLock::new();
 
 fn shared() -> Arc<Mutex<Inner>> {
-    SHARED.get_or_init(|| Arc::new(Mutex::new(Inner::default()))).clone()
+    SHARED
+        .get_or_init(|| Arc::new(Mutex::new(Inner::default())))
+        .clone()
 }
 
 /// Read settings_kv for the metrics config. kv missing → defaults.
@@ -152,7 +166,9 @@ pub fn history(plugin_id: &str, from_ts: i64, limit: usize) -> Vec<PluginMetrics
     let Some(store) = super::shared_store() else {
         return Vec::new();
     };
-    let Ok(g) = store.lock() else { return Vec::new() };
+    let Ok(g) = store.lock() else {
+        return Vec::new();
+    };
     use super::storage::StoreEnum;
     let rows = match &*g {
         StoreEnum::Db(s) => s.list_metrics_samples(plugin_id, from_ts, limit),
@@ -288,13 +304,7 @@ pub fn collect_snapshot(
         }
         _ => Some(0.0), // The first frame has no delta, so report 0 rather than None and wait for the next poll.
     };
-    s.prev.insert(
-        pid,
-        PrevSample {
-            jiffies,
-            at: now,
-        },
-    );
+    s.prev.insert(pid, PrevSample { jiffies, at: now });
     let ts = super::agent::now_secs() as i64;
     Some(PluginMetricsSnapshot {
         plugin_id: plugin_id.to_string(),
@@ -579,6 +589,10 @@ mod tests {
         assert!(fds >= 3, "open fds: {}", fds);
         assert!(rss > 0, "rss: {}", rss);
         let batch2 = read_proc_stats_batch(&[me], false, &mut cache);
-        assert_eq!(batch2.get(&me).map(|s| s.2), Some(fds), "throttled round reuses the cache");
+        assert_eq!(
+            batch2.get(&me).map(|s| s.2),
+            Some(fds),
+            "throttled round reuses the cache"
+        );
     }
 }

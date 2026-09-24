@@ -65,7 +65,8 @@ pub fn play(input: &Value) -> Result<Value, String> {
         let mut c = std::process::Command::new("afplay");
         if let Some(v) = volume {
             // afplay volume 0..=255 (linear)
-            c.arg("-v").arg(((v * 255.0).round() as i64).clamp(0, 255).to_string());
+            c.arg("-v")
+                .arg(((v * 255.0).round() as i64).clamp(0, 255).to_string());
         }
         c.arg(&path);
         c
@@ -114,7 +115,10 @@ pub fn play(input: &Value) -> Result<Value, String> {
                 return Err(format!(
                     "audio player exited {:?}: {}{}",
                     out.status.code(),
-                    String::from_utf8_lossy(&out.stderr).chars().take(200).collect::<String>(),
+                    String::from_utf8_lossy(&out.stderr)
+                        .chars()
+                        .take(200)
+                        .collect::<String>(),
                     player_hint()
                 ));
             }
@@ -146,34 +150,47 @@ mod tests {
         let (_, vol, wait) = validate(&json!({ "path": ok.to_str().unwrap() })).unwrap();
         assert!(vol.is_none());
         assert!(!wait, "default is not to wait for completion");
-        assert!(validate(&json!({ "path": ok.to_str().unwrap(), "volume": 0.5, "wait": true })).is_ok());
+        assert!(
+            validate(&json!({ "path": ok.to_str().unwrap(), "volume": 0.5, "wait": true })).is_ok()
+        );
         // path missing / empty / nonexistent / not a file / bad extension / volume out of range
         assert!(validate(&json!({})).unwrap_err().contains("path"));
-        assert!(validate(&json!({ "path": "" })).unwrap_err().contains("non-empty"));
-        assert!(validate(&json!({ "path": dir.join("nope.wav").to_str().unwrap() }))
+        assert!(validate(&json!({ "path": "" }))
             .unwrap_err()
-            .contains("unavailable"));
-        assert!(validate(&json!({ "path": dir.to_str().unwrap() })).unwrap_err().contains("not a file"));
+            .contains("non-empty"));
+        assert!(
+            validate(&json!({ "path": dir.join("nope.wav").to_str().unwrap() }))
+                .unwrap_err()
+                .contains("unavailable")
+        );
+        assert!(validate(&json!({ "path": dir.to_str().unwrap() }))
+            .unwrap_err()
+            .contains("not a file"));
         assert!(validate(&json!({ "path": bad.to_str().unwrap() }))
             .unwrap_err()
             .contains("unsupported audio extension"));
-        assert!(validate(&json!({ "path": ok.to_str().unwrap(), "volume": 1.5 }))
-            .unwrap_err()
-            .contains("volume"));
+        assert!(
+            validate(&json!({ "path": ok.to_str().unwrap(), "volume": 1.5 }))
+                .unwrap_err()
+                .contains("volume")
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     #[test]
     fn play_reports_platform_limit() {
-        assert!(play(&json!({ "path": "/x.wav" })).unwrap_err().contains("not supported"));
+        assert!(play(&json!({ "path": "/x.wav" }))
+            .unwrap_err()
+            .contains("not supported"));
     }
 
     #[cfg(target_os = "macos")]
     #[test]
     #[ignore = "plays real audio; run with --ignored manually"]
     fn play_system_sound_manual() {
-        let out = play(&json!({ "path": "/System/Library/Sounds/Ping.aiff", "wait": true })).unwrap();
+        let out =
+            play(&json!({ "path": "/System/Library/Sounds/Ping.aiff", "wait": true })).unwrap();
         assert_eq!(out["waited"], json!(true));
     }
 }

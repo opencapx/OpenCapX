@@ -95,17 +95,23 @@ pub fn default_bindings() -> Vec<HotkeyBinding> {
     vec![
         HotkeyBinding {
             combo: "CmdOrCtrl+Shift+P".into(),
-            action: HotkeyAction::Builtin { action: BuiltinAction::OpenPalette },
+            action: HotkeyAction::Builtin {
+                action: BuiltinAction::OpenPalette,
+            },
             enabled: true,
         },
         HotkeyBinding {
             combo: "CmdOrCtrl+Shift+,".into(),
-            action: HotkeyAction::Builtin { action: BuiltinAction::OpenSettings },
+            action: HotkeyAction::Builtin {
+                action: BuiltinAction::OpenSettings,
+            },
             enabled: true,
         },
         HotkeyBinding {
             combo: "CmdOrCtrl+Shift+H".into(),
-            action: HotkeyAction::Builtin { action: BuiltinAction::TogglePet },
+            action: HotkeyAction::Builtin {
+                action: BuiltinAction::TogglePet,
+            },
             enabled: true,
         },
     ]
@@ -165,7 +171,9 @@ impl HotkeyFileStore {
         if let Some(parent) = self.path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        let file = HotkeyFile { bindings: bindings.to_vec() };
+        let file = HotkeyFile {
+            bindings: bindings.to_vec(),
+        };
         let text = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
         std::fs::write(&self.path, text).map_err(|e| e.to_string())
     }
@@ -177,7 +185,11 @@ impl HotkeyFileStore {
         let combo = normalize_combo(combo_raw);
         validate_combo(&combo)?;
         let mut bindings = self.read();
-        let binding = HotkeyBinding { combo: combo.clone(), action: action.clone(), enabled: true };
+        let binding = HotkeyBinding {
+            combo: combo.clone(),
+            action: action.clone(),
+            enabled: true,
+        };
         bindings.retain(|b| b.combo != combo);
         bindings.push(binding.clone());
         self.write(&bindings)?;
@@ -276,7 +288,11 @@ fn migrate_from_sqlite_at(s: &HotkeyFileStore, rows: &[storage::HotkeyRow]) -> u
         .iter()
         .filter_map(|r| {
             let action = parse_action(&r.payload)?;
-            Some(HotkeyBinding { combo: normalize_combo(&r.combo), action, enabled: true })
+            Some(HotkeyBinding {
+                combo: normalize_combo(&r.combo),
+                action,
+                enabled: true,
+            })
         })
         .collect();
     if bindings.is_empty() || s.write(&bindings).is_err() {
@@ -335,7 +351,9 @@ pub fn normalize_combo(raw: &str) -> String {
 }
 
 fn is_function_key(key: &str) -> bool {
-    let Some(num) = key.strip_prefix('F') else { return false };
+    let Some(num) = key.strip_prefix('F') else {
+        return false;
+    };
     matches!(num.parse::<u32>(), Ok(n) if (1..=12).contains(&n))
 }
 
@@ -486,7 +504,9 @@ mod tests {
         let s = serde_json::to_string(&a).unwrap();
         let b: HotkeyAction = serde_json::from_str(&s).unwrap();
         assert_eq!(a, b);
-        let a2 = HotkeyAction::Builtin { action: BuiltinAction::OpenPalette };
+        let a2 = HotkeyAction::Builtin {
+            action: BuiltinAction::OpenPalette,
+        };
         let s2 = serde_json::to_string(&a2).unwrap();
         let b2: HotkeyAction = serde_json::from_str(&s2).unwrap();
         assert_eq!(a2, b2);
@@ -517,12 +537,16 @@ mod tests {
         let bindings = vec![
             HotkeyBinding {
                 combo: "CmdOrCtrl+Shift+P".into(),
-                action: HotkeyAction::Builtin { action: BuiltinAction::OpenPalette },
+                action: HotkeyAction::Builtin {
+                    action: BuiltinAction::OpenPalette,
+                },
                 enabled: true,
             },
             HotkeyBinding {
                 combo: "F5".into(),
-                action: HotkeyAction::Builtin { action: BuiltinAction::Quit },
+                action: HotkeyAction::Builtin {
+                    action: BuiltinAction::Quit,
+                },
                 enabled: false,
             },
         ];
@@ -546,7 +570,9 @@ mod tests {
         std::fs::write(s.path(), "{ not json").unwrap();
         let one = vec![HotkeyBinding {
             combo: "CmdOrCtrl+K".into(),
-            action: HotkeyAction::Builtin { action: BuiltinAction::TogglePet },
+            action: HotkeyAction::Builtin {
+                action: BuiltinAction::TogglePet,
+            },
             enabled: true,
         }];
         s.write(&one).unwrap();
@@ -557,10 +583,9 @@ mod tests {
 
     #[test]
     fn enabled_defaults_true_on_deserialize() {
-        let v: HotkeyBinding = serde_json::from_str(
-            r#"{"combo":"F6","action":{"kind":"builtin","action":"quit"}}"#,
-        )
-        .unwrap();
+        let v: HotkeyBinding =
+            serde_json::from_str(r#"{"combo":"F6","action":{"kind":"builtin","action":"quit"}}"#)
+                .unwrap();
         assert!(v.enabled);
     }
 
@@ -598,14 +623,24 @@ mod tests {
     }
 
     fn builtin(combo: &str, action: BuiltinAction) -> HotkeyBinding {
-        HotkeyBinding { combo: combo.into(), action: HotkeyAction::Builtin { action }, enabled: true }
+        HotkeyBinding {
+            combo: combo.into(),
+            action: HotkeyAction::Builtin { action },
+            enabled: true,
+        }
     }
 
     /// materialize-on-first-write: the first set on a brand-new file writes all 3 defaults into the file.
     #[test]
     fn crud_first_write_materializes_defaults() {
         let s = tmp_store();
-        s.set("CmdOrCtrl+K", &HotkeyAction::Builtin { action: BuiltinAction::TogglePet }).unwrap();
+        s.set(
+            "CmdOrCtrl+K",
+            &HotkeyAction::Builtin {
+                action: BuiltinAction::TogglePet,
+            },
+        )
+        .unwrap();
         let got = s.read();
         assert_eq!(got.len(), 4, "3 defaults + 1 newly created");
         assert!(got.iter().any(|b| b.combo == "CmdOrCtrl+K"));
@@ -615,29 +650,63 @@ mod tests {
     fn crud_set_normalizes_and_upserts() {
         let s = tmp_store();
         // Deliberately use lowercase ctrl — it should normalize to CmdOrCtrl
-        let r = s.set("ctrl+k", &HotkeyAction::Builtin { action: BuiltinAction::TogglePet }).unwrap();
+        let r = s
+            .set(
+                "ctrl+k",
+                &HotkeyAction::Builtin {
+                    action: BuiltinAction::TogglePet,
+                },
+            )
+            .unwrap();
         assert_eq!(r.binding.combo, "CmdOrCtrl+K");
-        assert!(!r.binding.registered_at_os, "registration is not attempted without an app handle");
+        assert!(
+            !r.binding.registered_at_os,
+            "registration is not attempted without an app handle"
+        );
         assert!(r.error.is_none());
         // The same combo overwrites the action without creating a second entry (still the only K on top of the materialized defaults)
-        s.set("CmdOrCtrl+K", &HotkeyAction::Builtin { action: BuiltinAction::Quit }).unwrap();
+        s.set(
+            "CmdOrCtrl+K",
+            &HotkeyAction::Builtin {
+                action: BuiltinAction::Quit,
+            },
+        )
+        .unwrap();
         let all = s.read();
         let ks: Vec<&HotkeyBinding> = all.iter().filter(|b| b.combo == "CmdOrCtrl+K").collect();
         assert_eq!(ks.len(), 1);
-        assert_eq!(ks[0].action, HotkeyAction::Builtin { action: BuiltinAction::Quit });
+        assert_eq!(
+            ks[0].action,
+            HotkeyAction::Builtin {
+                action: BuiltinAction::Quit
+            }
+        );
     }
 
     #[test]
     fn crud_set_rejects_invalid_combo() {
         let s = tmp_store();
-        assert!(s.set("A", &HotkeyAction::Builtin { action: BuiltinAction::Quit }).is_err());
+        assert!(s
+            .set(
+                "A",
+                &HotkeyAction::Builtin {
+                    action: BuiltinAction::Quit
+                }
+            )
+            .is_err());
         assert!(!s.path().exists(), "a validation failure does not persist");
     }
 
     #[test]
     fn crud_set_enabled_toggles_and_errors_on_missing() {
         let s = tmp_store();
-        s.set("F5", &HotkeyAction::Builtin { action: BuiltinAction::Quit }).unwrap();
+        s.set(
+            "F5",
+            &HotkeyAction::Builtin {
+                action: BuiltinAction::Quit,
+            },
+        )
+        .unwrap();
         let r = s.set_enabled("F5", false).unwrap();
         assert!(!r.binding.enabled);
         let f5 = s.read().into_iter().find(|b| b.combo == "F5").unwrap();
@@ -648,9 +717,18 @@ mod tests {
     #[test]
     fn crud_delete_roundtrip() {
         let s = tmp_store();
-        s.set("F5", &HotkeyAction::Builtin { action: BuiltinAction::Quit }).unwrap();
+        s.set(
+            "F5",
+            &HotkeyAction::Builtin {
+                action: BuiltinAction::Quit,
+            },
+        )
+        .unwrap();
         assert!(s.delete("f5"), "delete matches on the normalized combo");
-        assert!(s.read().iter().all(|b| b.combo != "F5"), "F5 is gone while the other defaults remain");
+        assert!(
+            s.read().iter().all(|b| b.combo != "F5"),
+            "F5 is gone while the other defaults remain"
+        );
         assert!(!s.delete("F5"), "a duplicate delete returns false");
     }
 
@@ -662,7 +740,10 @@ mod tests {
         assert_eq!(dtos.len(), 1);
         assert_eq!(dtos[0].combo, "F5");
         assert!(dtos[0].enabled);
-        assert!(!dtos[0].registered_at_os, "not registered without an app handle");
+        assert!(
+            !dtos[0].registered_at_os,
+            "not registered without an app handle"
+        );
     }
 
     fn sqlite_row(combo: &str, payload: &str) -> super::super::storage::HotkeyRow {

@@ -88,7 +88,10 @@ pub(crate) fn osascript_ok(
             "{} exited {:?}: {}",
             ctx,
             out.status.code(),
-            String::from_utf8_lossy(&out.stderr).chars().take(300).collect::<String>()
+            String::from_utf8_lossy(&out.stderr)
+                .chars()
+                .take(300)
+                .collect::<String>()
         ));
     }
     Ok(out)
@@ -109,12 +112,19 @@ fn validate(input: &Value) -> Result<(String, &'static str, Option<String>), Str
     if app.contains('"') || app.bytes().any(|b| b.is_ascii_control()) {
         return Err("invalid input: app must not contain quotes or control chars".into());
     }
-    let action = match input.get("action").and_then(|a| a.as_str()).unwrap_or("activate") {
+    let action = match input
+        .get("action")
+        .and_then(|a| a.as_str())
+        .unwrap_or("activate")
+    {
         "activate" => "activate",
         "launch" => "launch",
         "quit" => "quit",
         other => {
-            return Err(format!("invalid input: action must be activate|launch|quit, got {}", other))
+            return Err(format!(
+                "invalid input: action must be activate|launch|quit, got {}",
+                other
+            ))
         }
     };
     let script = input
@@ -124,7 +134,10 @@ fn validate(input: &Value) -> Result<(String, &'static str, Option<String>), Str
         .map(|s| s.to_string());
     if let Some(s) = &script {
         if s.len() > SCRIPT_MAX {
-            return Err(format!("invalid input: script must be ≤{} chars", SCRIPT_MAX));
+            return Err(format!(
+                "invalid input: script must be ≤{} chars",
+                SCRIPT_MAX
+            ));
         }
     }
     Ok((app.to_string(), action, script))
@@ -159,8 +172,8 @@ pub fn run(input: &Value) -> Result<Value, String> {
         let src = applescript_for(&app, action, &script);
         let mut cmd = std::process::Command::new("osascript");
         cmd.arg("-e").arg(&src);
-        let out = run_with_timeout(cmd, RUN_TIMEOUT)
-            .map_err(|e| format!("automation failed: {}", e))?;
+        let out =
+            run_with_timeout(cmd, RUN_TIMEOUT).map_err(|e| format!("automation failed: {}", e))?;
         if !out.status.success() {
             let err = String::from_utf8_lossy(&out.stderr);
             return Err(format!(
@@ -194,19 +207,36 @@ mod tests {
         assert_eq!(app, "Safari");
         assert_eq!(action, "activate", "default action");
         assert!(script.is_none());
-        assert_eq!(validate(&json!({ "app": "Safari", "action": "quit" })).unwrap().1, "quit");
+        assert_eq!(
+            validate(&json!({ "app": "Safari", "action": "quit" }))
+                .unwrap()
+                .1,
+            "quit"
+        );
         // app missing / empty / quotes / control characters / over-long
         assert!(validate(&json!({})).unwrap_err().contains("app"));
-        assert!(validate(&json!({ "app": "" })).unwrap_err().contains("non-empty"));
-        assert!(validate(&json!({ "app": "Sa\"fari" })).unwrap_err().contains("quotes"));
-        assert!(validate(&json!({ "app": "Sa\nfari" })).unwrap_err().contains("quotes"));
-        assert!(validate(&json!({ "app": "x".repeat(257) })).unwrap_err().contains("256"));
-        // Unknown action
-        assert!(validate(&json!({ "app": "S", "action": "destroy" })).unwrap_err().contains("activate|launch|quit"));
-        // script over-long
-        assert!(validate(&json!({ "app": "S", "script": "x".repeat(10_001) }))
+        assert!(validate(&json!({ "app": "" }))
             .unwrap_err()
-            .contains("10"));
+            .contains("non-empty"));
+        assert!(validate(&json!({ "app": "Sa\"fari" }))
+            .unwrap_err()
+            .contains("quotes"));
+        assert!(validate(&json!({ "app": "Sa\nfari" }))
+            .unwrap_err()
+            .contains("quotes"));
+        assert!(validate(&json!({ "app": "x".repeat(257) }))
+            .unwrap_err()
+            .contains("256"));
+        // Unknown action
+        assert!(validate(&json!({ "app": "S", "action": "destroy" }))
+            .unwrap_err()
+            .contains("activate|launch|quit"));
+        // script over-long
+        assert!(
+            validate(&json!({ "app": "S", "script": "x".repeat(10_001) }))
+                .unwrap_err()
+                .contains("10")
+        );
     }
 
     #[cfg(target_os = "macos")]
@@ -256,6 +286,8 @@ mod tests {
     #[cfg(not(target_os = "macos"))]
     #[test]
     fn run_reports_platform_limit() {
-        assert!(run(&json!({ "app": "X" })).unwrap_err().contains("macOS-only"));
+        assert!(run(&json!({ "app": "X" }))
+            .unwrap_err()
+            .contains("macOS-only"));
     }
 }

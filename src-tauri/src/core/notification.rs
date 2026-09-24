@@ -10,7 +10,9 @@
 //! `resolve_recipient(spec, endpoints)` turns a ref string → `Box<dyn NotificationSink>`,
 //! with each sink independently implementing the `send(envelope, body)` abstraction.
 
-use crate::core::alerting::{compute_signature, send_http_with_body, AlertEnvelope, WebhookEndpoint};
+use crate::core::alerting::{
+    compute_signature, send_http_with_body, AlertEnvelope, WebhookEndpoint,
+};
 
 pub trait NotificationSink: Send + Sync {
     fn kind(&self) -> &'static str;
@@ -201,7 +203,10 @@ mod tests {
         let res = resolve_recipient("webhook:missing", &eps);
         assert!(res.is_err());
         let msg = res.err().expect("expected error");
-        assert!(msg.contains("not found") || msg.contains("missing"), "got: {msg}");
+        assert!(
+            msg.contains("not found") || msg.contains("missing"),
+            "got: {msg}"
+        );
     }
 
     #[test]
@@ -224,14 +229,18 @@ mod tests {
         // send() uses a tmpdir, verifying append behavior
         let env = sample_env();
         let body = r#"{"source":"plugin.metrics.cpu","severity":"high"}"#;
-        let tmp = std::env::temp_dir().join(format!("opencapx-file-sink-{}.log", std::process::id()));
+        let tmp =
+            std::env::temp_dir().join(format!("opencapx-file-sink-{}.log", std::process::id()));
         let _ = std::fs::remove_file(&tmp);
         let sink = FileSink { path: tmp.clone() };
         sink.send(&env, body).expect("send 1");
         sink.send(&env, body).expect("send 2");
         let contents = std::fs::read_to_string(&tmp).expect("read");
         let line_count = contents.lines().filter(|l| !l.trim().is_empty()).count();
-        assert_eq!(line_count, 2, "should append 2 lines, got {line_count}: {contents}");
+        assert_eq!(
+            line_count, 2,
+            "should append 2 lines, got {line_count}: {contents}"
+        );
         let _ = std::fs::remove_file(&tmp);
     }
 

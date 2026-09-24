@@ -21,7 +21,11 @@ const MAC_EPOCH_DELTA: i64 = 978_307_200;
 /// message.date → Unix seconds (pure function). Modern DBs use nanoseconds; old DBs (migrated from
 /// before Yosemite) still use seconds — distinguish by magnitude: above 1e12 is treated as nanoseconds.
 fn mac_to_unix(d: i64) -> i64 {
-    let secs = if d.abs() > 1_000_000_000_000 { d / 1_000_000_000 } else { d };
+    let secs = if d.abs() > 1_000_000_000_000 {
+        d / 1_000_000_000
+    } else {
+        d
+    };
     secs + MAC_EPOCH_DELTA
 }
 
@@ -36,7 +40,10 @@ pub fn recent(input: &Value) -> Result<Value, String> {
     {
         let limit = input.get("limit").and_then(|l| l.as_i64()).unwrap_or(20);
         if !(1..=MSG_LIMIT_MAX).contains(&limit) {
-            return Err(format!("invalid input: limit must be 1..={} (default 20)", MSG_LIMIT_MAX));
+            return Err(format!(
+                "invalid input: limit must be 1..={} (default 20)",
+                MSG_LIMIT_MAX
+            ));
         }
         let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
         let db = format!("{}/Library/Messages/chat.db", home);
@@ -97,18 +104,28 @@ mod tests {
     #[test]
     fn mac_to_unix_handles_both_epochs() {
         // Nanoseconds (modern): an Apple nanosecond timestamp around 2024-06-01
-        assert_eq!(mac_to_unix(738_300_000_000_000_000), 738_300_000 + MAC_EPOCH_DELTA);
+        assert_eq!(
+            mac_to_unix(738_300_000_000_000_000),
+            738_300_000 + MAC_EPOCH_DELTA
+        );
         // Seconds (old DB): the old format for the same instant
         assert_eq!(mac_to_unix(738_300_000), 738_300_000 + MAC_EPOCH_DELTA);
         // Negative values (before 2001) do not panic
-        assert_eq!(mac_to_unix(-1_000_000_000), -1_000_000_000 + MAC_EPOCH_DELTA);
+        assert_eq!(
+            mac_to_unix(-1_000_000_000),
+            -1_000_000_000 + MAC_EPOCH_DELTA
+        );
     }
 
     #[cfg(target_os = "macos")]
     #[test]
     fn validates_limit_before_touching_db() {
-        assert!(recent(&json!({ "limit": 0 })).unwrap_err().contains("limit"));
-        assert!(recent(&json!({ "limit": 101 })).unwrap_err().contains("limit"));
+        assert!(recent(&json!({ "limit": 0 }))
+            .unwrap_err()
+            .contains("limit"));
+        assert!(recent(&json!({ "limit": 101 }))
+            .unwrap_err()
+            .contains("limit"));
     }
 
     #[cfg(not(target_os = "macos"))]

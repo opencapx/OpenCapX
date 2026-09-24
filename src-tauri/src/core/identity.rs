@@ -71,7 +71,13 @@ pub fn sanitize_kind(raw: &str) -> String {
         .trim()
         .to_lowercase()
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '.' { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '.' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect();
     let k = k.trim_matches('-').to_string();
     if k.is_empty() {
@@ -149,7 +155,8 @@ fn gen_token() -> String {
 }
 
 fn publish(kind: &str, payload: serde_json::Value) {
-    super::event::EventBus::shared().publish(&super::event::OpencapxEvent::new(kind, "core", payload));
+    super::event::EventBus::shared()
+        .publish(&super::event::OpencapxEvent::new(kind, "core", payload));
 }
 
 /// auth.rejected audit (called by the http gateway when it rejects a request). reason: anonymous|bad-token|revoked|unknown-agent.
@@ -164,11 +171,17 @@ pub fn audit_rejected(agent_id: Option<&str>, reason: &str) {
 /// TOFU registration. First time a kind is seen: create identity + issue token +
 /// `agent.registered` event; already active: rotate the token (lost token file /
 /// reinstall cases); already revoked: reject (Err).
-pub fn register(store: &SharedStore, kind_raw: &str, via: &str) -> Result<(String, String), &'static str> {
+pub fn register(
+    store: &SharedStore,
+    kind_raw: &str,
+    via: &str,
+) -> Result<(String, String), &'static str> {
     let kind = sanitize_kind(kind_raw);
     let display_name = display_name_for(&kind);
     let now = now_secs() as i64;
-    let Ok(mut s) = store.lock() else { return Err("store unavailable") };
+    let Ok(mut s) = store.lock() else {
+        return Err("store unavailable");
+    };
     let existing: Option<(String, String)> = s
         .with_conn_ref(|c| {
             c.query_row(
@@ -225,7 +238,9 @@ pub fn register(store: &SharedStore, kind_raw: &str, via: &str) -> Result<(Strin
 
 /// Three gates: exists → hash matches → status=active. On success also touches last_seen.
 pub fn verify(store: &SharedStore, agent_id: &str, token: &str) -> VerifyResult {
-    let Ok(mut s) = store.lock() else { return VerifyResult::UnknownAgent };
+    let Ok(mut s) = store.lock() else {
+        return VerifyResult::UnknownAgent;
+    };
     let row: Option<(String, String)> = s
         .with_conn_ref(|c| {
             c.query_row(
@@ -236,7 +251,9 @@ pub fn verify(store: &SharedStore, agent_id: &str, token: &str) -> VerifyResult 
             .ok()
         })
         .flatten();
-    let Some((token_hash, status)) = row else { return VerifyResult::UnknownAgent };
+    let Some((token_hash, status)) = row else {
+        return VerifyResult::UnknownAgent;
+    };
     if status == "revoked" {
         return VerifyResult::Revoked;
     }
@@ -255,7 +272,9 @@ pub fn verify(store: &SharedStore, agent_id: &str, token: &str) -> VerifyResult 
 
 /// Settings page "Revoke". Emits the agent.revoked audit.
 pub fn revoke(store: &SharedStore, agent_id: &str) -> bool {
-    let Ok(mut s) = store.lock() else { return false };
+    let Ok(mut s) = store.lock() else {
+        return false;
+    };
     let n = s
         .with_conn(|c| {
             c.execute(
@@ -294,7 +313,9 @@ pub fn reauthorize(store: &SharedStore, agent_id: &str) -> Option<String> {
 }
 
 pub fn list(store: &SharedStore) -> Vec<AgentDto> {
-    let Ok(s) = store.lock() else { return Vec::new() };
+    let Ok(s) = store.lock() else {
+        return Vec::new();
+    };
     s.with_conn_ref(|c| {
         let Ok(mut stmt) = c.prepare(
             "SELECT agent_id, kind, display_name, status, first_seen, last_seen, registered_via
@@ -360,7 +381,9 @@ pub fn check_agent(store: &SharedStore, agent_id: &str, perm: &str) -> Decision 
 /// be written as granted** — clicking Always at the Agent layer would also leave a
 /// permanent grant row, and this plugs that (review 7).
 pub fn set_agent_decision(store: &SharedStore, agent_id: &str, perm: &str, decision: &str) -> bool {
-    if !permission::known_or_declared(store, perm) || !["granted", "denied", "ask"].contains(&decision) {
+    if !permission::known_or_declared(store, perm)
+        || !["granted", "denied", "ask"].contains(&decision)
+    {
         return false;
     }
     if decision == "granted" && permission::is_declared(store, perm) {
@@ -498,7 +521,11 @@ pub fn detect_kind() -> String {
             return k;
         }
     }
-    for (var, kind) in [("CLAUDECODE", "claude"), ("OPENCODE", "opencode"), ("CODEX", "codex")] {
+    for (var, kind) in [
+        ("CLAUDECODE", "claude"),
+        ("OPENCODE", "opencode"),
+        ("CODEX", "codex"),
+    ] {
         if let Ok(v) = std::env::var(var) {
             if v == "1" || v.eq_ignore_ascii_case("true") {
                 return kind.into();
@@ -546,7 +573,10 @@ pub fn ensure_registered(kind: &str, via: &str) -> Option<Credentials> {
             None
         }
         Err(e) => {
-            eprintln!("OpenCapX: agent registration failed ({:?}); kind={}", e, kind);
+            eprintln!(
+                "OpenCapX: agent registration failed ({:?}); kind={}",
+                e, kind
+            );
             None
         }
     }
@@ -559,7 +589,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     fn db_store(tag: &str) -> SharedStore {
-        let dir = std::env::temp_dir().join(format!("opencapx-identity-{}-{}", std::process::id(), tag));
+        let dir =
+            std::env::temp_dir().join(format!("opencapx-identity-{}-{}", std::process::id(), tag));
         let _ = std::fs::remove_dir_all(&dir);
         let s: SharedStore = Arc::new(Mutex::new(StoreEnum::Db(
             super::super::storage::Storage::open(&dir.join("t.db")).unwrap(),
@@ -569,7 +600,9 @@ mod tests {
     }
 
     fn mem_store() -> SharedStore {
-        Arc::new(Mutex::new(StoreEnum::Mem(crate::core::agent::SessionStore::new())))
+        Arc::new(Mutex::new(StoreEnum::Mem(
+            crate::core::agent::SessionStore::new(),
+        )))
     }
 
     #[test]
@@ -612,12 +645,19 @@ mod tests {
         assert!(id1.starts_with("ag_claude_"));
         assert_eq!(verify(&s, &id1, &tok1), VerifyResult::Ok);
         assert_eq!(verify(&s, &id1, "ocx1_wrong"), VerifyResult::BadToken);
-        assert_eq!(verify(&s, "ag_ghost_0000", &tok1), VerifyResult::UnknownAgent);
+        assert_eq!(
+            verify(&s, "ag_ghost_0000", &tok1),
+            VerifyResult::UnknownAgent
+        );
         // Re-registration = rotation, same agent_id
         let (id2, tok2) = register(&s, "claude", "hook").expect("rotate");
         assert_eq!(id1, id2);
         assert_ne!(tok1, tok2);
-        assert_eq!(verify(&s, &id1, &tok1), VerifyResult::BadToken, "old token is invalidated");
+        assert_eq!(
+            verify(&s, &id1, &tok1),
+            VerifyResult::BadToken,
+            "old token is invalidated"
+        );
         assert_eq!(verify(&s, &id1, &tok2), VerifyResult::Ok);
         // Revoke → rejected; auto-registration rejected; reauthorize → new token works
         assert!(revoke(&s, &id1));
@@ -715,12 +755,19 @@ mod tests {
     #[test]
     fn token_file_roundtrip_and_permissions_bits() {
         // Explicit path, leaves HOME untouched (changing env under parallel tests would pollute other tests)
-        let dir = std::env::temp_dir().join(format!("opencapx-tok-{}-{}", std::process::id(), nanos()));
+        let dir =
+            std::env::temp_dir().join(format!("opencapx-tok-{}-{}", std::process::id(), nanos()));
         let _ = std::fs::create_dir_all(&dir);
-        let creds = Credentials { agent_id: "ag_t_01".into(), token: "ocx1_t".into() };
+        let creds = Credentials {
+            agent_id: "ag_t_01".into(),
+            token: "ocx1_t".into(),
+        };
         save_credentials_to(&token_file_in(&dir, "Claude Code!"), &creds);
         // Same name after kind normalization (sanitize → claude-code)
-        assert_eq!(load_credentials_from(&token_file_in(&dir, "claude-code")), Some(creds));
+        assert_eq!(
+            load_credentials_from(&token_file_in(&dir, "claude-code")),
+            Some(creds)
+        );
         assert!(load_credentials_from(&token_file_in(&dir, "codex")).is_none());
         #[cfg(unix)]
         {

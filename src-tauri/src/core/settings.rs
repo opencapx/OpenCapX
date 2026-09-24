@@ -44,7 +44,9 @@ fn validate(input: &Value) -> Result<(&'static str, Value), String> {
         }
         "volume" => {
             let Some(v) = value.as_i64() else {
-                return Err("invalid input: value (integer 0-100) required for setting=volume".into());
+                return Err(
+                    "invalid input: value (integer 0-100) required for setting=volume".into(),
+                );
             };
             if !(0..=100).contains(&v) {
                 return Err("invalid input: value must be 0..=100 for setting=volume".into());
@@ -52,13 +54,18 @@ fn validate(input: &Value) -> Result<(&'static str, Value), String> {
         }
         "wallpaper" => {
             let Some(p) = value.as_str() else {
-                return Err("invalid input: value (path string) required for setting=wallpaper".into());
+                return Err(
+                    "invalid input: value (path string) required for setting=wallpaper".into(),
+                );
             };
             let meta = std::fs::metadata(p).map_err(|e| format!("wallpaper unavailable: {}", e))?;
             if !meta.is_file() {
                 return Err(format!("not a file: {}", p));
             }
-            let ext = p.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
+            let ext = p
+                .rsplit_once('.')
+                .map(|(_, e)| e.to_ascii_lowercase())
+                .unwrap_or_default();
             if !WALLPAPER_EXTS.contains(&ext.as_str()) {
                 return Err(format!(
                     "unsupported wallpaper extension .{} (allowed: {})",
@@ -116,28 +123,44 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let wp = dir.join("w.png");
         std::fs::write(&wp, b"x").unwrap();
-        assert!(validate(&json!({ "setting": "wallpaper", "value": wp.to_str().unwrap() })).is_ok());
+        assert!(
+            validate(&json!({ "setting": "wallpaper", "value": wp.to_str().unwrap() })).is_ok()
+        );
         // setting missing / unknown / wrong type / volume out of range / wallpaper nonexistent / bad extension
         assert!(validate(&json!({})).unwrap_err().contains("setting"));
-        assert!(validate(&json!({ "setting": "dock", "value": 1 })).unwrap_err().contains("dark_mode|wallpaper|volume"));
-        assert!(validate(&json!({ "setting": "dark_mode", "value": 1 })).unwrap_err().contains("boolean"));
-        assert!(validate(&json!({ "setting": "volume", "value": 101 })).unwrap_err().contains("0..=100"));
-        assert!(validate(&json!({ "setting": "volume" })).unwrap_err().contains("integer"));
-        assert!(validate(&json!({ "setting": "wallpaper", "value": dir.join("no.png").to_str().unwrap() }))
+        assert!(validate(&json!({ "setting": "dock", "value": 1 }))
             .unwrap_err()
-            .contains("unavailable"));
+            .contains("dark_mode|wallpaper|volume"));
+        assert!(validate(&json!({ "setting": "dark_mode", "value": 1 }))
+            .unwrap_err()
+            .contains("boolean"));
+        assert!(validate(&json!({ "setting": "volume", "value": 101 }))
+            .unwrap_err()
+            .contains("0..=100"));
+        assert!(validate(&json!({ "setting": "volume" }))
+            .unwrap_err()
+            .contains("integer"));
+        assert!(validate(
+            &json!({ "setting": "wallpaper", "value": dir.join("no.png").to_str().unwrap() })
+        )
+        .unwrap_err()
+        .contains("unavailable"));
         let bad = dir.join("w.txt");
         std::fs::write(&bad, b"x").unwrap();
-        assert!(validate(&json!({ "setting": "wallpaper", "value": bad.to_str().unwrap() }))
-            .unwrap_err()
-            .contains("unsupported wallpaper"));
+        assert!(
+            validate(&json!({ "setting": "wallpaper", "value": bad.to_str().unwrap() }))
+                .unwrap_err()
+                .contains("unsupported wallpaper")
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[cfg(not(target_os = "macos"))]
     #[test]
     fn set_reports_platform_limit() {
-        assert!(set(&json!({ "setting": "volume", "value": 1 })).unwrap_err().contains("macOS-only"));
+        assert!(set(&json!({ "setting": "volume", "value": 1 }))
+            .unwrap_err()
+            .contains("macOS-only"));
     }
 
     #[cfg(target_os = "macos")]
@@ -145,6 +168,9 @@ mod tests {
     #[ignore = "changes real system settings; run with --ignored manually"]
     fn set_volume_manual() {
         // The original value cannot be read back (osascript set volume is one-way); only verify the write succeeded
-        assert_eq!(set(&json!({ "setting": "volume", "value": 50 })).unwrap()["ok"], json!(true));
+        assert_eq!(
+            set(&json!({ "setting": "volume", "value": 50 })).unwrap()["ok"],
+            json!(true)
+        );
     }
 }

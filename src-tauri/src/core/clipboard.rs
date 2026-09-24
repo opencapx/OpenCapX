@@ -96,13 +96,13 @@ mod tests {
         // arboard's Linux backend needs X11/Wayland; headless CI has no display, so skip then
         // (the macOS/Windows clipboard is always present, so do not skip).
         #[cfg(target_os = "linux")]
-        if std::env::var_os("WAYLAND_DISPLAY").is_none()
-            && std::env::var_os("DISPLAY").is_none()
-        {
+        if std::env::var_os("WAYLAND_DISPLAY").is_none() && std::env::var_os("DISPLAY").is_none() {
             eprintln!("skipping clipboard roundtrip: headless Linux, no display");
             return;
         }
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let unique = format!("opencapx-ui-clip-{}", std::process::id());
         write_text(&unique).expect("write_text");
         assert_eq!(text().as_deref(), Some(unique.as_str()));

@@ -8,7 +8,7 @@
 use serde::Serialize;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use super::event::{OpencapxEvent, EventBus};
+use super::event::{EventBus, OpencapxEvent};
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct KillSwitchStateDto {

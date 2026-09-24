@@ -11,8 +11,8 @@ pub fn pack_dir(dir: &Path, seed: &[u8; 32], key_id: &str, out: &Path) -> Result
     let manifest_path = dir.join("opencapx-plugin.json");
     let manifest_text = std::fs::read_to_string(&manifest_path)
         .map_err(|e| format!("failed to read {}: {}", manifest_path.display(), e))?;
-    let mut manifest: serde_json::Value =
-        serde_json::from_str(&manifest_text).map_err(|e| format!("manifest is not valid JSON: {}", e))?;
+    let mut manifest: serde_json::Value = serde_json::from_str(&manifest_text)
+        .map_err(|e| format!("manifest is not valid JSON: {}", e))?;
     // WHY: Python (json) and serde_json (ryu) serialize floats / out-of-range integers differently, which would make
     // cross-language digests silently diverge; this is the pack boundary, nothing has landed on disk yet, so reject outright.
     signing::ensure_signable_numbers(&manifest)?;
@@ -30,8 +30,8 @@ pub fn pack_dir(dir: &Path, seed: &[u8; 32], key_id: &str, out: &Path) -> Result
         "signature".into(),
         serde_json::json!({"alg": "ed25519", "keyId": key_id, "sig": hex_encode(&sig_bytes)}),
     );
-    let signed_manifest =
-        serde_json::to_string(&manifest).map_err(|e| format!("failed to serialize manifest: {}", e))?;
+    let signed_manifest = serde_json::to_string(&manifest)
+        .map_err(|e| format!("failed to serialize manifest: {}", e))?;
     let files = collect_plugin_files(dir)?;
 
     let write = (|| -> Result<(), String> {
@@ -42,7 +42,8 @@ pub fn pack_dir(dir: &Path, seed: &[u8; 32], key_id: &str, out: &Path) -> Result
         for (name, bytes) in &files {
             zip_add(&mut zw, name, bytes)?;
         }
-        zw.finish().map_err(|e| format!("failed to finish zip: {}", e))?;
+        zw.finish()
+            .map_err(|e| format!("failed to finish zip: {}", e))?;
         Ok(())
     })();
     if let Err(e) = write {
@@ -51,7 +52,9 @@ pub fn pack_dir(dir: &Path, seed: &[u8; 32], key_id: &str, out: &Path) -> Result
     }
 
     // Self-check: a signing tool that produces a package it cannot itself verify is a silent failure worse than not signing; stop it before it lands on disk.
-    let digest_ok = signing::digest_v2(out).map(|d| d == digest).unwrap_or(false);
+    let digest_ok = signing::digest_v2(out)
+        .map(|d| d == digest)
+        .unwrap_or(false);
     let sig_ok = sk
         .verifying_key()
         .verify_strict(

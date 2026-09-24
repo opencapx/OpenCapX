@@ -59,15 +59,13 @@ pub fn open(input: &Value) -> Result<Value, String> {
         return Err("invalid input: url (string) required".into());
     };
     validate_http_url(url)?;
-    let status = open_command(url)
-        .status()
-        .map_err(|e| {
-            #[cfg(target_os = "linux")]
-            let hint = " (install xdg-utils)";
-            #[cfg(not(target_os = "linux"))]
-            let hint = "";
-            format!("open failed{}: {}", hint, e)
-        })?;
+    let status = open_command(url).status().map_err(|e| {
+        #[cfg(target_os = "linux")]
+        let hint = " (install xdg-utils)";
+        #[cfg(not(target_os = "linux"))]
+        let hint = "";
+        format!("open failed{}: {}", hint, e)
+    })?;
     if !status.success() {
         return Err(format!("open failed: exit {:?}", status.code()));
     }
@@ -77,8 +75,21 @@ pub fn open(input: &Value) -> Result<Value, String> {
 /// The scheme blocklist for v1.3 url.scheme.open: schemes that can read the local disk / execute scripts / escalate privileges,
 /// and browser-internal schemes are never opened. http(s) is not accepted either — that belongs to browser.open.
 const BLOCKED_SCHEMES: &[&str] = &[
-    "file", "javascript", "data", "vbscript", "about", "blob", "view-source", "jar",
-    "ws", "wss", "chrome", "chromium", "chrome-extension", "moz-extension", "intent",
+    "file",
+    "javascript",
+    "data",
+    "vbscript",
+    "about",
+    "blob",
+    "view-source",
+    "jar",
+    "ws",
+    "wss",
+    "chrome",
+    "chromium",
+    "chrome-extension",
+    "moz-extension",
+    "intent",
 ];
 
 /// scheme URL validation (pure function): the scheme syntax is valid (starts with a letter, alphanumeric +.-,
@@ -122,15 +133,13 @@ pub fn open_scheme(input: &Value) -> Result<Value, String> {
         return Err("invalid input: url (string) required".into());
     };
     validate_scheme_url(url)?;
-    let status = open_command(url)
-        .status()
-        .map_err(|e| {
-            #[cfg(target_os = "linux")]
-            let hint = " (install xdg-utils)";
-            #[cfg(not(target_os = "linux"))]
-            let hint = "";
-            format!("open failed{}: {}", hint, e)
-        })?;
+    let status = open_command(url).status().map_err(|e| {
+        #[cfg(target_os = "linux")]
+        let hint = " (install xdg-utils)";
+        #[cfg(not(target_os = "linux"))]
+        let hint = "";
+        format!("open failed{}: {}", hint, e)
+    })?;
     if !status.success() {
         return Err(format!(
             "open failed: exit {:?} (no handler registered for this scheme?)",
@@ -147,10 +156,7 @@ fn strip_script_style(html: &str) -> String {
     let mut out = String::with_capacity(html.len());
     let mut rest = 0usize; // Position consumed so far (lower and html have equal length, indices interchangeable)
     loop {
-        let (start, end_tag) = match (
-            lower[rest..].find("<script"),
-            lower[rest..].find("<style"),
-        ) {
+        let (start, end_tag) = match (lower[rest..].find("<script"), lower[rest..].find("<style")) {
             (Some(s), None) => (s, "</script>"),
             (None, Some(st)) => (st, "</style>"),
             (Some(s), Some(st)) => {
@@ -201,10 +207,7 @@ fn extract_text(html: &str) -> (String, String, bool) {
         Some(body) => body.text().collect::<Vec<_>>().join(" "),
         None => doc.root_element().text().collect::<Vec<_>>().join(" "),
     };
-    let mut text = raw
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    let mut text = raw.split_whitespace().collect::<Vec<_>>().join(" ");
     let truncated = text.chars().count() > TEXT_CAP;
     if truncated {
         text = text.chars().take(TEXT_CAP).collect();
@@ -318,21 +321,44 @@ mod tests {
     fn validates_scheme_url_allowlist() {
         // A valid registered scheme is allowed, returning the lowercased scheme
         assert_eq!(validate_scheme_url("mailto:a@b.c").unwrap(), "mailto");
-        assert_eq!(validate_scheme_url("zoommtg://join?conf=1").unwrap(), "zoommtg");
+        assert_eq!(
+            validate_scheme_url("zoommtg://join?conf=1").unwrap(),
+            "zoommtg"
+        );
         assert_eq!(validate_scheme_url("MACAPPS:something").unwrap(), "macapps");
         // Blocklist: local disk / scripts / browser-internal
-        for bad in ["file:///etc/passwd", "javascript:alert(1)", "data:text/html,x",
-                    "vbscript:x", "about:blank", "blob:https://x", "view-source:https://x",
-                    "chrome://settings", "moz-extension://abc"] {
-            assert!(validate_scheme_url(bad).is_err(), "{} should be blocked", bad);
+        for bad in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "data:text/html,x",
+            "vbscript:x",
+            "about:blank",
+            "blob:https://x",
+            "view-source:https://x",
+            "chrome://settings",
+            "moz-extension://abc",
+        ] {
+            assert!(
+                validate_scheme_url(bad).is_err(),
+                "{} should be blocked",
+                bad
+            );
         }
         // http(s) belongs to browser.open
-        assert!(validate_scheme_url("https://example.com").unwrap_err().contains("browser.open"));
+        assert!(validate_scheme_url("https://example.com")
+            .unwrap_err()
+            .contains("browser.open"));
         // Syntax: missing colon / single-char scheme / leading digit / over-long scheme
-        assert!(validate_scheme_url("mailto").unwrap_err().contains("scheme:rest"));
+        assert!(validate_scheme_url("mailto")
+            .unwrap_err()
+            .contains("scheme:rest"));
         assert!(validate_scheme_url("a:b").unwrap_err().contains("2..=30"));
-        assert!(validate_scheme_url("1abc:x").unwrap_err().contains("2..=30"));
-        assert!(validate_scheme_url(&format!("{}:x", "s".repeat(31))).unwrap_err().contains("2..=30"));
+        assert!(validate_scheme_url("1abc:x")
+            .unwrap_err()
+            .contains("2..=30"));
+        assert!(validate_scheme_url(&format!("{}:x", "s".repeat(31)))
+            .unwrap_err()
+            .contains("2..=30"));
         // Length / control characters
         assert!(validate_scheme_url(&format!("mailto:{}", "a".repeat(3000))).is_err());
         assert!(validate_scheme_url("mail to:x").is_err());
@@ -355,7 +381,11 @@ mod tests {
     #[test]
     fn read_errors_on_unreachable() {
         let err = read(&json!({ "url": "http://127.0.0.1:1/" })).unwrap_err();
-        assert!(err.contains("unreachable") || err.contains("http error"), "{}", err);
+        assert!(
+            err.contains("unreachable") || err.contains("http error"),
+            "{}",
+            err
+        );
     }
 
     #[cfg(target_os = "macos")]

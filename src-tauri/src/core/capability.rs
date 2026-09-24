@@ -190,7 +190,13 @@ fn touch(capability: &str, plugin_id: &str, elapsed_ms: u128) {
 
 /// Phase 31: failure path recorded separately (result ∈ {err, timeout, denied}, error_kind goes into bucket).
 /// EMA is not updated — a failed latency would meaninglessly pollute avg.
-fn record_failure(capability: &str, plugin_id: &str, elapsed_ms: u128, result: &str, error_kind: &str) {
+fn record_failure(
+    capability: &str,
+    plugin_id: &str,
+    elapsed_ms: u128,
+    result: &str,
+    error_kind: &str,
+) {
     if let Some(store) = super::shared_store() {
         if let Ok(mut s) = store.lock() {
             s.record_capability_call(
@@ -326,9 +332,20 @@ fn digest_from(listed: &Value) -> Option<String> {
         if id.is_empty() {
             continue;
         }
-        let kind = if cap.get("type").and_then(|v| v.as_str()) == Some("subscribe") { "subscribe" } else { "execute" };
-        let providers = cap.get("providers").and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|p| p.as_str()).collect::<Vec<_>>().join(", "))
+        let kind = if cap.get("type").and_then(|v| v.as_str()) == Some("subscribe") {
+            "subscribe"
+        } else {
+            "execute"
+        };
+        let providers = cap
+            .get("providers")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|p| p.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
             .unwrap_or_default();
         let line = format!("\n- {id} — {kind} — providers: {providers}");
         if out.len() + line.len() > MAX_BYTES {
@@ -338,7 +355,10 @@ fn digest_from(listed: &Value) -> Option<String> {
         shown += 1;
     }
     if shown < caps.len() {
-        out.push_str(&format!("\n(+{} more — call opencapx.list_capabilities)", caps.len() - shown));
+        out.push_str(&format!(
+            "\n(+{} more — call opencapx.list_capabilities)",
+            caps.len() - shown
+        ));
     }
     Some(out)
 }
@@ -437,7 +457,9 @@ fn builtin_file_search(input: &Value) -> Result<Value, String> {
     let mut truncated = false;
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for e in entries.flatten() {
             if e.file_name().to_string_lossy().contains(pattern) {
                 if found.len() >= SEARCH_CAP {
@@ -456,7 +478,11 @@ fn builtin_file_search(input: &Value) -> Result<Value, String> {
 }
 
 /// S4 — per-provider call timeout: declared value (seconds, 1..=600) wins, otherwise CALL_TIMEOUT (60s).
-fn call_timeout_for(store: &Option<super::storage::SharedStore>, provider: &str, capability: &str) -> Duration {
+fn call_timeout_for(
+    store: &Option<super::storage::SharedStore>,
+    provider: &str,
+    capability: &str,
+) -> Duration {
     store
         .as_ref()
         .and_then(|st| super::declaration::timeout_for(st, provider, capability))
@@ -538,7 +564,13 @@ pub fn execute(capability: &str, input: &Value, agent: Option<&str>) -> Result<V
                     Ok(out)
                 }
                 Err(e) => {
-                    record_failure(capability, "core", call_start.elapsed().as_millis(), "err", "builtin");
+                    record_failure(
+                        capability,
+                        "core",
+                        call_start.elapsed().as_millis(),
+                        "err",
+                        "builtin",
+                    );
                     bus.publish(&super::event::OpencapxEvent::new(
                         "capability.failed",
                         "core",
@@ -586,7 +618,8 @@ pub fn execute(capability: &str, input: &Value, agent: Option<&str>) -> Result<V
     for pid in &provider_list {
         let permitted = match (&store, permission.as_deref()) {
             (Some(st), Some(perm)) => {
-                super::permission::gate(st, pid, perm, "capability", None) == super::permission::Decision::Granted
+                super::permission::gate(st, pid, perm, "capability", None)
+                    == super::permission::Decision::Granted
             }
             _ => false,
         };
@@ -723,25 +756,51 @@ mod tests {
         assert!(known("context.get_current"));
         assert!(known("system.permission_status"));
         // v1.3 batch
-        for id in ["automation.run", "input.send", "photos.read", "contacts.search",
-                   "calendar.events", "location.get", "audio.play", "url.scheme.open"] {
+        for id in [
+            "automation.run",
+            "input.send",
+            "photos.read",
+            "contacts.search",
+            "calendar.events",
+            "location.get",
+            "audio.play",
+            "url.scheme.open",
+        ] {
             assert!(known(id), "{} missing", id);
         }
         assert!(!known("video.analyze"));
         assert!(known("screen.watch"), "v1.3 second subscribe type");
         // v1.4 first batch
-        for id in ["media.playback", "system.sleep", "system.lock", "system.settings", "printer.print"] {
+        for id in [
+            "media.playback",
+            "system.sleep",
+            "system.lock",
+            "system.settings",
+            "printer.print",
+        ] {
             assert!(known(id), "{} missing", id);
         }
         // v1.4 second batch
         for id in [
-            "messages.recent", "window.list", "window.focus",
-            "notes.read", "reminders.read", "reminders.write", "mail.recent",
+            "messages.recent",
+            "window.list",
+            "window.focus",
+            "notes.read",
+            "reminders.read",
+            "reminders.write",
+            "mail.recent",
         ] {
             assert!(known(id), "{} missing", id);
         }
         // v1.5 Things data surface: registered but with no built-in provider (plugin-only)
-        for id in ["things.add", "things.update", "things.list", "things.show", "things.search", "things.delete"] {
+        for id in [
+            "things.add",
+            "things.update",
+            "things.list",
+            "things.show",
+            "things.search",
+            "things.delete",
+        ] {
             assert!(known(id), "{} missing", id);
         }
     }
@@ -759,10 +818,20 @@ mod tests {
             if SIDE_EFFECT_IDS.contains(&id) {
                 continue;
             }
-            assert!(builtin_dispatch(id, &json!({})).is_some(), "{} not dispatchable", id);
+            assert!(
+                builtin_dispatch(id, &json!({})).is_some(),
+                "{} not dispatchable",
+                id
+            );
         }
-        assert!(builtin_dispatch("image.analyze", &json!({})).is_some(), "A9:image.analyze has a built-in");
-        assert!(builtin_dispatch("screen.capture", &json!({})).is_some(), "A9:screen.capture has a built-in");
+        assert!(
+            builtin_dispatch("image.analyze", &json!({})).is_some(),
+            "A9:image.analyze has a built-in"
+        );
+        assert!(
+            builtin_dispatch("screen.capture", &json!({})).is_some(),
+            "A9:screen.capture has a built-in"
+        );
     }
 
     /// Built-in file.write roundtrip + missing field reports capability_failed (details in the event stream).
@@ -775,9 +844,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("a.txt");
-        let out = execute("file.write", &json!({
-            "path": path.to_str().unwrap(), "content": "hello opencapx"
-        }), None)
+        let out = execute(
+            "file.write",
+            &json!({
+                "path": path.to_str().unwrap(), "content": "hello opencapx"
+            }),
+            None,
+        )
         .unwrap();
         assert_eq!(out["ok"], json!(true));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello opencapx");
@@ -800,30 +873,46 @@ mod tests {
         std::fs::write(dir.join("sub/needle-b.md"), "y").unwrap();
         std::fs::write(dir.join("other.txt"), "z").unwrap();
 
-        let out = execute("file.search", &json!({
-            "root": dir.to_str().unwrap(), "pattern": "needle"
-        }), None)
+        let out = execute(
+            "file.search",
+            &json!({
+                "root": dir.to_str().unwrap(), "pattern": "needle"
+            }),
+            None,
+        )
         .unwrap();
         let m = out["matches"].as_array().unwrap();
         assert_eq!(m.len(), 2, "2 hits: {:?}", m);
-        assert!(m.iter().any(|x| x.as_str().unwrap().contains("needle-a.txt")));
-        assert!(m.iter().any(|x| x.as_str().unwrap().contains("needle-b.md")));
+        assert!(m
+            .iter()
+            .any(|x| x.as_str().unwrap().contains("needle-a.txt")));
+        assert!(m
+            .iter()
+            .any(|x| x.as_str().unwrap().contains("needle-b.md")));
         assert_eq!(out["truncated"], json!(false));
 
         // Cap: 120 hit files → 100 + truncated
         for i in 0..120 {
             std::fs::write(dir.join(format!("needle-{:03}.log", i)), "x").unwrap();
         }
-        let out = execute("file.search", &json!({
-            "root": dir.to_str().unwrap(), "pattern": "needle"
-        }), None)
+        let out = execute(
+            "file.search",
+            &json!({
+                "root": dir.to_str().unwrap(), "pattern": "needle"
+            }),
+            None,
+        )
         .unwrap();
         assert_eq!(out["matches"].as_array().unwrap().len(), SEARCH_CAP);
         assert_eq!(out["truncated"], json!(true));
 
         // root is not a directory → capability_failed
         assert_eq!(
-            execute("file.search", &json!({ "root": dir.join("nope").to_str().unwrap() }), None),
+            execute(
+                "file.search",
+                &json!({ "root": dir.join("nope").to_str().unwrap() }),
+                None
+            ),
             Err("capability_failed".into())
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -837,9 +926,17 @@ mod tests {
         use std::io::Write;
         let _guard = crate::core::TEST_STORE_LOCK.lock().unwrap();
         let saved = std::process::Command::new("pbpaste").output().ok();
-        let out = execute("clipboard.write", &json!({ "text": "opencapx-test-42" }), None).unwrap();
+        let out = execute(
+            "clipboard.write",
+            &json!({ "text": "opencapx-test-42" }),
+            None,
+        )
+        .unwrap();
         assert_eq!(out["ok"], json!(true));
-        let got = std::process::Command::new("pbpaste").output().unwrap().stdout;
+        let got = std::process::Command::new("pbpaste")
+            .output()
+            .unwrap()
+            .stdout;
         assert_eq!(String::from_utf8_lossy(&got), "opencapx-test-42");
         // Restore
         if let Some(s) = saved {
@@ -865,7 +962,12 @@ mod tests {
         let path = dir.join("readme.txt");
         std::fs::write(&path, "café opencapx").unwrap();
 
-        let out = execute("file.read", &json!({ "path": path.to_str().unwrap() }), None).unwrap();
+        let out = execute(
+            "file.read",
+            &json!({ "path": path.to_str().unwrap() }),
+            None,
+        )
+        .unwrap();
         assert_eq!(out["text"], json!("café opencapx"));
 
         // Missing path / nonexistent file → capability_failed
@@ -874,7 +976,11 @@ mod tests {
             Err("capability_failed".into())
         );
         assert_eq!(
-            execute("file.read", &json!({ "path": dir.join("nope.txt").to_str().unwrap() }), None),
+            execute(
+                "file.read",
+                &json!({ "path": dir.join("nope.txt").to_str().unwrap() }),
+                None
+            ),
             Err("capability_failed".into())
         );
 
@@ -899,7 +1005,12 @@ mod tests {
             let _g = crate::core::clipboard::clipboard_lock_guard();
             arboard::Clipboard::new().and_then(|mut c| c.get_text())
         };
-        execute("clipboard.write", &json!({ "text": "opencapx-read-42" }), None).unwrap();
+        execute(
+            "clipboard.write",
+            &json!({ "text": "opencapx-read-42" }),
+            None,
+        )
+        .unwrap();
         let out = execute("clipboard.read", &json!({}), None).unwrap();
         assert_eq!(out["text"], json!("opencapx-read-42"));
         if let Ok(t) = saved {

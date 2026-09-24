@@ -18,13 +18,14 @@ pub fn find_missing(
 ) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for (id, req_str) in raw {
-        let satisfied = semver::VersionReq::parse(req_str)
-            .ok()
-            .is_some_and(|req| {
-                installed.iter().find(|(iid, _)| iid == id).is_some_and(|(_, ver)| {
+        let satisfied = semver::VersionReq::parse(req_str).ok().is_some_and(|req| {
+            installed
+                .iter()
+                .find(|(iid, _)| iid == id)
+                .is_some_and(|(_, ver)| {
                     super::marketplace::parse_version_lenient(ver).is_some_and(|v| req.matches(&v))
                 })
-            });
+        });
         if !satisfied {
             out.push((id.clone(), req_str.clone()));
         }
@@ -85,7 +86,10 @@ mod tests {
     use std::collections::BTreeMap;
 
     fn deps(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]
@@ -100,14 +104,17 @@ mod tests {
         let d = deps(&[("com.x.b", ">=1.2.0"), ("com.x.c", "^0.9")]);
         let installed = vec![
             ("com.x.b".to_string(), "1.1.0".to_string()), // below the lower bound
-            // com.x.c not installed
+                                                          // com.x.c not installed
         ];
         let mut missing = find_missing(&d, &installed);
         missing.sort();
-        assert_eq!(missing, vec![
-            ("com.x.b".to_string(), ">=1.2.0".to_string()),
-            ("com.x.c".to_string(), "^0.9".to_string()),
-        ]);
+        assert_eq!(
+            missing,
+            vec![
+                ("com.x.b".to_string(), ">=1.2.0".to_string()),
+                ("com.x.c".to_string(), "^0.9".to_string()),
+            ]
+        );
     }
 
     /// The reported text must be the original manifest string, not the semver-normalized form ("1.2" must not become "^1.2").
@@ -149,7 +156,10 @@ mod tests {
     fn cycle_none_for_forest_and_for_deep_chain() {
         let new_deps = parse_deps(&deps(&[("com.x.b", ">=1.0.0")]));
         let installed = vec![
-            ("com.x.b".to_string(), parse_deps(&deps(&[("com.x.c", "^1.0")]))),
+            (
+                "com.x.b".to_string(),
+                parse_deps(&deps(&[("com.x.c", "^1.0")])),
+            ),
             ("com.x.c".to_string(), BTreeMap::new()),
         ];
         assert!(would_create_cycle("com.x.a", &new_deps, &installed).is_none());
@@ -160,8 +170,14 @@ mod tests {
     fn cycle_terminates_on_preexisting_installed_cycle() {
         let new_deps = parse_deps(&deps(&[("com.x.b", ">=1.0.0")]));
         let installed = vec![
-            ("com.x.b".to_string(), parse_deps(&deps(&[("com.x.c", "^1.0")]))),
-            ("com.x.c".to_string(), parse_deps(&deps(&[("com.x.b", "^1.0")]))),
+            (
+                "com.x.b".to_string(),
+                parse_deps(&deps(&[("com.x.c", "^1.0")])),
+            ),
+            (
+                "com.x.c".to_string(),
+                parse_deps(&deps(&[("com.x.b", "^1.0")])),
+            ),
         ];
         assert!(would_create_cycle("com.x.a", &new_deps, &installed).is_none());
     }

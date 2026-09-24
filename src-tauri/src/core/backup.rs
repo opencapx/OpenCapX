@@ -37,11 +37,11 @@ pub struct BackupSnapshot {
     pub version: String,
     pub created_at: u64,
     pub app_version: String,
-/// Table name → rows (each row is a vector of columns, one-to-one with storage).
+    /// Table name → rows (each row is a vector of columns, one-to-one with storage).
     pub tables: HashMap<String, Vec<Vec<serde_json::Value>>>,
-/// plugin id → config JSON content (empty / missing ones are not added to the HashMap).
+    /// plugin id → config JSON content (empty / missing ones are not added to the HashMap).
     pub plugin_configs: HashMap<String, serde_json::Value>,
-/// Hotkey bindings (the contents of hotkeys.json; old snapshots lack this field → empty, ignored on restore).
+    /// Hotkey bindings (the contents of hotkeys.json; old snapshots lack this field → empty, ignored on restore).
     #[serde(default)]
     pub hotkeys: Vec<super::hotkey::HotkeyBinding>,
 }
@@ -53,7 +53,7 @@ pub struct BackupMeta {
     pub created_at: u64,
     pub size_bytes: u64,
     pub app_version: String,
-/// Row counts per category (lets the UI show things like "N plugins · M hotkeys").
+    /// Row counts per category (lets the UI show things like "N plugins · M hotkeys").
     pub table_counts: HashMap<String, usize>,
     pub plugin_config_count: usize,
 }
@@ -119,10 +119,7 @@ const BACKUP_TABLES: &[&str] = &[
     "settings_kv",
 ];
 
-pub fn take_snapshot(
-    store: &super::storage::Storage,
-    plugin_config_dir: &Path,
-) -> BackupSnapshot {
+pub fn take_snapshot(store: &super::storage::Storage, plugin_config_dir: &Path) -> BackupSnapshot {
     let mut tables = HashMap::new();
     for t in BACKUP_TABLES {
         match dump_table(store, t) {
@@ -163,7 +160,8 @@ fn read_plugin_configs(dir: &Path) -> HashMap<String, serde_json::Value> {
             continue;
         };
         if let Ok(s) = std::fs::read_to_string(&path) {
-            let val: serde_json::Value = serde_json::from_str(&s).unwrap_or(serde_json::Value::Null);
+            let val: serde_json::Value =
+                serde_json::from_str(&s).unwrap_or(serde_json::Value::Null);
             out.insert(id.to_string(), val);
         }
     }
@@ -194,7 +192,10 @@ fn apply_table(
     if ncols == 0 {
         return Ok(0);
     }
-    let placeholders = (1..=ncols).map(|i| format!("?{}", i)).collect::<Vec<_>>().join(",");
+    let placeholders = (1..=ncols)
+        .map(|i| format!("?{}", i))
+        .collect::<Vec<_>>()
+        .join(",");
     let sql = format!("INSERT INTO {} VALUES ({})", table, placeholders);
     let mut count = 0;
     for row in rows {
@@ -209,8 +210,12 @@ fn apply_table(
         let params: Vec<Box<dyn rusqlite::ToSql>> = row
             .iter()
             .map(|v| match v {
-                serde_json::Value::Null => Box::new(rusqlite::types::Value::Null) as Box<dyn rusqlite::ToSql>,
-                serde_json::Value::Bool(b) => Box::new(if *b { 1i64 } else { 0i64 }) as Box<dyn rusqlite::ToSql>,
+                serde_json::Value::Null => {
+                    Box::new(rusqlite::types::Value::Null) as Box<dyn rusqlite::ToSql>
+                }
+                serde_json::Value::Bool(b) => {
+                    Box::new(if *b { 1i64 } else { 0i64 }) as Box<dyn rusqlite::ToSql>
+                }
                 serde_json::Value::Number(n) => {
                     if let Some(i) = n.as_i64() {
                         Box::new(i) as Box<dyn rusqlite::ToSql>
@@ -272,7 +277,13 @@ pub fn apply_snapshot(
 
 fn sanitize_filename(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -420,7 +431,7 @@ mod tests {
             cfgdir.join("plug-x.json"),
             r#"{"theme": "dark", "limit": 5}"#,
         )
-            .unwrap();
+        .unwrap();
 
         let snap = take_snapshot(&db, &cfgdir);
         assert_eq!(snap.tables.get("plugin_channel").unwrap().len(), 1);
@@ -439,7 +450,14 @@ mod tests {
 
         // restore
         let report = apply_snapshot(&mut db, &snap, &cfgdir).unwrap();
-        assert_eq!(report.table_counts.get("plugin_channel").copied().unwrap_or(0), 1);
+        assert_eq!(
+            report
+                .table_counts
+                .get("plugin_channel")
+                .copied()
+                .unwrap_or(0),
+            1
+        );
         assert_eq!(report.plugin_config_count, 1);
         // channel in the DB should be beta
         let got: String = db
@@ -466,7 +484,9 @@ mod tests {
         // OPENCAPX_BACKUPS_DIR is process-level env, and path_traversal_rejected also set/removes it;
         // run in parallel, it can be removed between create and list → lists the default directory → assertion fails. Hold the lock to serialize
         // (TEST_STORE_LOCK is this suite's agreed mutex for "process-level global state").
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         std::env::set_var("OPENCAPX_BACKUPS_DIR", &cfgdir);
         // A backup can be created with no data
         let meta = create_backup(&db, &cfgdir).unwrap();
@@ -485,7 +505,9 @@ mod tests {
 
     #[test]
     fn path_traversal_rejected() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         std::env::set_var("OPENCAPX_BACKUPS_DIR", "/tmp/opencapx-bk-test-only");
         assert!(delete_backup("../etc/passwd").is_err());
         std::env::remove_var("OPENCAPX_BACKUPS_DIR");

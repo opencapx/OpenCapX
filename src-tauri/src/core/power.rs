@@ -30,7 +30,10 @@ fn run(cmd: std::process::Command, doing: &str) -> Result<Value, String> {
             "{} exited {:?}: {}",
             doing,
             out.status.code(),
-            String::from_utf8_lossy(&out.stderr).chars().take(200).collect::<String>()
+            String::from_utf8_lossy(&out.stderr)
+                .chars()
+                .take(200)
+                .collect::<String>()
         ));
     }
     Ok(json!({ "ok": true }))

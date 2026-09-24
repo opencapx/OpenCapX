@@ -13,7 +13,7 @@
 //! - Trigger throttling: the same rule does not re-fire within 5s (mass Downloads writes do not flood)
 //! - Each trigger publishes an `automation.rule_fired` event (into the Timeline, auditable)
 
-use crate::core::event::{OpencapxEvent, EventBus};
+use crate::core::event::{EventBus, OpencapxEvent};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -82,16 +82,31 @@ pub fn validate_rule(when: &Value, then: &Value) -> Result<Value, String> {
     let action = then.get("action").and_then(|a| a.as_str()).unwrap_or("");
     match action {
         "notify" => {
-            if then.get("body").and_then(|b| b.as_str()).unwrap_or("").is_empty() {
+            if then
+                .get("body")
+                .and_then(|b| b.as_str())
+                .unwrap_or("")
+                .is_empty()
+            {
                 return Err("then.body is required for notify".into());
             }
         }
         "say" => {
-            if then.get("text").and_then(|t| t.as_str()).unwrap_or("").is_empty() {
+            if then
+                .get("text")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .is_empty()
+            {
                 return Err("then.text is required for say".into());
             }
         }
-        other => return Err(format!("unknown then.action: {} (allowed: notify, say)", other)),
+        other => {
+            return Err(format!(
+                "unknown then.action: {} (allowed: notify, say)",
+                other
+            ))
+        }
     }
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -221,30 +236,54 @@ pub fn start(handle: tauri::AppHandle, bus: Arc<EventBus>) {
                 if rule.get("enabled").and_then(|e| e.as_bool()) == Some(false) {
                     continue;
                 }
-                let Some(when) = rule.get("when") else { continue };
+                let Some(when) = rule.get("when") else {
+                    continue;
+                };
                 if !matches(when, &ev) {
                     continue;
                 }
-                let Some(id) = rule.get("id").and_then(|i| i.as_str()) else { continue };
+                let Some(id) = rule.get("id").and_then(|i| i.as_str()) else {
+                    continue;
+                };
                 if !cooled_down(id) {
                     continue;
                 }
-                fire(&handle, &bus, id, rule.get("then").cloned().unwrap_or(Value::Null), &ev);
+                fire(
+                    &handle,
+                    &bus,
+                    id,
+                    rule.get("then").cloned().unwrap_or(Value::Null),
+                    &ev,
+                );
             }
         }
     });
 }
 
 /// Execute the action + record an audit event. Actions are only Core's native low-risk surface (notify/say).
-fn fire(handle: &tauri::AppHandle, bus: &Arc<EventBus>, rule_id: &str, then: Value, ev: &OpencapxEvent) {
+fn fire(
+    handle: &tauri::AppHandle,
+    bus: &Arc<EventBus>,
+    rule_id: &str,
+    then: Value,
+    ev: &OpencapxEvent,
+) {
     use tauri::Emitter;
     use tauri_plugin_notification::NotificationExt;
     let action = then.get("action").and_then(|a| a.as_str()).unwrap_or("");
     match action {
         "notify" => {
-            let title = then.get("title").and_then(|t| t.as_str()).unwrap_or("OpenCapX Automation");
+            let title = then
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or("OpenCapX Automation");
             let body = then.get("body").and_then(|b| b.as_str()).unwrap_or("");
-            let _ = handle.notification().builder().title(title).body(body).show();
+            let _ = handle
+                .notification()
+                .builder()
+                .title(title)
+                .body(body)
+                .show();
             bus.publish(&OpencapxEvent::new(
                 "notification.posted",
                 "automation",
@@ -253,7 +292,11 @@ fn fire(handle: &tauri::AppHandle, bus: &Arc<EventBus>, rule_id: &str, then: Val
         }
         "say" => {
             let text = then.get("text").and_then(|t| t.as_str()).unwrap_or("");
-            bus.publish(&OpencapxEvent::new("pet.say", "automation", json!({ "text": text })));
+            bus.publish(&OpencapxEvent::new(
+                "pet.say",
+                "automation",
+                json!({ "text": text }),
+            ));
             let _ = handle.emit("opencapx-say", json!({ "text": text }));
         }
         _ => {
@@ -280,7 +323,10 @@ fn fire(handle: &tauri::AppHandle, bus: &Arc<EventBus>, rule_id: &str, then: Val
 /// CLI (`opencapx automation …`) entry: users manage rules without depending on MCP/UI.
 /// `opencapx automation` — clap owns the parsing and the generated help.
 #[derive(clap::Parser)]
-#[command(name = "opencapx automation", about = "Automation rules: list, add and remove")]
+#[command(
+    name = "opencapx automation",
+    about = "Automation rules: list, add and remove"
+)]
 struct AutomationCli {
     #[command(subcommand)]
     cmd: AutomationCmd,
@@ -304,7 +350,10 @@ pub fn run_cli(args: &[String]) -> i32 {
     match cli.cmd {
         AutomationCmd::List => {
             let rules = load_rules();
-            println!("{}", serde_json::to_string_pretty(&json!({ "rules": rules })).unwrap());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({ "rules": rules })).unwrap()
+            );
             0
         }
         AutomationCmd::Add { spec } => {
@@ -365,14 +414,23 @@ mod tests {
             &json!({"event": "capability.event", "match": {"capability": "file.watch", "event": "created"}}),
             &e
         ));
-        assert!(!matches(&json!({"event": "capability.event", "match": {"event": "modified"}}), &e));
+        assert!(!matches(
+            &json!({"event": "capability.event", "match": {"event": "modified"}}),
+            &e
+        ));
         // Missing field = no match
-        assert!(!matches(&json!({"event": "capability.event", "match": {"nope": 1}}), &e));
+        assert!(!matches(
+            &json!({"event": "capability.event", "match": {"nope": 1}}),
+            &e
+        ));
     }
 
     #[test]
     fn match_contains_for_paths() {
-        let e = ev("capability.event", json!({ "capability": "file.watch", "path": "/Users/x/Downloads/new.pdf" }));
+        let e = ev(
+            "capability.event",
+            json!({ "capability": "file.watch", "path": "/Users/x/Downloads/new.pdf" }),
+        );
         // i2 §15 example: a new file lands in ~/Downloads
         assert!(matches(
             &json!({"event": "capability.event", "match": {"path_contains": "/Downloads/"}}),
@@ -383,7 +441,10 @@ mod tests {
             &e
         ));
         // contains on a non-string field = no match, no panic
-        assert!(!matches(&json!({"event": "capability.event", "match": {"path_contains": 5}}), &e));
+        assert!(!matches(
+            &json!({"event": "capability.event", "match": {"path_contains": 5}}),
+            &e
+        ));
     }
 
     #[test]
@@ -396,10 +457,26 @@ mod tests {
         assert!(ok["id"].as_str().unwrap().starts_with("rule-"));
         assert_eq!(ok["enabled"], json!(true));
         // Missing event / unknown action / action missing body
-        assert!(validate_rule(&json!({}), &json!({"action": "notify", "body": "x"})).unwrap_err().contains("when.event"));
-        assert!(validate_rule(&json!({"event": "x"}), &json!({"action": "shell"})).unwrap_err().contains("unknown then.action"));
-        assert!(validate_rule(&json!({"event": "x"}), &json!({"action": "notify"})).unwrap_err().contains("body"));
-        assert!(validate_rule(&json!({"event": "x"}), &json!({"action": "say"})).unwrap_err().contains("text"));
+        assert!(
+            validate_rule(&json!({}), &json!({"action": "notify", "body": "x"}))
+                .unwrap_err()
+                .contains("when.event")
+        );
+        assert!(
+            validate_rule(&json!({"event": "x"}), &json!({"action": "shell"}))
+                .unwrap_err()
+                .contains("unknown then.action")
+        );
+        assert!(
+            validate_rule(&json!({"event": "x"}), &json!({"action": "notify"}))
+                .unwrap_err()
+                .contains("body")
+        );
+        assert!(
+            validate_rule(&json!({"event": "x"}), &json!({"action": "say"}))
+                .unwrap_err()
+                .contains("text")
+        );
     }
 
     /// Toggle: a hit sets enabled and is returned; a missing id returns None.
@@ -409,7 +486,10 @@ mod tests {
             "id": "r1", "enabled": true,
             "when": {"event": "x"}, "then": {"action": "say", "text": "y"}
         })];
-        assert_eq!(set_enabled_in(&mut rules, "r1", false).unwrap()["enabled"], json!(false));
+        assert_eq!(
+            set_enabled_in(&mut rules, "r1", false).unwrap()["enabled"],
+            json!(false)
+        );
         assert_eq!(rules[0]["enabled"], json!(false));
         assert!(set_enabled_in(&mut rules, "nope", true).is_none());
     }

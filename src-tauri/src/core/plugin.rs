@@ -50,7 +50,11 @@ pub struct Manifest {
     #[serde(default)]
     pub alerting: Option<super::alerting::AlertingManifest>,
     /// F4 — semantic version floor: install/start only when core_version >= minCoreVersion.
-    #[serde(rename = "minCoreVersion", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "minCoreVersion",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub min_core_version: Option<String>,
     /// F5 — inter-plugin dependencies: pluginId -> semver VersionReq.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -154,7 +158,10 @@ impl LocalizedText {
 #[serde(untagged)]
 pub enum SettingOption {
     Value(String),
-    Item { value: String, label: Option<LocalizedText> },
+    Item {
+        value: String,
+        label: Option<LocalizedText>,
+    },
 }
 
 impl SettingOption {
@@ -352,7 +359,10 @@ impl ValidateRule {
     fn legal_on(&self, stype: &str) -> bool {
         match self.type_name() {
             Some("required") => {
-                matches!(stype, "text" | "textarea" | "secret" | "path" | "number" | "color")
+                matches!(
+                    stype,
+                    "text" | "textarea" | "secret" | "path" | "number" | "color"
+                )
             }
             Some("minLength" | "maxLength") => {
                 matches!(stype, "text" | "textarea" | "secret" | "path")
@@ -372,8 +382,15 @@ fn validate_localized_text(
     owner: &str,
     max_chars: Option<usize>,
 ) -> Result<(), String> {
-    fn check_length(value: &str, owner: &str, locale: Option<&str>, max: Option<usize>) -> Result<(), String> {
-        let Some(max) = max else { return Ok(()); };
+    fn check_length(
+        value: &str,
+        owner: &str,
+        locale: Option<&str>,
+        max: Option<usize>,
+    ) -> Result<(), String> {
+        let Some(max) = max else {
+            return Ok(());
+        };
         let trimmed = value.trim();
         if trimmed.is_empty() {
             return Err(format!("{} must not be blank", owner));
@@ -428,15 +445,11 @@ fn rule_passes(rule: &ValidateRule, value: &serde_json::Value) -> bool {
         ValidateRule::MaxLength { value: max, .. } => value
             .as_str()
             .map_or(true, |s| s.chars().count() <= num_f64(max) as usize),
-        ValidateRule::Min { value: min, .. } => value
-            .as_f64()
-            .map_or(true, |n| n >= num_f64(min)),
-        ValidateRule::Max { value: max, .. } => value
-            .as_f64()
-            .map_or(true, |n| n <= num_f64(max)),
-        ValidateRule::Pattern { regex: re, .. } => value
-            .as_str()
-            .map_or(true, |s| regex::Regex::new(re).map_or(true, |r| r.is_match(s))),
+        ValidateRule::Min { value: min, .. } => value.as_f64().map_or(true, |n| n >= num_f64(min)),
+        ValidateRule::Max { value: max, .. } => value.as_f64().map_or(true, |n| n <= num_f64(max)),
+        ValidateRule::Pattern { regex: re, .. } => value.as_str().map_or(true, |s| {
+            regex::Regex::new(re).map_or(true, |r| r.is_match(s))
+        }),
         ValidateRule::Unknown => true,
     }
 }
@@ -519,9 +532,13 @@ fn validate_cond(
 ) -> Result<(), String> {
     match cond {
         Cond::Unknown => Err(format!("{}: unknown predicate op", owner)),
-        Cond::Equals { key, value } => {
-            validate_cond_key(owner, key, "equals", Some(std::slice::from_ref(value)), decls)
-        }
+        Cond::Equals { key, value } => validate_cond_key(
+            owner,
+            key,
+            "equals",
+            Some(std::slice::from_ref(value)),
+            decls,
+        ),
         Cond::NotEquals { key, value } => validate_cond_key(
             owner,
             key,
@@ -584,7 +601,10 @@ pub struct SandboxFs {
 pub(crate) fn validate_sandbox(s: &SandboxDecl) -> Result<(), String> {
     if let Some(net) = &s.network {
         if net != "none" && net != "out" {
-            return Err(format!("invalid sandbox.network {:?} (expect none|out)", net));
+            return Err(format!(
+                "invalid sandbox.network {:?} (expect none|out)",
+                net
+            ));
         }
     }
     if let Some(fs) = &s.fs {
@@ -603,7 +623,10 @@ pub(crate) fn validate_sandbox(s: &SandboxDecl) -> Result<(), String> {
 impl Manifest {
     /// List of declared capability IDs (string form + object form; the latter has no duplicates).
     pub fn capability_ids(&self) -> Vec<String> {
-        self.capabilities.iter().map(|c| c.id().to_string()).collect()
+        self.capabilities
+            .iter()
+            .map(|c| c.id().to_string())
+            .collect()
     }
 
     /// Object-form declarations → (capability, permission, default), used by the commit phase to write the declaration table.
@@ -684,7 +707,11 @@ pub struct PluginStatusDto {
     #[serde(rename = "healthEnabled", skip_serializing_if = "Option::is_none")]
     pub health_enabled: Option<bool>,
     /// F5 — unmet plugin dependencies (used for the settings-page warning).
-    #[serde(rename = "missingDependencies", default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        rename = "missingDependencies",
+        default,
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub missing_dependencies: Vec<MissingDepDto>,
     /// M4 — revocation hit: the publisher key is in the registry revokedKeys (settings-page banner + reopen button).
     #[serde(rename = "revokedKey", skip_serializing_if = "Option::is_none")]
@@ -881,7 +908,11 @@ pub fn set_allow_unsigned(on: bool) -> Result<(), String> {
 /// S1 — environment isolation switch (default on; `plugin_env_isolation=false` falls back to inheriting the host env).
 pub fn env_isolation_enabled() -> bool {
     super::shared_store()
-        .and_then(|s| s.lock().ok().and_then(|g| g.get_setting("plugin_env_isolation")))
+        .and_then(|s| {
+            s.lock()
+                .ok()
+                .and_then(|g| g.get_setting("plugin_env_isolation"))
+        })
         .map(|v| v != "0")
         .unwrap_or(true)
 }
@@ -889,7 +920,11 @@ pub fn env_isolation_enabled() -> bool {
 /// S1 — incremental plugin environment allowlist (comma-separated; empty = minimal allowlist only).
 pub fn env_allowlist() -> Vec<String> {
     super::shared_store()
-        .and_then(|s| s.lock().ok().and_then(|g| g.get_setting("plugin_env_allowlist")))
+        .and_then(|s| {
+            s.lock()
+                .ok()
+                .and_then(|g| g.get_setting("plugin_env_allowlist"))
+        })
         .map(|v| {
             v.split(',')
                 .map(|x| x.trim().to_string())
@@ -902,7 +937,11 @@ pub fn env_allowlist() -> Vec<String> {
 /// S5b — sandbox enforcement switch (default false: H1 soaks first; trusted declaring plugins follow the switch, untrusted declaring plugins are forced).
 pub fn sandbox_enforcement_enabled() -> bool {
     super::shared_store()
-        .and_then(|s| s.lock().ok().and_then(|g| g.get_setting("sandbox_enforcement")))
+        .and_then(|s| {
+            s.lock()
+                .ok()
+                .and_then(|g| g.get_setting("sandbox_enforcement"))
+        })
         .map(|v| v == "1")
         .unwrap_or(false)
 }
@@ -936,7 +975,10 @@ struct Watchdog {
 
 impl Watchdog {
     fn new(cfg: super::health::PluginHealthConfig) -> Self {
-        Self { enabled: cfg.enabled, cfg }
+        Self {
+            enabled: cfg.enabled,
+            cfg,
+        }
     }
 }
 
@@ -991,484 +1033,520 @@ impl PluginManager {
     }
 
     /// P0 hotfix (docs/permission-domains.md §7): plugin id lexical validation.
-/// Previously `install_ocplugin` did `root.join(&m.id)` directly and, for an existing target,
-/// `remove_dir_all` — a manifest id of `../..` could traverse and delete an arbitrary directory.
-/// Rules: charset [a-z0-9.-], non-empty, length ≤ 128, forbids ".." and leading/trailing dots.
-/// Whitespace / non-ASCII / slashes are naturally excluded by the charset. Old single-segment hyphen ids are compatible.
-fn valid_plugin_id(id: &str) -> bool {
-    !id.is_empty()
-        && id.len() <= 128
-        && id
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-')
-        && !id.starts_with('.')
-        && !id.ends_with('.')
-        && !id.contains("..")
-}
+    /// Previously `install_ocplugin` did `root.join(&m.id)` directly and, for an existing target,
+    /// `remove_dir_all` — a manifest id of `../..` could traverse and delete an arbitrary directory.
+    /// Rules: charset [a-z0-9.-], non-empty, length ≤ 128, forbids ".." and leading/trailing dots.
+    /// Whitespace / non-ASCII / slashes are naturally excluded by the charset. Old single-segment hyphen ids are compatible.
+    fn valid_plugin_id(id: &str) -> bool {
+        !id.is_empty()
+            && id.len() <= 128
+            && id
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-')
+            && !id.starts_with('.')
+            && !id.ends_with('.')
+            && !id.contains("..")
+    }
 
-pub(crate) fn validate_manifest(m: &Manifest) -> Result<(), String> {
-    if !Self::valid_plugin_id(&m.id) {
-        return Err(format!(
+    pub(crate) fn validate_manifest(m: &Manifest) -> Result<(), String> {
+        if !Self::valid_plugin_id(&m.id) {
+            return Err(format!(
             "invalid plugin id {:?}: charset [a-z0-9.-], no \"..\", no leading/trailing dot, max 128 chars",
             m.id
         ));
-    }
-    if m.api_version != API_VERSION {
-        return Err(format!(
-            "unsupported apiVersion {} (core expects {})",
-            m.api_version, API_VERSION
-        ));
-    }
-    if !matches!(m.ptype.as_str(), "pet" | "capability") {
-        return Err(format!("unsupported type {} (v1: pet | capability)", m.ptype));
-    }
+        }
+        if m.api_version != API_VERSION {
+            return Err(format!(
+                "unsupported apiVersion {} (core expects {})",
+                m.api_version, API_VERSION
+            ));
+        }
+        if !matches!(m.ptype.as_str(), "pet" | "capability") {
+            return Err(format!(
+                "unsupported type {} (v1: pet | capability)",
+                m.ptype
+            ));
+        }
 
-    // §4.4 step 1 bootstrapping order: capability validation branches by form —
-    // - string form: must still be a **built-in** capability (the declaration is not yet persisted, so `known()` must not be trusted)
-    // - object form: valid lexically + non-reserved domain is enough to pass (the declaration itself is frozen in the commit phase)
-    if m.ptype == "capability" {
-        if m.runtime.is_none() {
-            return Err("capability plugin requires runtime".into());
-        }
-        if m.capabilities.is_empty() {
-            return Err("capability plugin requires capabilities[]".into());
-        }
-        for c in &m.capabilities {
-            let id = c.id();
-            match c.mapping() {
-                None => {
-                    // built-in capability names are exempt from the lexical rule (Core's own word list; additions must sync docs/capability.md)
-                    if !super::capability::is_builtin(id) {
-                        return Err(format!(
+        // §4.4 step 1 bootstrapping order: capability validation branches by form —
+        // - string form: must still be a **built-in** capability (the declaration is not yet persisted, so `known()` must not be trusted)
+        // - object form: valid lexically + non-reserved domain is enough to pass (the declaration itself is frozen in the commit phase)
+        if m.ptype == "capability" {
+            if m.runtime.is_none() {
+                return Err("capability plugin requires runtime".into());
+            }
+            if m.capabilities.is_empty() {
+                return Err("capability plugin requires capabilities[]".into());
+            }
+            for c in &m.capabilities {
+                let id = c.id();
+                match c.mapping() {
+                    None => {
+                        // built-in capability names are exempt from the lexical rule (Core's own word list; additions must sync docs/capability.md)
+                        if !super::capability::is_builtin(id) {
+                            return Err(format!(
                             "unknown capability {} (not in v1 registry; new-domain capabilities must be declared in object form)",
                             id
                         ));
+                        }
                     }
-                }
-                Some((perm, default)) => {
-                    // Only the declaration surface is lexically constrained (§4.2): new names supplied by plugins are validated byte-exact
-                    if !super::permission::valid_name(id) {
-                        return Err(format!(
+                    Some((perm, default)) => {
+                        // Only the declaration surface is lexically constrained (§4.2): new names supplied by plugins are validated byte-exact
+                        if !super::permission::valid_name(id) {
+                            return Err(format!(
                             "invalid capability name {:?}: ^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+$, <=64 chars",
                             id
                         ));
-                    }
-                    // Reserved IDs may only be providers in string form (§4.2 reserved-domain closure)
-                    if super::capability::is_builtin(id) || super::permission::reserved_capability(id)
-                    {
-                        return Err(format!(
+                        }
+                        // Reserved IDs may only be providers in string form (§4.2 reserved-domain closure)
+                        if super::capability::is_builtin(id)
+                            || super::permission::reserved_capability(id)
+                        {
+                            return Err(format!(
                             "reserved capability {} cannot be declared in object form (use the string form)",
                             id
                         ));
-                    }
-                    if super::permission::reserved_domain(super::permission::first_segment(id)) {
-                        return Err(format!("capability {} is in a reserved domain", id));
-                    }
-                    if !super::permission::valid_name(perm) {
-                        return Err(format!("invalid permission name {:?}", perm));
-                    }
-                    // Declarations must not reference reserved permission names (including their granted default, to prevent self-granting via defaults)
-                    if super::permission::reserved_domain(super::permission::first_segment(perm)) {
-                        return Err(format!(
-                            "declaration may not reference reserved permission {}",
-                            perm
-                        ));
-                    }
-                    if super::permission::first_segment(perm) != super::permission::first_segment(id) {
-                        return Err(format!(
-                            "capability {} and permission {} must share a domain",
-                            id, perm
-                        ));
-                    }
-                    if !matches!(default, "ask" | "denied") {
-                        return Err(format!(
-                            "declaration default must be ask|denied, got {:?}",
-                            default
-                        ));
-                    }
-                    // S4 — call timeout bounds (object form only; default = CALL_TIMEOUT 60s)
-                    if let CapabilityDecl::Mapping {
-                        timeout_secs: Some(t),
-                        ..
-                    } = c
-                    {
-                        if !(1..=600).contains(t) {
+                        }
+                        if super::permission::reserved_domain(super::permission::first_segment(id))
+                        {
+                            return Err(format!("capability {} is in a reserved domain", id));
+                        }
+                        if !super::permission::valid_name(perm) {
+                            return Err(format!("invalid permission name {:?}", perm));
+                        }
+                        // Declarations must not reference reserved permission names (including their granted default, to prevent self-granting via defaults)
+                        if super::permission::reserved_domain(super::permission::first_segment(
+                            perm,
+                        )) {
                             return Err(format!(
-                                "timeoutSecs {} out of range for {} (expect 1..=600)",
-                                t, id
+                                "declaration may not reference reserved permission {}",
+                                perm
                             ));
+                        }
+                        if super::permission::first_segment(perm)
+                            != super::permission::first_segment(id)
+                        {
+                            return Err(format!(
+                                "capability {} and permission {} must share a domain",
+                                id, perm
+                            ));
+                        }
+                        if !matches!(default, "ask" | "denied") {
+                            return Err(format!(
+                                "declaration default must be ask|denied, got {:?}",
+                                default
+                            ));
+                        }
+                        // S4 — call timeout bounds (object form only; default = CALL_TIMEOUT 60s)
+                        if let CapabilityDecl::Mapping {
+                            timeout_secs: Some(t),
+                            ..
+                        } = c
+                        {
+                            if !(1..=600).contains(t) {
+                                return Err(format!(
+                                    "timeoutSecs {} out of range for {} (expect 1..=600)",
+                                    t, id
+                                ));
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
-    // Permission table: built-in names as before (lexical exemption — single-segment names like `camera` / `microphone` are
-    // Core's existing word list, so tightening the lexical rule does not change the built-in list); new domain names must be given by the object form of this list
-    // declaration (and must not dangle).
-    let declared_perms = m.declared_permission_names();
-    for p in &m.permissions {
-        if super::permission::known(p) {
-            continue;
-        }
-        if !super::permission::valid_name(p) {
-            return Err(format!("invalid permission name {:?}", p));
-        }
-        if declared_perms.iter().any(|d| d == p) {
-            continue;
-        }
-        return Err(format!(
+        // Permission table: built-in names as before (lexical exemption — single-segment names like `camera` / `microphone` are
+        // Core's existing word list, so tightening the lexical rule does not change the built-in list); new domain names must be given by the object form of this list
+        // declaration (and must not dangle).
+        let declared_perms = m.declared_permission_names();
+        for p in &m.permissions {
+            if super::permission::known(p) {
+                continue;
+            }
+            if !super::permission::valid_name(p) {
+                return Err(format!("invalid permission name {:?}", p));
+            }
+            if declared_perms.iter().any(|d| d == p) {
+                continue;
+            }
+            return Err(format!(
             "unknown permission {} (non-built-in permissions must be declared via an object-form capability)",
             p
         ));
-    }
+        }
 
-    // F4/F5 — strict validation of new fields: bad minCoreVersion / bad requirement / illegal plugin id / self-dependency
-    if let Some(min) = &m.min_core_version {
-        if super::marketplace::parse_version_lenient(min).is_none() {
-            return Err(format!("invalid minCoreVersion {:?}", min));
+        // F4/F5 — strict validation of new fields: bad minCoreVersion / bad requirement / illegal plugin id / self-dependency
+        if let Some(min) = &m.min_core_version {
+            if super::marketplace::parse_version_lenient(min).is_none() {
+                return Err(format!("invalid minCoreVersion {:?}", min));
+            }
         }
-    }
-    for (dep_id, req) in &m.dependencies {
-        if !Self::valid_plugin_id(dep_id) {
-            return Err(format!("invalid dependency plugin id {:?}", dep_id));
+        for (dep_id, req) in &m.dependencies {
+            if !Self::valid_plugin_id(dep_id) {
+                return Err(format!("invalid dependency plugin id {:?}", dep_id));
+            }
+            if dep_id == &m.id {
+                return Err("plugin cannot depend on itself".into());
+            }
+            if semver::VersionReq::parse(req).is_err() {
+                return Err(format!(
+                    "invalid dependency requirement {:?} for {}",
+                    req, dep_id
+                ));
+            }
         }
-        if dep_id == &m.id {
-            return Err("plugin cannot depend on itself".into());
-        }
-        if semver::VersionReq::parse(req).is_err() {
-            return Err(format!("invalid dependency requirement {:?} for {}", req, dep_id));
-        }
-    }
 
-    // M7/F8 + P1 — settings[] frozen schema: unique key names/charset; 11 controls; dropdown /
-    // radio-group options; button carries no value; number default is an integer (consistent with the signature numeric dialect);
-    // secret declares no default; range fields / pick / section; data-driven predicates; data-driven validation rules.
-    if m.settings.len() > 32 {
-        return Err("too many settings declarations (max 32)".into());
-    }
-    let mut setting_keys = std::collections::BTreeSet::new();
-    // P1 — build the full key table first: predicates allow forward references, so reference integrity is checked uniformly in the declaration loop.
-    let setting_decls: BTreeMap<&str, &SettingDecl> =
-        m.settings.iter().map(|s| (s.key.as_str(), s)).collect();
-    for s in &m.settings {
-        let key_ok = !s.key.is_empty()
-            && s.key.len() <= 64
-            && s
-                .key
-                .chars()
-                .next()
-                .map(|c| c.is_ascii_lowercase())
-                .unwrap_or(false)
-            && s.key
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-');
-        if !key_ok {
-            return Err(format!(
-                "invalid setting key {:?}: ^[a-z][a-z0-9_-]{{0,63}}$",
-                s.key
-            ));
+        // M7/F8 + P1 — settings[] frozen schema: unique key names/charset; 11 controls; dropdown /
+        // radio-group options; button carries no value; number default is an integer (consistent with the signature numeric dialect);
+        // secret declares no default; range fields / pick / section; data-driven predicates; data-driven validation rules.
+        if m.settings.len() > 32 {
+            return Err("too many settings declarations (max 32)".into());
         }
-        if !setting_keys.insert(s.key.clone()) {
-            return Err(format!("duplicate setting key {}", s.key));
-        }
-        match s.stype.as_str() {
-            "toggle" | "text" | "textarea" | "number" | "slider" | "secret" | "path"
-            | "color" => {}
-            "dropdown" | "radio-group" => {
-                if s.options.is_empty() {
-                    return Err(format!("{} setting {} requires options[]", s.stype, s.key));
+        let mut setting_keys = std::collections::BTreeSet::new();
+        // P1 — build the full key table first: predicates allow forward references, so reference integrity is checked uniformly in the declaration loop.
+        let setting_decls: BTreeMap<&str, &SettingDecl> =
+            m.settings.iter().map(|s| (s.key.as_str(), s)).collect();
+        for s in &m.settings {
+            let key_ok = !s.key.is_empty()
+                && s.key.len() <= 64
+                && s.key
+                    .chars()
+                    .next()
+                    .map(|c| c.is_ascii_lowercase())
+                    .unwrap_or(false)
+                && s.key
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-');
+            if !key_ok {
+                return Err(format!(
+                    "invalid setting key {:?}: ^[a-z][a-z0-9_-]{{0,63}}$",
+                    s.key
+                ));
+            }
+            if !setting_keys.insert(s.key.clone()) {
+                return Err(format!("duplicate setting key {}", s.key));
+            }
+            match s.stype.as_str() {
+                "toggle" | "text" | "textarea" | "number" | "slider" | "secret" | "path"
+                | "color" => {}
+                "dropdown" | "radio-group" => {
+                    if s.options.is_empty() {
+                        return Err(format!("{} setting {} requires options[]", s.stype, s.key));
+                    }
+                    if let Some(d) = &s.default {
+                        let ok = d
+                            .as_str()
+                            .map(|x| s.options.iter().any(|o| o.value() == x))
+                            .unwrap_or(false);
+                        if !ok {
+                            return Err(format!(
+                                "{} setting {} default must be one of options[]",
+                                s.stype, s.key
+                            ));
+                        }
+                    }
                 }
-                if let Some(d) = &s.default {
-                    let ok = d
-                        .as_str()
-                        .map(|x| s.options.iter().any(|o| o.value() == x))
-                        .unwrap_or(false);
-                    if !ok {
+                "button" => {
+                    if s.default.is_some() || !s.options.is_empty() {
                         return Err(format!(
-                            "{} setting {} default must be one of options[]",
-                            s.stype, s.key
+                            "button setting {} must not declare default/options",
+                            s.key
                         ));
                     }
                 }
-            }
-            "button" => {
-                if s.default.is_some() || !s.options.is_empty() {
-                    return Err(format!(
-                        "button setting {} must not declare default/options",
-                        s.key
-                    ));
+                "list" => {
+                    // P3 — data belongs to the plugin process: the host only relays ops, and default/options etc. must never be declared
+                    if s.default.is_some()
+                        || !s.options.is_empty()
+                        || s.min.is_some()
+                        || s.max.is_some()
+                        || s.pick.is_some()
+                    {
+                        return Err(format!(
+                            "list setting {} must not declare default/options/min/max/pick",
+                            s.key
+                        ));
+                    }
                 }
-            }
-            "list" => {
-                // P3 — data belongs to the plugin process: the host only relays ops, and default/options etc. must never be declared
-                if s.default.is_some()
-                    || !s.options.is_empty()
-                    || s.min.is_some()
-                    || s.max.is_some()
-                    || s.pick.is_some()
-                {
+                other => {
                     return Err(format!(
-                        "list setting {} must not declare default/options/min/max/pick",
-                        s.key
-                    ));
-                }
-            }
-            other => {
-                return Err(format!(
                     "unknown setting type {:?} (toggle|text|textarea|number|slider|dropdown|radio-group|color|secret|path|button|list)",
                     other
                 ));
-            }
-        }
-        if s.stype == "secret" && s.default.is_some() {
-            return Err(format!("secret setting {} must not declare default", s.key));
-        }
-        // P1 — min/max/step are available for number / slider only.
-        let uses_range = s.min.is_some() || s.max.is_some() || s.step.is_some();
-        if uses_range && !matches!(s.stype.as_str(), "number" | "slider") {
-            return Err(format!(
-                "setting {} ({}) must not declare min/max/step",
-                s.key, s.stype
-            ));
-        }
-        if s.stype == "slider" {
-            let (Some(min), Some(max)) = (&s.min, &s.max) else {
-                return Err(format!("slider setting {} requires both min and max", s.key));
-            };
-            if !(num_f64(min) < num_f64(max)) {
-                return Err(format!("slider setting {} requires min < max", s.key));
-            }
-        }
-        if let Some(step) = &s.step {
-            if !(num_f64(step) > 0.0) {
-                return Err(format!("setting {} step must be > 0", s.key));
-            }
-        }
-        // P1 — the default of number / slider must be numeric and within [min,max].
-        if matches!(s.stype.as_str(), "number" | "slider") {
-            if let Some(d) = &s.default {
-                if s.stype == "number" && !d.is_i64() {
-                    return Err(format!(
-                        "number setting {} default must be an integer",
-                        s.key
-                    ));
-                }
-                let Some(dv) = d.as_f64() else {
-                    return Err(format!(
-                        "{} setting {} default must be numeric",
-                        s.stype, s.key
-                    ));
-                };
-                if let Some(min) = &s.min {
-                    if dv < num_f64(min) {
-                        return Err(format!(
-                            "{} setting {} default {} is below min {}",
-                            s.stype,
-                            s.key,
-                            dv,
-                            num_f64(min)
-                        ));
-                    }
-                }
-                if let Some(max) = &s.max {
-                    if dv > num_f64(max) {
-                        return Err(format!(
-                            "{} setting {} default {} is above max {}",
-                            s.stype,
-                            s.key,
-                            dv,
-                            num_f64(max)
-                        ));
-                    }
                 }
             }
-        }
-        // P1 — color: no options/min/max; the default (if any) must be hex.
-        if s.stype == "color" {
-            if !s.options.is_empty() || s.min.is_some() || s.max.is_some() {
+            if s.stype == "secret" && s.default.is_some() {
+                return Err(format!("secret setting {} must not declare default", s.key));
+            }
+            // P1 — min/max/step are available for number / slider only.
+            let uses_range = s.min.is_some() || s.max.is_some() || s.step.is_some();
+            if uses_range && !matches!(s.stype.as_str(), "number" | "slider") {
                 return Err(format!(
-                    "color setting {} must not declare options/min/max",
-                    s.key
-                ));
-            }
-            if let Some(d) = &s.default {
-                let ok = d.as_str().map(is_hex_color).unwrap_or(false);
-                if !ok {
-                    return Err(format!(
-                        "color setting {} default must be a hex color (^#[0-9a-fA-F]{{3}}([0-9a-fA-F]{{3}})?$)",
-                        s.key
-                    ));
-                }
-            }
-        }
-        // P1 — pick only on path, value ∈ {file, directory}.
-        if let Some(pick) = &s.pick {
-            if s.stype != "path" {
-                return Err(format!(
-                    "setting {} ({}) must not declare pick (only path)",
+                    "setting {} ({}) must not declare min/max/step",
                     s.key, s.stype
                 ));
             }
-            if pick != "file" && pick != "directory" {
-                return Err(format!(
-                    "path setting {} pick must be \"file\" or \"directory\"",
-                    s.key
-                ));
+            if s.stype == "slider" {
+                let (Some(min), Some(max)) = (&s.min, &s.max) else {
+                    return Err(format!(
+                        "slider setting {} requires both min and max",
+                        s.key
+                    ));
+                };
+                if !(num_f64(min) < num_f64(max)) {
+                    return Err(format!("slider setting {} requires min < max", s.key));
+                }
             }
-        }
-        // P2 — localizable display text: map form must be non-empty, keys non-empty, values non-empty after trim.
-        if let Some(label) = &s.label {
-            validate_localized_text(label, &format!("setting {} label", s.key), None)?;
-        }
-        if let Some(description) = &s.description {
-            validate_localized_text(description, &format!("setting {} description", s.key), None)?;
-        }
-        // P1/P2 — section: non-empty after trim and ≤40 chars (per locale).
-        if let Some(section) = &s.section {
-            validate_localized_text(section, &format!("setting {} section", s.key), Some(40))?;
-        }
-        // P2 — aliases: search keywords only, never displayed; ≤8 items, each non-empty after trim and ≤40 chars.
-        if let Some(dep) = &s.deprecated {
-            validate_localized_text(dep, &format!("setting {} deprecated", s.key), Some(200))?;
-        }
-        if s.aliases.len() > 8 {
-            return Err(format!("setting {} has too many aliases (max 8)", s.key));
-        }
-        for alias in &s.aliases {
-            let trimmed = alias.trim();
-            if trimmed.is_empty() {
-                return Err(format!("setting {} alias must not be blank", s.key));
+            if let Some(step) = &s.step {
+                if !(num_f64(step) > 0.0) {
+                    return Err(format!("setting {} step must be > 0", s.key));
+                }
             }
-            if trimmed.chars().count() > 40 {
-                return Err(format!(
-                    "setting {} alias is too long (max 40 chars)",
-                    s.key
-                ));
+            // P1 — the default of number / slider must be numeric and within [min,max].
+            if matches!(s.stype.as_str(), "number" | "slider") {
+                if let Some(d) = &s.default {
+                    if s.stype == "number" && !d.is_i64() {
+                        return Err(format!(
+                            "number setting {} default must be an integer",
+                            s.key
+                        ));
+                    }
+                    let Some(dv) = d.as_f64() else {
+                        return Err(format!(
+                            "{} setting {} default must be numeric",
+                            s.stype, s.key
+                        ));
+                    };
+                    if let Some(min) = &s.min {
+                        if dv < num_f64(min) {
+                            return Err(format!(
+                                "{} setting {} default {} is below min {}",
+                                s.stype,
+                                s.key,
+                                dv,
+                                num_f64(min)
+                            ));
+                        }
+                    }
+                    if let Some(max) = &s.max {
+                        if dv > num_f64(max) {
+                            return Err(format!(
+                                "{} setting {} default {} is above max {}",
+                                s.stype,
+                                s.key,
+                                dv,
+                                num_f64(max)
+                            ));
+                        }
+                    }
+                }
             }
-        }
-        // P1 — predicates are only shape/reference validated, Rust does not evaluate (the UI evaluates).
-        if let Some(cond) = &s.visible {
-            validate_cond(cond, &format!("setting {} visible", s.key), 0, &setting_decls)?;
-        }
-        if let Some(cond) = &s.disabled {
-            validate_cond(cond, &format!("setting {} disabled", s.key), 0, &setting_decls)?;
-        }
-        // P1 — validation rules: type↔control table; pattern must compile with Rust `regex`.
-        for rule in &s.validate {
-            let Some(rtype) = rule.type_name() else {
-                return Err(format!("setting {} has an unknown validate rule type", s.key));
-            };
-            if !rule.legal_on(&s.stype) {
-                return Err(format!(
-                    "setting {} ({}): validate rule {:?} is not allowed on this control",
-                    s.key, s.stype, rtype
-                ));
+            // P1 — color: no options/min/max; the default (if any) must be hex.
+            if s.stype == "color" {
+                if !s.options.is_empty() || s.min.is_some() || s.max.is_some() {
+                    return Err(format!(
+                        "color setting {} must not declare options/min/max",
+                        s.key
+                    ));
+                }
+                if let Some(d) = &s.default {
+                    let ok = d.as_str().map(is_hex_color).unwrap_or(false);
+                    if !ok {
+                        return Err(format!(
+                        "color setting {} default must be a hex color (^#[0-9a-fA-F]{{3}}([0-9a-fA-F]{{3}})?$)",
+                        s.key
+                    ));
+                    }
+                }
             }
-            if let Some(message) = rule.message() {
+            // P1 — pick only on path, value ∈ {file, directory}.
+            if let Some(pick) = &s.pick {
+                if s.stype != "path" {
+                    return Err(format!(
+                        "setting {} ({}) must not declare pick (only path)",
+                        s.key, s.stype
+                    ));
+                }
+                if pick != "file" && pick != "directory" {
+                    return Err(format!(
+                        "path setting {} pick must be \"file\" or \"directory\"",
+                        s.key
+                    ));
+                }
+            }
+            // P2 — localizable display text: map form must be non-empty, keys non-empty, values non-empty after trim.
+            if let Some(label) = &s.label {
+                validate_localized_text(label, &format!("setting {} label", s.key), None)?;
+            }
+            if let Some(description) = &s.description {
                 validate_localized_text(
-                    message,
-                    &format!("setting {} validate rule {:?} message", s.key, rtype),
+                    description,
+                    &format!("setting {} description", s.key),
                     None,
                 )?;
             }
-            if let ValidateRule::Pattern { regex: re, .. } = rule {
-                if regex::Regex::new(re).is_err() {
+            // P1/P2 — section: non-empty after trim and ≤40 chars (per locale).
+            if let Some(section) = &s.section {
+                validate_localized_text(section, &format!("setting {} section", s.key), Some(40))?;
+            }
+            // P2 — aliases: search keywords only, never displayed; ≤8 items, each non-empty after trim and ≤40 chars.
+            if let Some(dep) = &s.deprecated {
+                validate_localized_text(dep, &format!("setting {} deprecated", s.key), Some(200))?;
+            }
+            if s.aliases.len() > 8 {
+                return Err(format!("setting {} has too many aliases (max 8)", s.key));
+            }
+            for alias in &s.aliases {
+                let trimmed = alias.trim();
+                if trimmed.is_empty() {
+                    return Err(format!("setting {} alias must not be blank", s.key));
+                }
+                if trimmed.chars().count() > 40 {
                     return Err(format!(
+                        "setting {} alias is too long (max 40 chars)",
+                        s.key
+                    ));
+                }
+            }
+            // P1 — predicates are only shape/reference validated, Rust does not evaluate (the UI evaluates).
+            if let Some(cond) = &s.visible {
+                validate_cond(
+                    cond,
+                    &format!("setting {} visible", s.key),
+                    0,
+                    &setting_decls,
+                )?;
+            }
+            if let Some(cond) = &s.disabled {
+                validate_cond(
+                    cond,
+                    &format!("setting {} disabled", s.key),
+                    0,
+                    &setting_decls,
+                )?;
+            }
+            // P1 — validation rules: type↔control table; pattern must compile with Rust `regex`.
+            for rule in &s.validate {
+                let Some(rtype) = rule.type_name() else {
+                    return Err(format!(
+                        "setting {} has an unknown validate rule type",
+                        s.key
+                    ));
+                };
+                if !rule.legal_on(&s.stype) {
+                    return Err(format!(
+                        "setting {} ({}): validate rule {:?} is not allowed on this control",
+                        s.key, s.stype, rtype
+                    ));
+                }
+                if let Some(message) = rule.message() {
+                    validate_localized_text(
+                        message,
+                        &format!("setting {} validate rule {:?} message", s.key, rtype),
+                        None,
+                    )?;
+                }
+                if let ValidateRule::Pattern { regex: re, .. } = rule {
+                    if regex::Regex::new(re).is_err() {
+                        return Err(format!(
                         "setting {} pattern must be a valid Rust regex (JS-only constructs like lookahead are rejected): {:?}",
                         s.key, re
                     ));
-                }
-                if let Some(bad) = JS_INCOMPATIBLE_REGEX.iter().find(|f| re.contains(*f)) {
-                    return Err(format!(
+                    }
+                    if let Some(bad) = JS_INCOMPATIBLE_REGEX.iter().find(|f| re.contains(*f)) {
+                        return Err(format!(
                         "setting {} pattern uses Rust-only construct {:?} which JavaScript (new RegExp) cannot compile: {:?}",
                         s.key, bad, re
+                    ));
+                    }
+                }
+            }
+            // P1 — default must be self-consistent: its own declared validate must pass (rejected at install time).
+            if let Some(d) = &s.default {
+                if let Some(rule) = first_failing_rule(&s.validate, d) {
+                    return Err(format!(
+                        "setting {} default {:?} fails its validate rule {:?}{}",
+                        s.key,
+                        d,
+                        rule.type_name().unwrap_or("unknown"),
+                        rule.message()
+                            .map(|m| format!(": {}", m.pick_host_locale()))
+                            .unwrap_or_default()
                     ));
                 }
             }
         }
-        // P1 — default must be self-consistent: its own declared validate must pass (rejected at install time).
-        if let Some(d) = &s.default {
-            if let Some(rule) = first_failing_rule(&s.validate, d) {
-                return Err(format!(
-                    "setting {} default {:?} fails its validate rule {:?}{}",
-                    s.key,
-                    d,
-                    rule.type_name().unwrap_or("unknown"),
-                    rule.message()
-                        .map(|m| format!(": {}", m.pick_host_locale()))
-                        .unwrap_or_default()
-                ));
+
+        // S5a — sandbox declaration: allowlist validation; pet (no process) must not carry one.
+        if let Some(sb) = &m.sandbox {
+            if m.runtime.is_none() {
+                return Err(
+                    "sandbox declaration requires runtime (pet plugins have no process)".into(),
+                );
+            }
+            validate_sandbox(sb)?;
+        }
+        Ok(())
+    }
+
+    /// F4 — semantic-version compatibility gate: core >= minCoreVersion. Default = no floor. Lenient parsing
+    /// (same implementation as the marketplace, avoiding two comparison paths).
+    pub fn check_core_compat(m: &Manifest) -> Result<(), String> {
+        let Some(min) = &m.min_core_version else {
+            return Ok(());
+        };
+        let core = env!("CARGO_PKG_VERSION");
+        match (
+            super::marketplace::parse_version_lenient(core),
+            super::marketplace::parse_version_lenient(min),
+        ) {
+            (Some(c), Some(req)) => {
+                if c >= req {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "plugin requires core >= {} (current {})",
+                        min, core
+                    ))
+                }
+            }
+            // unparseable → let through (strict rejection already happens in validate; this is defensive)
+            _ => Ok(()),
+        }
+    }
+
+    /// §4.4 step 4 — confirmation set = permissions[] ∪ all inline-mapping permissions (review M1),
+    /// each item annotated with whether it is declaration-derived (→ once-only) and its default tier.
+    fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
+        let mut plan: Vec<super::permission::InstallAsk> = Vec::new();
+        let mut push = |permission: String, declared: bool, default: Option<&str>| {
+            if plan.iter().any(|a| a.permission == permission) {
+                return;
+            }
+            plan.push(super::permission::InstallAsk {
+                permission,
+                declared,
+                declared_default: default.unwrap_or("ask").to_string(),
+            });
+        };
+        for p in &m.permissions {
+            // built-in names as before; declared permission names get the `declared` marker from the inline mapping
+            let declared = !super::permission::known(p);
+            let default = m
+                .capabilities
+                .iter()
+                .find(|c| c.mapping().map(|(perm, _)| perm) == Some(p.as_str()))
+                .and_then(|c| c.mapping().map(|(_, d)| d))
+                .map(|s| s.to_string());
+            push(p.clone(), declared, default.as_deref());
+        }
+        for c in &m.capabilities {
+            if let Some((perm, default)) = c.mapping() {
+                push(perm.to_string(), true, Some(default));
             }
         }
+        plan
     }
-
-    // S5a — sandbox declaration: allowlist validation; pet (no process) must not carry one.
-    if let Some(sb) = &m.sandbox {
-        if m.runtime.is_none() {
-            return Err(
-                "sandbox declaration requires runtime (pet plugins have no process)".into(),
-            );
-        }
-        validate_sandbox(sb)?;
-    }
-    Ok(())
-}
-
-/// F4 — semantic-version compatibility gate: core >= minCoreVersion. Default = no floor. Lenient parsing
-/// (same implementation as the marketplace, avoiding two comparison paths).
-pub fn check_core_compat(m: &Manifest) -> Result<(), String> {
-    let Some(min) = &m.min_core_version else { return Ok(()); };
-    let core = env!("CARGO_PKG_VERSION");
-    match (
-        super::marketplace::parse_version_lenient(core),
-        super::marketplace::parse_version_lenient(min),
-    ) {
-        (Some(c), Some(req)) => {
-            if c >= req {
-                Ok(())
-            } else {
-                Err(format!("plugin requires core >= {} (current {})", min, core))
-            }
-        }
-        // unparseable → let through (strict rejection already happens in validate; this is defensive)
-        _ => Ok(()),
-    }
-}
-
-/// §4.4 step 4 — confirmation set = permissions[] ∪ all inline-mapping permissions (review M1),
-/// each item annotated with whether it is declaration-derived (→ once-only) and its default tier.
-fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
-    let mut plan: Vec<super::permission::InstallAsk> = Vec::new();
-    let mut push = |permission: String, declared: bool, default: Option<&str>| {
-        if plan.iter().any(|a| a.permission == permission) {
-            return;
-        }
-        plan.push(super::permission::InstallAsk {
-            permission,
-            declared,
-            declared_default: default.unwrap_or("ask").to_string(),
-        });
-    };
-    for p in &m.permissions {
-        // built-in names as before; declared permission names get the `declared` marker from the inline mapping
-        let declared = !super::permission::known(p);
-        let default = m
-            .capabilities
-            .iter()
-            .find(|c| c.mapping().map(|(perm, _)| perm) == Some(p.as_str()))
-            .and_then(|c| c.mapping().map(|(_, d)| d))
-            .map(|s| s.to_string());
-        push(p.clone(), declared, default.as_deref());
-    }
-    for c in &m.capabilities {
-        if let Some((perm, default)) = c.mapping() {
-            push(perm.to_string(), true, Some(default));
-        }
-    }
-    plan
-}
 
     /// F6 — update confirmation plan: keep only items that are "added / declaration or default changed".
     /// Completely unchanged → empty plan = silent update (reuses the existing consent, no popup).
@@ -1615,7 +1693,11 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
             params["value"] = json!(v);
         }
         let proc = Self::shared().ensure_running(id)?;
-        proc.call(&format!("settings.{}", key), params, Duration::from_secs(10))
+        proc.call(
+            &format!("settings.{}", key),
+            params,
+            Duration::from_secs(10),
+        )
     }
 
     /// F6 — revises the frozen revocation marker (`revoked_key IS NOT NULL` = disabled by default).
@@ -1624,11 +1706,9 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
             .and_then(|store| {
                 store.lock().ok().and_then(|s| {
                     s.with_conn_ref(|c| {
-                        c.query_row(
-                            "SELECT revoked_key FROM plugins WHERE id = ?1",
-                            [id],
-                            |r| r.get::<_, Option<String>>(0),
-                        )
+                        c.query_row("SELECT revoked_key FROM plugins WHERE id = ?1", [id], |r| {
+                            r.get::<_, Option<String>>(0)
+                        })
                         .ok()
                     })
                 })
@@ -1718,11 +1798,18 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
         for (capability, permission, default, _timeout) in m.declarations() {
             // built-in static mapping takes precedence: a declaration must not land on a reserved capability (validate already blocks it; this is a fallback)
             if super::capability::is_builtin(&capability) {
-                return Err(format!("reserved capability {} cannot be declared", capability));
+                return Err(format!(
+                    "reserved capability {} cannot be declared",
+                    capability
+                ));
             }
-            if let Some(other) =
-                super::declaration::conflicting_provider(&store, &capability, &permission, &default, &m.id)
-            {
+            if let Some(other) = super::declaration::conflicting_provider(
+                &store,
+                &capability,
+                &permission,
+                &default,
+                &m.id,
+            ) {
                 return Err(format!(
                     "capability {} is already provided by {} with a different permission mapping",
                     capability, other
@@ -1734,7 +1821,9 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
 
     /// F5 install-time precheck: only blocks cycles (missing dependencies are allowed through — the install order is user-controlled, with a start-time fallback).
     fn check_install_dependencies(&self, m: &Manifest) -> Result<(), String> {
-        let Some(store) = Self::store() else { return Ok(()); };
+        let Some(store) = Self::store() else {
+            return Ok(());
+        };
         let installed: Vec<(String, BTreeMap<String, semver::VersionReq>)> = store
             .lock()
             .ok()
@@ -1860,8 +1949,7 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
         let _install_guard = INSTALL_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let file = std::fs::File::open(archive)
             .map_err(|e| format!("cannot open {}: {}", archive.display(), e))?;
-        let mut zip = zip::ZipArchive::new(file)
-            .map_err(|e| format!("bad zip: {}", e))?;
+        let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("bad zip: {}", e))?;
 
         // the manifest must be at the package root
         let mut manifest_text = String::new();
@@ -1917,7 +2005,10 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
                 }
             }
             crate::core::plugin_sig::Allowance::HardDeny => {
-                return Err(format!("signature verification failed: {}", outcome.label()));
+                return Err(format!(
+                    "signature verification failed: {}",
+                    outcome.label()
+                ));
             }
         }
         if let VerifyOutcome::Trusted { key_id } = &outcome {
@@ -1967,7 +2058,11 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
                 return Err(format!("unsafe path in archive: {}", name));
             }
             if entry.size() > MAX_FILE {
-                return Err(format!("entry too large: {} ({} bytes)", name, entry.size()));
+                return Err(format!(
+                    "entry too large: {} ({} bytes)",
+                    name,
+                    entry.size()
+                ));
             }
             total += entry.size();
         }
@@ -2231,8 +2326,8 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
         let Some((path, manifest)) = row else {
             return Err(format!("plugin not installed: {}", id));
         };
-        let m: Manifest =
-            serde_json::from_str(&manifest).map_err(|e| format!("stored manifest broken: {}", e))?;
+        let m: Manifest = serde_json::from_str(&manifest)
+            .map_err(|e| format!("stored manifest broken: {}", e))?;
         Ok((PathBuf::from(path), m))
     }
 
@@ -2245,7 +2340,9 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
         // repo convention is README.md; hand-written plugins often use readme.md, so try each once
         for name in ["README.md", "readme.md"] {
             let p = dir.join(name);
-            let Ok(meta) = std::fs::metadata(&p) else { continue };
+            let Ok(meta) = std::fs::metadata(&p) else {
+                continue;
+            };
             if !meta.is_file() || meta.len() > MAX_README_BYTES {
                 continue;
             }
@@ -2298,7 +2395,10 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
         // F6 — revocation default-disable: a plugin hit by revokedKeys is forbidden to start until the user explicitly reopens it
         // (reopen clears revoked_key and records an ack; here we only look at the current disable marker).
         if let Some(key) = Self::revoked_key_of(id) {
-            let reason = format!("plugin revoked: publisher key {} (reopen explicitly to run)", key);
+            let reason = format!(
+                "plugin revoked: publisher key {} (reopen explicitly to run)",
+                key
+            );
             Self::reject_start(id, &reason);
             return Err(reason);
         }
@@ -2332,7 +2432,10 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
             "core",
             json!({ "pluginId": id }),
         ));
-        let runtime = m.runtime.clone().ok_or_else(|| "pet plugin has no runtime".to_string())?;
+        let runtime = m
+            .runtime
+            .clone()
+            .ok_or_else(|| "pet plugin has no runtime".to_string())?;
         if runtime.rtype != "process" {
             let err = format!("unsupported runtime type {}", runtime.rtype);
             super::event::EventBus::shared().publish(&super::event::OpencapxEvent::new(
@@ -2405,11 +2508,7 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
             init_payload["previousVersion"] = serde_json::Value::String(prev.clone());
         }
         let init = proc
-            .call(
-                "plugin.initialize",
-                init_payload,
-                Duration::from_secs(10),
-            )
+            .call("plugin.initialize", init_payload, Duration::from_secs(10))
             .map_err(|e| {
                 Self::set_status(id, "error");
                 super::event::EventBus::shared().publish(&super::event::OpencapxEvent::new(
@@ -2534,7 +2633,9 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
         if let Ok(mut set) = self.auto_reload_set.lock() {
             for (id, path) in rows {
                 set.insert(id.clone());
-                if let Ok(m) = std::fs::metadata(std::path::Path::new(&path).join("opencapx-plugin.json")) {
+                if let Ok(m) =
+                    std::fs::metadata(std::path::Path::new(&path).join("opencapx-plugin.json"))
+                {
                     if let Ok(t) = m.modified() {
                         if let Ok(mut lm) = self.last_mtimes.lock() {
                             lm.insert(id, t);
@@ -2685,7 +2786,8 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
                             .unwrap_or(0)
                             + c.execute("DELETE FROM capabilities WHERE plugin_id = ?1", [id])
                                 .unwrap_or(0)
-                            + c.execute("DELETE FROM plugins WHERE id = ?1", [id]).unwrap_or(0)
+                            + c.execute("DELETE FROM plugins WHERE id = ?1", [id])
+                                .unwrap_or(0)
                     })
                     .map(|n| n > 0)
                     .unwrap_or(false);
@@ -2745,7 +2847,11 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
                 if other.id == id {
                     continue;
                 }
-                if other.capabilities.iter().any(|c| me.capabilities.contains(c)) {
+                if other
+                    .capabilities
+                    .iter()
+                    .any(|c| me.capabilities.contains(c))
+                {
                     dependents.push(other.id);
                 }
             }
@@ -2886,77 +2992,98 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
             .and_then(|s| {
                 s.with_conn_ref(|c| {
                     let mut st = c.prepare("SELECT id, version FROM plugins").ok()?;
-                    let it = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))).ok()?;
+                    let it = st
+                        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+                        .ok()?;
                     Some(it.filter_map(|x| x.ok()).collect::<Vec<_>>())
                 })
             })
             .flatten()
             .unwrap_or_default();
         rows.into_iter()
-            .filter_map(|(id, manifest, status, auto_reload, probe_status, probe_at, revoked_key, revoked_at)| {
-                let m: Manifest = serde_json::from_str(&manifest).ok()?;
-                // also fetch path, so settings can show "where it came from"
-                let path_row = store
-                    .lock()
-                    .ok()
-                    .and_then(|s| {
-                        s.with_conn_ref(|c| {
-                            c.query_row(
-                                "SELECT path FROM plugins WHERE id = ?1",
-                                params![id],
-                                |r| r.get::<_, String>(0),
-                            )
-                            .ok()
-                        })
-                    })
-                    .flatten();
-                // Phase 38 — query the plugin_channel table separately for the currently subscribed channel.
-                // fetch everything via list_plugin_channels then find in memory,
-                // one SELECT for everything, avoiding N+1 queries.
-                let channel = store
-                    .lock()
-                    .ok()
-                    .and_then(|s| s.list_plugin_channels().into_iter().find(|(pid, _)| pid == &id))
-                    .map(|(_, c)| c);
-                // Phase 40 — health config (fetch all once, find in memory). No row → None.
-                let health_cfg = store
-                    .lock()
-                    .ok()
-                    .and_then(|s| s.list_health_configs().into_iter().find(|(pid, _)| pid == &id))
-                    .map(|(_, c)| c);
-                let capability_ids = m.capability_ids();
-                Some(PluginStatusDto {
+            .filter_map(
+                |(
                     id,
-                    name: m.name,
-                    description: m.description,
-                    author: m.author,
-                    homepage: m.homepage,
-                    license: m.license,
-                    version: m.version,
-                    ptype: m.ptype,
+                    manifest,
                     status,
-                    capabilities: capability_ids,
-                    permissions: m.permissions,
-                    path: path_row,
-                    auto_reload: auto_reload != 0,
-                    probe_status: probe_status.filter(|s| !s.is_empty()),
-                    probe_at: probe_at.map(|v| v as u64).filter(|v| *v > 0),
-                    channel,
-                    sandbox_declared: m.sandbox.is_some(),
-                    health_heartbeat_sec: health_cfg.as_ref().map(|c| c.heartbeat_sec),
-                    health_max_retries: health_cfg.as_ref().map(|c| c.max_retries),
-                    health_enabled: health_cfg.as_ref().map(|c| c.enabled),
-                    missing_dependencies: super::plugin_deps::find_missing(
-                        &m.dependencies,
-                        &installed,
-                    )
-                    .into_iter()
-                    .map(|(id, requirement)| MissingDepDto { id, requirement })
-                    .collect(),
+                    auto_reload,
+                    probe_status,
+                    probe_at,
                     revoked_key,
-                    revoked_at: revoked_at.map(|v| v as u64).filter(|v| *v > 0),
-                })
-            })
+                    revoked_at,
+                )| {
+                    let m: Manifest = serde_json::from_str(&manifest).ok()?;
+                    // also fetch path, so settings can show "where it came from"
+                    let path_row = store
+                        .lock()
+                        .ok()
+                        .and_then(|s| {
+                            s.with_conn_ref(|c| {
+                                c.query_row(
+                                    "SELECT path FROM plugins WHERE id = ?1",
+                                    params![id],
+                                    |r| r.get::<_, String>(0),
+                                )
+                                .ok()
+                            })
+                        })
+                        .flatten();
+                    // Phase 38 — query the plugin_channel table separately for the currently subscribed channel.
+                    // fetch everything via list_plugin_channels then find in memory,
+                    // one SELECT for everything, avoiding N+1 queries.
+                    let channel = store
+                        .lock()
+                        .ok()
+                        .and_then(|s| {
+                            s.list_plugin_channels()
+                                .into_iter()
+                                .find(|(pid, _)| pid == &id)
+                        })
+                        .map(|(_, c)| c);
+                    // Phase 40 — health config (fetch all once, find in memory). No row → None.
+                    let health_cfg = store
+                        .lock()
+                        .ok()
+                        .and_then(|s| {
+                            s.list_health_configs()
+                                .into_iter()
+                                .find(|(pid, _)| pid == &id)
+                        })
+                        .map(|(_, c)| c);
+                    let capability_ids = m.capability_ids();
+                    Some(PluginStatusDto {
+                        id,
+                        name: m.name,
+                        description: m.description,
+                        author: m.author,
+                        homepage: m.homepage,
+                        license: m.license,
+                        version: m.version,
+                        ptype: m.ptype,
+                        status,
+                        capabilities: capability_ids,
+                        permissions: m.permissions,
+                        path: path_row,
+                        auto_reload: auto_reload != 0,
+                        probe_status: probe_status.filter(|s| !s.is_empty()),
+                        probe_at: probe_at.map(|v| v as u64).filter(|v| *v > 0),
+                        channel,
+                        sandbox_declared: m.sandbox.is_some(),
+                        health_heartbeat_sec: health_cfg.as_ref().map(|c| c.heartbeat_sec),
+                        health_max_retries: health_cfg.as_ref().map(|c| c.max_retries),
+                        health_enabled: health_cfg.as_ref().map(|c| c.enabled),
+                        missing_dependencies: super::plugin_deps::find_missing(
+                            &m.dependencies,
+                            &installed,
+                        )
+                        .into_iter()
+                        .map(|(id, requirement)| MissingDepDto { id, requirement })
+                        .collect(),
+                        revoked_key,
+                        revoked_at: revoked_at.map(|v| v as u64).filter(|v| *v > 0),
+                    })
+                },
+            )
             .collect()
     }
 
@@ -2978,7 +3105,9 @@ fn install_ask_plan(m: &Manifest) -> Vec<super::permission::InstallAsk> {
     /// Phase 45 — for the metrics module: returns (plugin_id, pid) pairs of all running plugins.
     /// `pid` may be None (the process just started and has no pid yet / it exited but procs is not cleaned up).
     pub fn list_running_with_pid(&self) -> Vec<(String, u32)> {
-        let Ok(procs) = self.procs.lock() else { return Vec::new() };
+        let Ok(procs) = self.procs.lock() else {
+            return Vec::new();
+        };
         procs
             .iter()
             .filter_map(|(id, p)| p.pid().map(|pid| (id.clone(), pid)))
@@ -3024,11 +3153,9 @@ fn auto_reload_loop() {
                 let mut out = Vec::new();
                 for id in &ids {
                     let path = s.with_conn_ref(|c| {
-                        c.query_row(
-                            "SELECT path FROM plugins WHERE id = ?1",
-                            [id],
-                            |r| r.get::<_, String>(0),
-                        )
+                        c.query_row("SELECT path FROM plugins WHERE id = ?1", [id], |r| {
+                            r.get::<_, String>(0)
+                        })
                         .ok()
                     });
                     if let Some(Some(p)) = path.map(|x| x) {
@@ -3084,10 +3211,14 @@ fn watchdog_loop(mgr: Arc<PluginManager>, id: String, wd: Arc<Mutex<Watchdog>>) 
         // Phase 40 — the tick interval is decided by cfg.heartbeat_sec; 0 = ping off, still using the 500ms is_alive check.
         let heartbeat_ms = wd
             .lock()
-            .map(|w| if w.cfg.heartbeat_sec == 0 {
-                WATCHDOG_TICK_MS
-            } else {
-                (w.cfg.heartbeat_sec as u64).saturating_mul(1000).max(WATCHDOG_TICK_MS)
+            .map(|w| {
+                if w.cfg.heartbeat_sec == 0 {
+                    WATCHDOG_TICK_MS
+                } else {
+                    (w.cfg.heartbeat_sec as u64)
+                        .saturating_mul(1000)
+                        .max(WATCHDOG_TICK_MS)
+                }
             })
             .unwrap_or(WATCHDOG_TICK_MS);
         std::thread::sleep(Duration::from_millis(heartbeat_ms));
@@ -3107,18 +3238,13 @@ fn watchdog_loop(mgr: Arc<PluginManager>, id: String, wd: Arc<Mutex<Watchdog>>) 
         if alive {
             let heartbeat_sec = wd.lock().map(|w| w.cfg.heartbeat_sec).unwrap_or(0);
             if heartbeat_sec > 0 {
-                let timeout_ms = wd
-                    .lock()
-                    .map(|w| w.cfg.ping_timeout_ms)
-                    .unwrap_or(1000);
+                let timeout_ms = wd.lock().map(|w| w.cfg.ping_timeout_ms).unwrap_or(1000);
                 let ping_ok = mgr
                     .procs
                     .lock()
                     .ok()
                     .and_then(|m| m.get(&id).cloned())
-                    .map(|p| {
-                        p.ping(std::time::Duration::from_millis(timeout_ms as u64))
-                    })
+                    .map(|p| p.ping(std::time::Duration::from_millis(timeout_ms as u64)))
                     .unwrap_or(false);
                 if ping_ok {
                     continue;
@@ -3132,7 +3258,12 @@ fn watchdog_loop(mgr: Arc<PluginManager>, id: String, wd: Arc<Mutex<Watchdog>>) 
             continue;
         }
         // the process died. Check whether our own stop caused it.
-        let still_tracked = mgr.watchdogs.lock().ok().and_then(|m| m.get(&id).cloned()).is_some();
+        let still_tracked = mgr
+            .watchdogs
+            .lock()
+            .ok()
+            .and_then(|m| m.get(&id).cloned())
+            .is_some();
         if !still_tracked {
             return;
         }
@@ -3158,7 +3289,10 @@ fn watchdog_loop(mgr: Arc<PluginManager>, id: String, wd: Arc<Mutex<Watchdog>>) 
             let n = counts.get(&id).copied().unwrap_or(0) + 1;
             counts.insert(id.clone(), n);
             // Phase 40 — max_retries comes from cfg; 0 disables the watchdog outright; max_retries=3 matches the Phase 10 behavior.
-            let max_retries = wd.lock().map(|w| w.cfg.max_retries).unwrap_or(WATCHDOG_MAX_RETRIES);
+            let max_retries = wd
+                .lock()
+                .map(|w| w.cfg.max_retries)
+                .unwrap_or(WATCHDOG_MAX_RETRIES);
             if max_retries == 0 || n > max_retries {
                 PluginManager::set_status(&id, "error");
                 super::event::EventBus::shared().publish(&super::event::OpencapxEvent::new(
@@ -3176,10 +3310,7 @@ fn watchdog_loop(mgr: Arc<PluginManager>, id: String, wd: Arc<Mutex<Watchdog>>) 
             n
         };
         // Phase 40 — backoff comes from cfg (default 1s, doubling, capped at 30s).
-        let backoff_initial = wd
-            .lock()
-            .map(|w| w.cfg.backoff_initial_ms)
-            .unwrap_or(1000);
+        let backoff_initial = wd.lock().map(|w| w.cfg.backoff_initial_ms).unwrap_or(1000);
         let backoff_ms = super::health::compute_backoff_ms(retry, backoff_initial);
         std::thread::sleep(Duration::from_millis(backoff_ms));
         // re-confirm enabled (start may have already reset the watchdog)
@@ -3372,7 +3503,9 @@ fn register_permission_waiter(
             false
         }
         None => {
-            let mut w = PermWaiters { replies: Vec::new() };
+            let mut w = PermWaiters {
+                replies: Vec::new(),
+            };
             if let Some(id) = id {
                 w.replies.push((id, reply));
             }
@@ -3384,7 +3517,10 @@ fn register_permission_waiter(
 
 /// Decision complete: remove the key and reply to all waiters (newly arriving ones are under the same key too).
 fn settle_permission_waiters(key: &(String, String), granted: bool) {
-    let waiters = permission_pending().lock().ok().and_then(|mut m| m.remove(key));
+    let waiters = permission_pending()
+        .lock()
+        .ok()
+        .and_then(|mut m| m.remove(key));
     if let Some(w) = waiters {
         for (id, reply) in w.replies {
             reply(json!({
@@ -3447,8 +3583,14 @@ fn handle_reverse(plugin_id: &str, v: serde_json::Value, reply: super::process::
             if !reverse_allow(plugin_id) {
                 return;
             }
-            let level = v.pointer("/params/level").and_then(|x| x.as_str()).unwrap_or("info");
-            let msg = v.pointer("/params/message").and_then(|x| x.as_str()).unwrap_or("");
+            let level = v
+                .pointer("/params/level")
+                .and_then(|x| x.as_str())
+                .unwrap_or("info");
+            let msg = v
+                .pointer("/params/message")
+                .and_then(|x| x.as_str())
+                .unwrap_or("");
             eprintln!("[plugin:{}] [{}] {}", plugin_id, level, msg);
             super::event::EventBus::shared().publish(&super::event::OpencapxEvent::new(
                 "plugin.log",
@@ -3465,7 +3607,10 @@ fn handle_reverse(plugin_id: &str, v: serde_json::Value, reply: super::process::
             if !reverse_allow(plugin_id) {
                 return;
             }
-            let kind = v.pointer("/params/type").and_then(|x| x.as_str()).unwrap_or("");
+            let kind = v
+                .pointer("/params/type")
+                .and_then(|x| x.as_str())
+                .unwrap_or("");
             if !kind.is_empty() {
                 super::event::EventBus::shared().publish(&super::event::OpencapxEvent::new(
                     &format!("{}.{}", plugin_id, kind),
@@ -3489,7 +3634,10 @@ fn handle_reverse(plugin_id: &str, v: serde_json::Value, reply: super::process::
             enqueue_permission_request(plugin_id.to_string(), permission, reason, id, reply);
         }
         "plugin.subscribe" => {
-            let kind = v.pointer("/params/kind").and_then(|x| x.as_str()).unwrap_or("");
+            let kind = v
+                .pointer("/params/kind")
+                .and_then(|x| x.as_str())
+                .unwrap_or("");
             let res = super::subscriber::SubscriptionRegistry::shared().subscribe(plugin_id, kind);
             if let Some(id) = v.get("id").cloned() {
                 let (ok, msg) = match res {
@@ -3500,7 +3648,10 @@ fn handle_reverse(plugin_id: &str, v: serde_json::Value, reply: super::process::
             }
         }
         "plugin.unsubscribe" => {
-            let kind = v.pointer("/params/kind").and_then(|x| x.as_str()).unwrap_or("");
+            let kind = v
+                .pointer("/params/kind")
+                .and_then(|x| x.as_str())
+                .unwrap_or("");
             super::subscriber::SubscriptionRegistry::shared().unsubscribe(plugin_id, kind);
             if let Some(id) = v.get("id").cloned() {
                 reply(json!({ "jsonrpc": "2.0", "id": id, "result": { "ok": true } }));
@@ -3569,13 +3720,17 @@ mod tests {
             r#"{"id":"x","name":"X","version":"0.1.0","apiVersion":"1","type":"capability","runtime":{"type":"process","command":"true"},"capabilities":["nope.nope"]}"#,
         )
         .unwrap();
-        assert!(PluginManager::read_manifest(&dir).unwrap_err().contains("unknown capability"));
+        assert!(PluginManager::read_manifest(&dir)
+            .unwrap_err()
+            .contains("unknown capability"));
         std::fs::write(
             dir.join("opencapx-plugin.json"),
             r#"{"id":"x","name":"X","version":"0.1.0","apiVersion":"1","type":"capability","runtime":{"type":"process","command":"true"},"capabilities":["image.analyze"],"permissions":["root.access"]}"#,
         )
         .unwrap();
-        assert!(PluginManager::read_manifest(&dir).unwrap_err().contains("unknown permission"));
+        assert!(PluginManager::read_manifest(&dir)
+            .unwrap_err()
+            .contains("unknown permission"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -3584,20 +3739,38 @@ mod tests {
         // P0 regression (docs/permission-domains.md §7): an id like `../..` could exploit
         // root.join(id) + remove_dir_all to traverse and delete an arbitrary directory; it must be
         // rejected in validate_manifest (parse time) — both the tmp and dest joins are covered.
-        let dir = std::env::temp_dir().join(format!("opencapx-manifest-traversal-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "opencapx-manifest-traversal-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for bad in [
-            "../..", "..", ".", "a/../b", "/abs/path", "a/b",
-            "A-upper", "é-accent", "has space", ".leading", "trailing.", "a..b",
+            "../..",
+            "..",
+            ".",
+            "a/../b",
+            "/abs/path",
+            "a/b",
+            "A-upper",
+            "é-accent",
+            "has space",
+            ".leading",
+            "trailing.",
+            "a..b",
         ] {
             std::fs::write(
                 dir.join("opencapx-plugin.json"),
-                format!(r#"{{"id":"{bad}","name":"X","version":"0.1.0","apiVersion":"1","type":"pet"}}"#),
+                format!(
+                    r#"{{"id":"{bad}","name":"X","version":"0.1.0","apiVersion":"1","type":"pet"}}"#
+                ),
             )
             .unwrap();
             let err = PluginManager::read_manifest(&dir).unwrap_err();
-            assert!(err.contains("invalid plugin id"), "id {bad:?} should be rejected, got: {err}");
+            assert!(
+                err.contains("invalid plugin id"),
+                "id {bad:?} should be rejected, got: {err}"
+            );
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -3605,14 +3778,35 @@ mod tests {
     #[test]
     fn plugin_id_lexicon_accepts_legal_ids() {
         // Old single-segment hyphen ids are compatible; reverse-DNS form is preferred.
-        for ok in ["x", "echo-vision", "things-demo", "com.example.weather", "plug2.v2"] {
+        for ok in [
+            "x",
+            "echo-vision",
+            "things-demo",
+            "com.example.weather",
+            "plug2.v2",
+        ] {
             assert!(PluginManager::valid_plugin_id(ok), "{ok:?} should be valid");
         }
         for bad in [
-            "", "..", ".", "a..b", "../x", "x/../y", "/abs", "a/b", "A", "É",
-            "a b", ".lead", "trail.", &"x".repeat(129),
+            "",
+            "..",
+            ".",
+            "a..b",
+            "../x",
+            "x/../y",
+            "/abs",
+            "a/b",
+            "A",
+            "É",
+            "a b",
+            ".lead",
+            "trail.",
+            &"x".repeat(129),
         ] {
-            assert!(!PluginManager::valid_plugin_id(bad), "{bad:?} should be invalid");
+            assert!(
+                !PluginManager::valid_plugin_id(bad),
+                "{bad:?} should be invalid"
+            );
         }
     }
 
@@ -3635,7 +3829,10 @@ mod tests {
         assert_eq!(m2.homepage.as_deref(), Some("https://example.com"));
         assert_eq!(m2.sha256.as_deref(), Some("aa"));
         assert_eq!(
-            m2.signature.as_ref().and_then(|s| s.get("sig")).and_then(|v| v.as_str()),
+            m2.signature
+                .as_ref()
+                .and_then(|s| s.get("sig"))
+                .and_then(|v| v.as_str()),
             Some("bb")
         );
     }
@@ -3658,7 +3855,10 @@ mod tests {
             "minCoreVersion":"0.5.0","dependencies":{"com.x.b":">=1.2.0"}}"#;
         let m: Manifest = serde_json::from_str(text).unwrap();
         assert_eq!(m.min_core_version.as_deref(), Some("0.5.0"));
-        assert_eq!(m.dependencies.get("com.x.b").map(String::as_str), Some(">=1.2.0"));
+        assert_eq!(
+            m.dependencies.get("com.x.b").map(String::as_str),
+            Some(">=1.2.0")
+        );
         let round = serde_json::to_string(&m).unwrap();
         assert!(round.contains("minCoreVersion") && round.contains(">=1.2.0"));
         // an old manifest with no fields: serialization adds no keys
@@ -3671,12 +3871,17 @@ mod tests {
 
     #[test]
     fn validate_rejects_bad_min_core_and_bad_deps() {
-        let base = |extra: &str| format!(
-            r#"{{"id":"com.x.y","name":"Y","version":"1.0.0","apiVersion":"1","type":"capability",
+        let base = |extra: &str| {
+            format!(
+                r#"{{"id":"com.x.y","name":"Y","version":"1.0.0","apiVersion":"1","type":"capability",
             "runtime":{{"type":"process","command":"python3"}},"capabilities":["image.analyze"]{extra}}}"#
-        );
+            )
+        };
         let ok: Manifest = serde_json::from_str(&base(r#","minCoreVersion":"1.2""#)).unwrap();
-        assert!(PluginManager::validate_manifest(&ok).is_ok(), "lenient semver 1.2 is legal");
+        assert!(
+            PluginManager::validate_manifest(&ok).is_ok(),
+            "lenient semver 1.2 is legal"
+        );
         for bad in [
             r#","minCoreVersion":"not-a-version""#,
             r#","dependencies":{"com.x.b":"not a req"}"#,
@@ -3684,7 +3889,10 @@ mod tests {
             r#","dependencies":{"com.x.y":">=1.0"}"#, // self-dependency
         ] {
             let m: Manifest = serde_json::from_str(&base(bad)).unwrap();
-            assert!(PluginManager::validate_manifest(&m).is_err(), "should reject: {bad}");
+            assert!(
+                PluginManager::validate_manifest(&m).is_err(),
+                "should reject: {bad}"
+            );
         }
     }
 
@@ -3710,7 +3918,9 @@ mod tests {
     /// Install gate: minCoreVersion higher than the current core → reject, with zero writes (never reaches the confirm/commit phase).
     #[test]
     fn install_rejects_future_core_requirement_before_any_write() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("opencapx-core-gate-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let src = dir.join("plugin-src");
@@ -3731,7 +3941,10 @@ mod tests {
         let count: i64 = store
             .lock()
             .unwrap()
-            .with_conn_ref(|c| c.query_row("SELECT COUNT(*) FROM plugins", [], |r| r.get(0)).ok())
+            .with_conn_ref(|c| {
+                c.query_row("SELECT COUNT(*) FROM plugins", [], |r| r.get(0))
+                    .ok()
+            })
             .flatten()
             .unwrap_or(-1);
         assert_eq!(count, 0, "a failed gate must not write to the DB");
@@ -3744,7 +3957,9 @@ mod tests {
     /// whereas readme() only depends on the (path, manifest) columns.
     #[test]
     fn readme_reads_plugin_dir_three_states() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("opencapx-readme-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let installed = dir.join("installed");
@@ -3772,7 +3987,10 @@ mod tests {
 
         // 2) README.md present → Some(raw)
         std::fs::write(installed.join("README.md"), "# Hi\n\ndoc here\n").unwrap();
-        assert_eq!(PluginManager::readme("com.x.readme").unwrap(), Some("# Hi\n\ndoc here\n".to_string()));
+        assert_eq!(
+            PluginManager::readme("com.x.readme").unwrap(),
+            Some("# Hi\n\ndoc here\n".to_string())
+        );
 
         // 3) over the limit → None
         let big = "x".repeat(256 * 1024 + 1);
@@ -3787,7 +4005,9 @@ mod tests {
     /// Start gate: missing dependency → reject the start (no spawn), emit plugin.start.rejected.
     #[test]
     fn start_rejects_missing_dependency_without_spawning() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("opencapx-dep-gate-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -3819,7 +4039,9 @@ mod tests {
     /// list() surfaces author/license from the persisted manifest (old behavior: missing field → None).
     #[test]
     fn list_exposes_author_from_persisted_manifest() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("opencapx-list-author-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store: SharedStore = Arc::new(Mutex::new(crate::core::storage::StoreEnum::Db(
@@ -3875,7 +4097,11 @@ mod tests {
                 {"id":"weather.set","permission":"weather.write","default":"denied"}]"#,
             r#"["weather.read","weather.write"]"#,
         );
-        assert!(validate_json("ok", &ok).is_ok(), "should accept: {:?}", validate_json("ok2", &ok));
+        assert!(
+            validate_json("ok", &ok).is_ok(),
+            "should accept: {:?}",
+            validate_json("ok2", &ok)
+        );
         // default omitted = ask
         let no_default = cap_manifest(
             r#"[{"id":"weather.fetch","permission":"weather.read"}]"#,
@@ -3896,34 +4122,53 @@ mod tests {
         // reserved domain (things.*, long built-in)
         let r = validate_json(
             "res-domain",
-            &cap_manifest(r#"[{"id":"things.fetch","permission":"things.read"}]"#, r#"[]"#),
+            &cap_manifest(
+                r#"[{"id":"things.fetch","permission":"things.read"}]"#,
+                r#"[]"#,
+            ),
         );
-        assert!(r.unwrap_err().contains("reserved"), "reserved domain must be rejected");
+        assert!(
+            r.unwrap_err().contains("reserved"),
+            "reserved domain must be rejected"
+        );
         // a reserved capability ID may only use the string form
         let r = validate_json(
             "res-cap",
-            &cap_manifest(r#"[{"id":"image.analyze","permission":"image.analyze"}]"#, r#"[]"#),
+            &cap_manifest(
+                r#"[{"id":"image.analyze","permission":"image.analyze"}]"#,
+                r#"[]"#,
+            ),
         );
         assert!(r.unwrap_err().contains("reserved capability"));
         // declaration references a reserved permission name (the reserved-domain check fires before the same-domain check, giving a more precise message)
         let r = validate_json(
             "res-perm",
-            &cap_manifest(r#"[{"id":"weather.fetch","permission":"image.read"}]"#, r#"[]"#),
+            &cap_manifest(
+                r#"[{"id":"weather.fetch","permission":"image.read"}]"#,
+                r#"[]"#,
+            ),
         );
         assert!(
-            r.unwrap_err().contains("may not reference reserved permission"),
+            r.unwrap_err()
+                .contains("may not reference reserved permission"),
             "declaration referencing a reserved permission must be rejected"
         );
         // cross-domain (both are new domains, but different ones)
         let r = validate_json(
             "cross-domain",
-            &cap_manifest(r#"[{"id":"weather.fetch","permission":"stock.read"}]"#, r#"[]"#),
+            &cap_manifest(
+                r#"[{"id":"weather.fetch","permission":"stock.read"}]"#,
+                r#"[]"#,
+            ),
         );
         assert!(r.unwrap_err().contains("must share a domain"));
         // the opencapx prefix is reserved
         let r = validate_json(
             "res-opencapx",
-            &cap_manifest(r#"[{"id":"opencapx.fetch","permission":"opencapx.read"}]"#, r#"[]"#),
+            &cap_manifest(
+                r#"[{"id":"opencapx.fetch","permission":"opencapx.read"}]"#,
+                r#"[]"#,
+            ),
         );
         assert!(r.is_err());
     }
@@ -3952,13 +4197,19 @@ mod tests {
         // non-ASCII homoglyphs
         let r = validate_json(
             "homoglyph",
-            &cap_manifest(r#"[{"id":"wéather.fetch","permission":"wéather.read"}]"#, r#"[]"#),
+            &cap_manifest(
+                r#"[{"id":"wéather.fetch","permission":"wéather.read"}]"#,
+                r#"[]"#,
+            ),
         );
         assert!(r.unwrap_err().contains("invalid"));
         // dangling new permission name: not in the built-in table and not declared by any object form
         let r = validate_json(
             "dangling",
-            &cap_manifest(r#"[{"id":"weather.fetch","permission":"weather.read"}]"#, r#"["root.access"]"#),
+            &cap_manifest(
+                r#"[{"id":"weather.fetch","permission":"weather.read"}]"#,
+                r#"["root.access"]"#,
+            ),
         );
         assert!(r.unwrap_err().contains("unknown permission"));
     }
@@ -3974,10 +4225,8 @@ mod tests {
     #[test]
     fn manifest_parses_alerting_severity_hints() {
         // Phase 53 — the `alerting.severityHints` table should be captured by the Manifest.alerting field.
-        let dir = std::env::temp_dir().join(format!(
-            "opencapx-manifest-hints-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("opencapx-manifest-hints-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
@@ -3994,10 +4243,7 @@ mod tests {
         let m = PluginManager::read_manifest(&dir).expect("manifest should parse");
         let alerting = m.alerting.expect("alerting field present");
         assert_eq!(
-            alerting
-                .severity_hints
-                .get("my.event")
-                .map(|s| s.as_str()),
+            alerting.severity_hints.get("my.event").map(|s| s.as_str()),
             Some("warn")
         );
         assert_eq!(
@@ -4013,10 +4259,8 @@ mod tests {
     #[test]
     fn manifest_without_alerting_field_parses_ok() {
         // Phase 53 — an old manifest has no alerting field → `#[serde(default)]` → None, without breaking the existing flow.
-        let dir = std::env::temp_dir().join(format!(
-            "opencapx-manifest-noalert-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("opencapx-manifest-noalert-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
@@ -4058,12 +4302,13 @@ mod tests {
         }
         let dir = std::env::temp_dir().join(format!("opencapx-pettest-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&dir.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
 
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -4077,7 +4322,10 @@ mod tests {
         // starts a stdio process once to simulate a start and asserts the reverse emit is forwarded into an event by handle_reverse
         let on_reverse: crate::core::process::OnReverse = std::sync::Arc::new(|v, _reply| {
             if v.get("method").and_then(|m| m.as_str()) == Some("core.emit") {
-                let kind = v.pointer("/params/type").and_then(|x| x.as_str()).unwrap_or("");
+                let kind = v
+                    .pointer("/params/type")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("");
                 if kind == "animation" {
                     crate::core::event::EventBus::shared().publish(
                         &crate::core::event::OpencapxEvent::new(
@@ -4112,7 +4360,10 @@ mod tests {
                 Duration::from_secs(5),
             )
             .expect("initialize");
-        assert_eq!(init.get("pluginId").and_then(|v| v.as_str()), Some(m.id.as_str()));
+        assert_eq!(
+            init.get("pluginId").and_then(|v| v.as_str()),
+            Some(m.id.as_str())
+        );
 
         // give the reverse call 200ms to reach the EventBus, then subscribe + publish to detect it
         std::thread::sleep(Duration::from_millis(200));
@@ -4123,10 +4374,14 @@ mod tests {
             "test",
             serde_json::json!({ "kind": "animation" }),
         ));
-        let seen = rx.recv_timeout(Duration::from_millis(500))
+        let seen = rx
+            .recv_timeout(Duration::from_millis(500))
             .map(|e| e.kind == "pet_blank_seen")
             .unwrap_or(false);
-        assert!(seen, "pet plugin core.emit should surface as EventBus event");
+        assert!(
+            seen,
+            "pet plugin core.emit should surface as EventBus event"
+        );
 
         let _ = proc.notify("plugin.shutdown", serde_json::json!({}));
         let _ = std::fs::remove_dir_all(&dir);
@@ -4137,7 +4392,9 @@ mod tests {
     /// so it holds TEST_STORE_LOCK to exclude other tests that start plugins.
     #[test]
     fn safe_mode_blocks_start_before_manifest_lookup() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::safe_mode::set_active(true);
         let err = PluginManager::shared()
             .start("com.example.safe-mode-probe")
@@ -4173,7 +4430,9 @@ mod tests {
         let store: SharedStore = Arc::new(Mutex::new(crate::core::storage::StoreEnum::Db(
             crate::core::storage::Storage::open(&dir.join("t.db")).unwrap(),
         )));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
 
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -4187,13 +4446,26 @@ mod tests {
         assert!(listed.iter().any(|p| p.status == "running"));
 
         // unauthorized: image.read defaults to ask → gate rejects → capability_failed
-        let denied = crate::core::capability::execute("image.analyze", &serde_json::json!({"image":"/tmp/a.png"}), None);
+        let denied = crate::core::capability::execute(
+            "image.analyze",
+            &serde_json::json!({"image":"/tmp/a.png"}),
+            None,
+        );
         assert!(denied.is_err());
 
         // after granting, the full path passes
-        assert!(crate::core::permission::set_decision(&store, &id, "image.read", "granted"));
-        let out = crate::core::capability::execute("image.analyze", &serde_json::json!({"image":"/tmp/a.png"}), None)
-            .expect("execute after grant");
+        assert!(crate::core::permission::set_decision(
+            &store,
+            &id,
+            "image.read",
+            "granted"
+        ));
+        let out = crate::core::capability::execute(
+            "image.analyze",
+            &serde_json::json!({"image":"/tmp/a.png"}),
+            None,
+        )
+        .expect("execute after grant");
         assert!(out["description"].as_str().unwrap().contains("/tmp/a.png"));
 
         let caps = crate::core::capability::list();
@@ -4203,7 +4475,11 @@ mod tests {
             .iter()
             .find(|c| c["id"] == "image.analyze")
             .expect("registered");
-        assert!(entry["providers"].as_array().unwrap().iter().any(|p| p == "com.opencapx.echo-vision"));
+        assert!(entry["providers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p == "com.opencapx.echo-vision"));
 
         mgr.stop(&id);
         let _ = std::fs::remove_dir_all(&dir);
@@ -4233,7 +4509,9 @@ mod tests {
         let store: SharedStore = Arc::new(Mutex::new(crate::core::storage::StoreEnum::Db(
             crate::core::storage::Storage::open(&dir.join("t.db")).unwrap(),
         )));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
 
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -4246,14 +4524,26 @@ mod tests {
         assert!(mgr.list().iter().any(|p| p.status == "running"));
 
         // unauthorized: image.read defaults to ask → gate rejects → capability_failed
-        let denied =
-            crate::core::capability::execute("image.analyze", &serde_json::json!({"image":"/tmp/b.png"}), None);
+        let denied = crate::core::capability::execute(
+            "image.analyze",
+            &serde_json::json!({"image":"/tmp/b.png"}),
+            None,
+        );
         assert!(denied.is_err());
 
         // after granting, the full path passes; the prefix proves the reverse config.get went through the real core
-        assert!(crate::core::permission::set_decision(&store, &id, "image.read", "granted"));
-        let out = crate::core::capability::execute("image.analyze", &serde_json::json!({"image":"/tmp/b.png"}), None)
-            .expect("execute after grant");
+        assert!(crate::core::permission::set_decision(
+            &store,
+            &id,
+            "image.read",
+            "granted"
+        ));
+        let out = crate::core::capability::execute(
+            "image.analyze",
+            &serde_json::json!({"image":"/tmp/b.png"}),
+            None,
+        )
+        .expect("execute after grant");
         assert_eq!(
             out["description"].as_str().unwrap(),
             "[ts-echo] got /tmp/b.png"
@@ -4271,9 +4561,11 @@ mod tests {
         let mut w = ZipWriter::new(f);
         for (name, data) in entries {
             if name.ends_with('/') {
-                w.add_directory(name.trim_end_matches('/'), SimpleFileOptions::default()).unwrap();
+                w.add_directory(name.trim_end_matches('/'), SimpleFileOptions::default())
+                    .unwrap();
             } else {
-                w.start_file(name.clone(), SimpleFileOptions::default()).unwrap();
+                w.start_file(name.clone(), SimpleFileOptions::default())
+                    .unwrap();
                 w.write_all(data.as_bytes()).unwrap();
             }
         }
@@ -4284,7 +4576,12 @@ mod tests {
         // echo_vision.py hardcodes a self-reported pluginId=com.opencapx.echo-vision, so the manifest must match
         let manifest = r#"{"id":"com.opencapx.echo-vision","name":"Echo Vision","version":"0.1.0","apiVersion":"1","type":"capability","runtime":{"type":"process","command":"python3","args":["bin/echo_vision.py"]},"capabilities":["image.analyze"],"permissions":["image.read"]}"#.to_string();
         let script = std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("plugins").join("echo-vision").join("bin").join("echo_vision.py"),
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("plugins")
+                .join("echo-vision")
+                .join("bin")
+                .join("echo_vision.py"),
         )
         .unwrap();
         vec![
@@ -4310,12 +4607,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-ocp-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store);
         // env is process-level: it must be set inside the lock, otherwise a parallel `ocplugin_rejects_unsafe_paths`
         // remove_var/overwrite → extraction lands in the wrong directory.
@@ -4329,8 +4627,16 @@ mod tests {
         let mgr = PluginManager::shared();
         let id = install_confirmed(&zip_path).expect("install ocplugin");
         assert_eq!(id, "com.opencapx.echo-vision");
-        assert!(base.join("plugins").join(&id).join("bin").join("echo_vision.py").exists());
-        assert!(mgr.list().iter().any(|p| p.id == id && p.status == "running"));
+        assert!(base
+            .join("plugins")
+            .join(&id)
+            .join("bin")
+            .join("echo_vision.py")
+            .exists());
+        assert!(mgr
+            .list()
+            .iter()
+            .any(|p| p.id == id && p.status == "running"));
 
         mgr.stop(&id);
         std::env::remove_var("OPENCAPX_PLUGINS_DIR");
@@ -4341,17 +4647,20 @@ mod tests {
 
     /// Reads the version of the plugins row (test helper).
     fn installed_version(store: &SharedStore, id: &str) -> Option<String> {
-        store.lock().ok().and_then(|s| {
-            s.with_conn_ref(|c| {
-                c.query_row(
-                    "SELECT version FROM plugins WHERE id = ?1",
-                    params![id],
-                    |r| r.get::<_, String>(0),
-                )
-                .ok()
+        store
+            .lock()
+            .ok()
+            .and_then(|s| {
+                s.with_conn_ref(|c| {
+                    c.query_row(
+                        "SELECT version FROM plugins WHERE id = ?1",
+                        params![id],
+                        |r| r.get::<_, String>(0),
+                    )
+                    .ok()
+                })
             })
-        })
-        .flatten()
+            .flatten()
     }
 
     /// Reads the decision of the plugin_permissions row (test helper).
@@ -4387,7 +4696,13 @@ mod tests {
 
     /// Two-phase signing of a v2 package (same method as plugin_sig's golden vectors): compute digest_v2 for the base package →
     /// sign `opencapx-v2\n<digest>` with the seed → backfill signature/sha256 and repackage.
-    fn make_v2_signed_echo(path: &Path, key_id: &str, seed: [u8; 32], version: &str, perms: &[&str]) {
+    fn make_v2_signed_echo(
+        path: &Path,
+        key_id: &str,
+        seed: [u8; 32],
+        version: &str,
+        perms: &[&str],
+    ) {
         use ed25519_dalek::Signer;
         let mut entries = echo_zip_entries_with(version, perms);
         let unsigned = path.with_extension("unsigned.ocplugin");
@@ -4501,15 +4816,17 @@ mod tests {
             eprintln!("skip: no python3");
             return;
         }
-        let base = std::env::temp_dir().join(format!("opencapx-commit-inst-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("opencapx-commit-inst-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
 
@@ -4518,7 +4835,10 @@ mod tests {
         let id = install_confirmed(&zip_path).expect("install");
 
         assert_eq!(installed_version(&store, &id).as_deref(), Some("0.1.0"));
-        assert_eq!(stored_decision(&store, &id, "image.read").as_deref(), Some("ask"));
+        assert_eq!(
+            stored_decision(&store, &id, "image.read").as_deref(),
+            Some("ask")
+        );
 
         PluginManager::shared().stop(&id);
         std::env::remove_var("OPENCAPX_PLUGINS_DIR");
@@ -4535,15 +4855,17 @@ mod tests {
             eprintln!("skip: no python3");
             return;
         }
-        let base = std::env::temp_dir().join(format!("opencapx-reject-keep-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("opencapx-reject-keep-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
 
@@ -4560,15 +4882,28 @@ mod tests {
             crate::core::storage::StoreEnum::Mem(crate::core::agent::SessionStore::new()),
         )));
         let v2 = base.join("v2.ocplugin");
-        make_zip(&v2, &echo_zip_entries_with("0.2.0", &["image.read", "file.read"]));
+        make_zip(
+            &v2,
+            &echo_zip_entries_with("0.2.0", &["image.read", "file.read"]),
+        );
         let err = install_confirmed(&v2).unwrap_err();
         assert!(err.contains("sqlite unavailable"), "got: {}", err);
 
         // 3) the old version must be intact: directory present + DB record still 0.1.0 + decisions not overwritten
-        assert!(dest.join("bin").join("echo_vision.py").exists(), "old dir must survive");
+        assert!(
+            dest.join("bin").join("echo_vision.py").exists(),
+            "old dir must survive"
+        );
         assert_eq!(installed_version(&store, &id).as_deref(), Some("0.1.0"));
-        assert_eq!(stored_decision(&store, &id, "image.read").as_deref(), Some("ask"));
-        assert_eq!(stored_decision(&store, &id, "file.read"), None, "new permissions must not be written to the DB");
+        assert_eq!(
+            stored_decision(&store, &id, "image.read").as_deref(),
+            Some("ask")
+        );
+        assert_eq!(
+            stored_decision(&store, &id, "file.read"),
+            None,
+            "new permissions must not be written to the DB"
+        );
         // no staging or .bak residue may remain
         let leftovers: Vec<String> = std::fs::read_dir(base.join("plugins"))
             .unwrap()
@@ -4583,7 +4918,10 @@ mod tests {
         let id2 = install_confirmed(&v2).expect("install v2");
         assert_eq!(id2, id);
         assert_eq!(installed_version(&store, &id).as_deref(), Some("0.2.0"));
-        assert_eq!(stored_decision(&store, &id, "file.read").as_deref(), Some("ask"));
+        assert_eq!(
+            stored_decision(&store, &id, "file.read").as_deref(),
+            Some("ask")
+        );
 
         PluginManager::shared().stop(&id);
         std::env::remove_var("OPENCAPX_PLUGINS_DIR");
@@ -4638,12 +4976,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-silent-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         std::env::remove_var("OPENCAPX_TRUSTED_KEYS");
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
@@ -4651,7 +4990,12 @@ mod tests {
         let v1 = base.join("v1.ocplugin");
         make_zip(&v1, &echo_zip_entries_with("0.1.0", &["image.read"]));
         let id = install_confirmed(&v1).expect("install v1");
-        assert!(crate::core::permission::set_decision(&store, &id, "image.read", "granted"));
+        assert!(crate::core::permission::set_decision(
+            &store,
+            &id,
+            "image.read",
+            "granted"
+        ));
 
         // same key (both unsigned), unchanged → silent: the old behavior (full re-ask) would reset granted to ask
         let v2 = base.join("v2.ocplugin");
@@ -4681,12 +5025,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-keychg-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
 
@@ -4707,7 +5052,12 @@ mod tests {
         let v1 = base.join("v1.ocplugin");
         make_v2_signed_echo(&v1, "key.a", seed_a, "0.1.0", &["image.read"]);
         let id = install_confirmed(&v1).expect("install key.a");
-        assert!(crate::core::permission::set_decision(&store, &id, "image.read", "granted"));
+        assert!(crate::core::permission::set_decision(
+            &store,
+            &id,
+            "image.read",
+            "granted"
+        ));
 
         let rx = crate::core::event::EventBus::shared().subscribe();
         let v2 = base.join("v2.ocplugin");
@@ -4754,12 +5104,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-swapfail-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
 
@@ -4821,12 +5172,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-conc-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
 
@@ -4877,12 +5229,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-revoke-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         std::env::remove_var("OPENCAPX_TRUSTED_KEYS");
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
@@ -4913,17 +5266,16 @@ mod tests {
             .iter()
             .any(|p| p.id == id && p.status == "running"));
 
-        let index: crate::core::registry::RegistryIndex = serde_json::from_value(
-            serde_json::json!({
+        let index: crate::core::registry::RegistryIndex =
+            serde_json::from_value(serde_json::json!({
                 "schemaVersion": 2,
                 "generatedAt": 1,
                 "publishers": [],
                 "revokedKeys": [{ "keyId": "com.test.revoked", "at": 9, "reason": "test" }],
                 "entries": [],
                 "indexSignature": { "alg": "ed25519", "keyId": "k", "sig": "0" }
-            }),
-        )
-        .unwrap();
+            }))
+            .unwrap();
 
         let rx = crate::core::event::EventBus::shared().subscribe();
         let hits = crate::core::revocation::sweep_with(&index);
@@ -4956,7 +5308,10 @@ mod tests {
 
         // explicit reopen: clear the marker + idempotent error; ack exempts it from the next sweep; it can start again
         crate::core::revocation::reopen(&id).expect("reopen");
-        assert!(crate::core::revocation::reopen(&id).is_err(), "not-revoked error");
+        assert!(
+            crate::core::revocation::reopen(&id).is_err(),
+            "not-revoked error"
+        );
         let row = PluginManager::shared()
             .list()
             .into_iter()
@@ -4965,7 +5320,9 @@ mod tests {
         assert!(row.revoked_key.is_none());
         let again = crate::core::revocation::sweep_with(&index);
         assert!(again.is_empty(), "ack must exempt re-disable");
-        PluginManager::shared().start(&id).expect("start after reopen");
+        PluginManager::shared()
+            .start(&id)
+            .expect("start after reopen");
         assert!(PluginManager::shared()
             .list()
             .iter()
@@ -4987,12 +5344,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-3state-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         std::env::remove_var("OPENCAPX_TRUSTED_KEYS");
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
@@ -5033,7 +5391,11 @@ mod tests {
         );
         make_zip(&tampered, &entries);
         let err = install_confirmed(&tampered).unwrap_err();
-        assert!(err.contains("signature verification failed"), "got: {}", err);
+        assert!(
+            err.contains("signature verification failed"),
+            "got: {}",
+            err
+        );
 
         PluginManager::shared().stop(&id);
         std::env::remove_var("OPENCAPX_PLUGINS_DIR");
@@ -5051,18 +5413,21 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-samples-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         std::env::set_var(
             "OPENCAPX_TRUSTED_KEYS",
-            repo.join("fixtures").join("signing").join("trusted-keys.json"),
+            repo.join("fixtures")
+                .join("signing")
+                .join("trusted-keys.json"),
         );
 
         // 1) the sample signed artifact is installable (trusted direct install, no confirmation)
@@ -5086,10 +5451,9 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(&mpath).unwrap()).unwrap();
         m["version"] = serde_json::Value::String("0.1.1".to_string());
         std::fs::write(&mpath, serde_json::to_string(&m).unwrap()).unwrap();
-        let seed_text = std::fs::read_to_string(
-            repo.join("fixtures").join("signing").join("key.seed.hex"),
-        )
-        .unwrap();
+        let seed_text =
+            std::fs::read_to_string(repo.join("fixtures").join("signing").join("key.seed.hex"))
+                .unwrap();
         let seed_text = seed_text.trim();
         let mut seed = [0u8; 32];
         for i in 0..32 {
@@ -5120,23 +5484,25 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-migrate-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         std::env::set_var(
             "OPENCAPX_TRUSTED_KEYS",
-            repo.join("fixtures").join("signing").join("trusted-keys.json"),
+            repo.join("fixtures")
+                .join("signing")
+                .join("trusted-keys.json"),
         );
-        let seed_text = std::fs::read_to_string(
-            repo.join("fixtures").join("signing").join("key.seed.hex"),
-        )
-        .unwrap();
+        let seed_text =
+            std::fs::read_to_string(repo.join("fixtures").join("signing").join("key.seed.hex"))
+                .unwrap();
         let seed_text = seed_text.trim();
         let mut seed = [0u8; 32];
         for i in 0..32 {
@@ -5162,7 +5528,10 @@ mod tests {
         crate::core::pack::pack_dir(&src, &seed, "com.opencapx.test-signing", &v1).unwrap();
         let id = install_confirmed(&v1).expect("install 0.1.0");
         assert_eq!(id, "com.example.weather-demo");
-        assert_eq!(PluginManager::last_version_of(&id).as_deref(), Some("0.1.0"));
+        assert_eq!(
+            PluginManager::last_version_of(&id).as_deref(),
+            Some("0.1.0")
+        );
         PluginManager::shared().stop(&id);
 
         // 2) simulate the v1 store left by the old version (the host does not migrate; the plugin migrates itself on the next start)
@@ -5174,7 +5543,10 @@ mod tests {
         crate::core::pack::pack_dir(&src, &seed, "com.opencapx.test-signing", &v2).unwrap();
         install_confirmed(&v2).expect("update 0.1.1");
         assert_eq!(installed_version(&store, &id).as_deref(), Some("0.1.1"));
-        assert_eq!(PluginManager::last_version_of(&id).as_deref(), Some("0.1.1"));
+        assert_eq!(
+            PluginManager::last_version_of(&id).as_deref(),
+            Some("0.1.1")
+        );
 
         let migrated: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&store_file).unwrap()).unwrap();
@@ -5183,7 +5555,9 @@ mod tests {
         assert_eq!(migrated["migrated_from"], serde_json::json!("0.1.0"));
 
         // 4) idempotent + old data preserved: after a restart the read still has the migrated shape and the old city
-        let proc = PluginManager::shared().ensure_running(&id).expect("running");
+        let proc = PluginManager::shared()
+            .ensure_running(&id)
+            .expect("running");
         let out = proc
             .call("weather.current", json!({}), Duration::from_secs(10))
             .expect("weather.current");
@@ -5239,7 +5613,8 @@ mod tests {
             .unwrap_err()
             .contains("unknown setting type"));
 
-        let bad_key = manifest_with_settings(serde_json::json!([{"key": "BadKey", "type": "text"}]));
+        let bad_key =
+            manifest_with_settings(serde_json::json!([{"key": "BadKey", "type": "text"}]));
         assert!(PluginManager::validate_manifest(&bad_key)
             .unwrap_err()
             .contains("invalid setting key"));
@@ -5299,12 +5674,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-settings-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         std::env::set_var("OPENCAPX_SECRETS_DIR", base.join("secrets"));
         crate::core::set_shared_store(store.clone());
 
@@ -5341,7 +5717,9 @@ mod tests {
             .to_string(),
         )
         .unwrap();
-        let id = PluginManager::shared().install_from_dir(&src).expect("install");
+        let id = PluginManager::shared()
+            .install_from_dir(&src)
+            .expect("install");
         assert_eq!(id, "com.opencapx.echo-vision");
 
         // view: default-value fallback + secret unset (value not returned)
@@ -5358,12 +5736,14 @@ mod tests {
         let err =
             PluginManager::set_setting_value(&id, "run_now", &serde_json::json!(null)).unwrap_err();
         assert!(err.contains("action"), "got: {}", err);
-        let err =
-            PluginManager::set_setting_value(&id, "nope", &serde_json::json!(1)).unwrap_err();
+        let err = PluginManager::set_setting_value(&id, "nope", &serde_json::json!(1)).unwrap_err();
         assert!(err.contains("not declared"), "got: {}", err);
 
         let view = PluginManager::settings_view(&id).expect("view 2");
-        assert_eq!(view.values.get("auto_play"), Some(&serde_json::json!(false)));
+        assert_eq!(
+            view.values.get("auto_play"),
+            Some(&serde_json::json!(false))
+        );
         assert_eq!(view.secrets_set, vec!["api_key".to_string()]);
         assert!(
             view.values.get("api_key").is_none(),
@@ -5374,7 +5754,10 @@ mod tests {
         let secret_dir = base.join("secrets").join("com.opencapx.echo-vision");
         assert!(secret_dir.exists());
         PluginManager::shared().uninstall(&id).expect("uninstall");
-        assert!(!secret_dir.exists(), "uninstall must clean fallback secrets");
+        assert!(
+            !secret_dir.exists(),
+            "uninstall must clean fallback secrets"
+        );
 
         std::env::remove_var("OPENCAPX_SECRETS_DIR");
         let _ = std::fs::remove_dir_all(&base);
@@ -5410,10 +5793,14 @@ mod tests {
 
     #[test]
     fn settings_p1_slider_requires_min_max_lt_and_positive_step() {
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "slider", "min": 1}]))
-            .contains("min and max"));
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "slider", "max": 8}]))
-            .contains("min and max"));
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "slider", "min": 1}]))
+                .contains("min and max")
+        );
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "slider", "max": 8}]))
+                .contains("min and max")
+        );
         assert!(
             decl_err(serde_json::json!([{"key": "a", "type": "slider", "min": 8, "max": 8}]))
                 .contains("min < max")
@@ -5430,92 +5817,129 @@ mod tests {
             {"key": "a", "type": "slider", "min": 1, "max": 8, "default": 0.0}
         ]))
         .contains("below min"));
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "a", "type": "slider", "min": 1, "max": 8, "default": 1.5}
-        ])))
-        .is_ok());
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "a", "type": "slider", "min": 1, "max": 8, "default": 1.5}
+            ])))
+            .is_ok()
+        );
     }
 
     #[test]
     fn settings_p1_range_fields_only_on_number_and_slider() {
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "text", "min": 1}]))
-            .contains("min/max/step"));
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "toggle", "max": 1}]))
-            .contains("min/max/step"));
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "text", "step": 1}]))
-            .contains("min/max/step"));
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "text", "min": 1}]))
+                .contains("min/max/step")
+        );
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "toggle", "max": 1}]))
+                .contains("min/max/step")
+        );
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "text", "step": 1}]))
+                .contains("min/max/step")
+        );
         assert!(decl_err(serde_json::json!([
             {"key": "a", "type": "dropdown", "options": ["x"], "max": 2}
         ]))
         .contains("min/max/step"));
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "a", "type": "number", "min": 0, "max": 10, "step": 2}
-        ])))
-        .is_ok());
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "a", "type": "number", "min": 0, "max": 10, "step": 2}
+            ])))
+            .is_ok()
+        );
     }
 
     #[test]
     fn settings_p1_radio_group_like_dropdown() {
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "radio-group"}]))
-            .contains("options"));
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "radio-group"}])).contains("options")
+        );
         assert!(decl_err(serde_json::json!([
             {"key": "a", "type": "radio-group", "options": ["x"], "default": "y"}
         ]))
         .contains("one of options"));
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "a", "type": "radio-group", "options": ["x", "y"], "default": "y"}
-        ])))
-        .is_ok());
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "a", "type": "radio-group", "options": ["x", "y"], "default": "y"}
+            ])))
+            .is_ok()
+        );
     }
 
     #[test]
     fn settings_p1_color_default_must_be_hex_and_no_options() {
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "color", "default": "red"}]))
-            .contains("hex"));
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "color", "default": "#12"}]))
-            .contains("hex"));
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "color", "default": "#12345"}]))
-            .contains("hex"));
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "color", "default": "red"}]))
+                .contains("hex")
+        );
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "color", "default": "#12"}]))
+                .contains("hex")
+        );
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "color", "default": "#12345"}]))
+                .contains("hex")
+        );
         assert!(decl_err(serde_json::json!([
             {"key": "a", "type": "color", "options": ["#000"]}
         ]))
         .contains("options/min/max"));
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "color", "min": 0}]))
-            .contains("min/max/step"));
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "a", "type": "color", "default": "#0f0"}
-        ])))
-        .is_ok());
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "color", "min": 0}]))
+                .contains("min/max/step")
+        );
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "a", "type": "color", "default": "#0f0"}
+            ])))
+            .is_ok()
+        );
     }
 
     #[test]
     fn settings_p1_pick_only_on_path_and_known_value() {
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "a", "type": "path", "pick": "file"}
-        ])))
-        .is_ok());
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "a", "type": "path", "pick": "directory"}
-        ])))
-        .is_ok());
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "text", "pick": "file"}]))
-            .contains("pick"));
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "path", "pick": "bogus"}]))
-            .contains("file"));
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "a", "type": "path", "pick": "file"}
+            ])))
+            .is_ok()
+        );
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "a", "type": "path", "pick": "directory"}
+            ])))
+            .is_ok()
+        );
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "text", "pick": "file"}]))
+                .contains("pick")
+        );
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "path", "pick": "bogus"}]))
+                .contains("file")
+        );
     }
 
     #[test]
     fn settings_p1_section_nonblank_and_max_40() {
         let exact = "x".repeat(40);
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "a", "type": "text", "section": exact}
-        ])))
-        .is_ok());
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "a", "type": "text", "section": exact}
+            ])))
+            .is_ok()
+        );
         let too_long = "x".repeat(41);
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "text", "section": too_long}]))
-            .contains("section"));
-        assert!(decl_err(serde_json::json!([{"key": "a", "type": "text", "section": "   "}]))
-            .contains("section"));
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "text", "section": too_long}]))
+                .contains("section")
+        );
+        assert!(
+            decl_err(serde_json::json!([{"key": "a", "type": "text", "section": "   "}]))
+                .contains("section")
+        );
     }
 
     #[test]
@@ -5598,11 +6022,13 @@ mod tests {
             }
             cond
         }
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "a", "type": "toggle"},
-            {"key": "b", "type": "text", "visible": deep(8)}
-        ])))
-        .is_ok());
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "a", "type": "toggle"},
+                {"key": "b", "type": "text", "visible": deep(8)}
+            ])))
+            .is_ok()
+        );
         assert!(decl_err(serde_json::json!([
             {"key": "a", "type": "toggle"},
             {"key": "b", "type": "text", "visible": deep(9)}
@@ -5684,10 +6110,12 @@ mod tests {
 
     #[test]
     fn settings_p1_pattern_must_be_rust_regex() {
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "a", "type": "path", "validate": [{"type": "pattern", "regex": "\\.json$"}]}
-        ])))
-        .is_ok());
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "a", "type": "path", "validate": [{"type": "pattern", "regex": "\\.json$"}]}
+            ])))
+            .is_ok()
+        );
         assert!(decl_err(serde_json::json!([
             {"key": "a", "type": "text", "validate": [{"type": "pattern", "regex": "("}]}
         ]))
@@ -5700,7 +6128,9 @@ mod tests {
 
     #[test]
     fn settings_p1_pattern_must_be_js_compilable() {
-        for re in ["(?i)foo", "(?m)^a$", "(?s).", "(?x)a b", "(?U)a+", "(?-i)foo", "(?P<n>a)"] {
+        for re in [
+            "(?i)foo", "(?m)^a$", "(?s).", "(?x)a b", "(?U)a+", "(?-i)foo", "(?P<n>a)",
+        ] {
             let e = decl_err(serde_json::json!([
                 {"key": "a", "type": "text", "validate": [{"type": "pattern", "regex": re}]}
             ]));
@@ -5711,18 +6141,22 @@ mod tests {
                 e
             );
         }
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "a", "type": "text", "validate": [{"type": "pattern", "regex": "(?:foo)"}]}
-        ])))
-        .is_ok());
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "a", "type": "text", "validate": [{"type": "pattern", "regex": "(?:foo)"}]}
+            ])))
+            .is_ok()
+        );
         assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
             {"key": "a", "type": "text", "validate": [{"type": "pattern", "regex": "(?<name>foo)"}]}
         ])))
         .is_ok());
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "a", "type": "text", "validate": [{"type": "pattern", "regex": "^[a-z]+$"}]}
-        ])))
-        .is_ok());
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "a", "type": "text", "validate": [{"type": "pattern", "regex": "^[a-z]+$"}]}
+            ])))
+            .is_ok()
+        );
         assert!(decl_err(serde_json::json!([
             {"key": "a", "type": "text", "validate": [{"type": "pattern", "regex": "(?=x)"}]}
         ]))
@@ -5743,7 +6177,11 @@ mod tests {
             {"key": "a", "type": "text", "default": "nope",
              "validate": [{"type": "pattern", "regex": "^x", "message": "must start with x"}]}
         ]));
-        assert!(e.contains("default") && e.contains("must start with x"), "got: {}", e);
+        assert!(
+            e.contains("default") && e.contains("must start with x"),
+            "got: {}",
+            e
+        );
         assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
             {"key": "a", "type": "text", "default": "longenough", "validate": [{"type": "minLength", "value": 8}]}
         ])))
@@ -5786,18 +6224,22 @@ mod tests {
 
     #[test]
     fn settings_p1_empty_default_with_pattern_validates() {
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "store_path", "type": "path", "default": "", "validate": [
-                {"type": "pattern", "regex": "\\.json$", "message": "must be a .json file"}
-            ]}
-        ])))
-        .is_ok());
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "optional_title", "type": "text", "default": "", "validate": [
-                {"type": "minLength", "value": 8}
-            ]}
-        ])))
-        .is_ok());
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "store_path", "type": "path", "default": "", "validate": [
+                    {"type": "pattern", "regex": "\\.json$", "message": "must be a .json file"}
+                ]}
+            ])))
+            .is_ok()
+        );
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "optional_title", "type": "text", "default": "", "validate": [
+                    {"type": "minLength", "value": 8}
+                ]}
+            ])))
+            .is_ok()
+        );
         assert!(decl_err(serde_json::json!([
             {"key": "store_path", "type": "path", "default": "notes.txt", "validate": [
                 {"type": "pattern", "regex": "\\.json$"}
@@ -5821,8 +6263,15 @@ mod tests {
         assert!(PluginManager::validate_manifest(&m).is_ok());
         let v = serde_json::to_value(&m).expect("serialize");
         for (i, s) in v["settings"].as_array().unwrap().iter().enumerate() {
-            for k in ["visible", "disabled", "validate", "section", "pick", "min", "max", "step"] {
-                assert!(s.get(k).is_none(), "legacy setting #{} unexpectedly gained {}", i, k);
+            for k in [
+                "visible", "disabled", "validate", "section", "pick", "min", "max", "step",
+            ] {
+                assert!(
+                    s.get(k).is_none(),
+                    "legacy setting #{} unexpectedly gained {}",
+                    i,
+                    k
+                );
             }
         }
     }
@@ -5867,15 +6316,17 @@ mod tests {
             eprintln!("skip: no python3");
             return;
         }
-        let base = std::env::temp_dir().join(format!("opencapx-settings-p1-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("opencapx-settings-p1-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         std::env::set_var("OPENCAPX_SECRETS_DIR", base.join("secrets"));
         crate::core::set_shared_store(store.clone());
 
@@ -5918,7 +6369,9 @@ mod tests {
             .to_string(),
         )
         .unwrap();
-        let id = PluginManager::shared().install_from_dir(&src).expect("install");
+        let id = PluginManager::shared()
+            .install_from_dir(&src)
+            .expect("install");
         assert_eq!(id, "com.opencapx.p1-settings");
 
         assert_eq!(
@@ -5993,9 +6446,18 @@ mod tests {
         ]));
         assert!(PluginManager::validate_manifest(&m).is_ok());
         let v = serde_json::to_value(&m).unwrap();
-        assert_eq!(v["settings"][0]["label"]["zh-Hans"], serde_json::json!("后端模式"));
-        assert_eq!(v["settings"][0]["label"]["ja"], serde_json::json!("バックエンド"));
-        assert_eq!(v["settings"][0]["aliases"][2], serde_json::json!("运行模式"));
+        assert_eq!(
+            v["settings"][0]["label"]["zh-Hans"],
+            serde_json::json!("后端模式")
+        );
+        assert_eq!(
+            v["settings"][0]["label"]["ja"],
+            serde_json::json!("バックエンド")
+        );
+        assert_eq!(
+            v["settings"][0]["aliases"][2],
+            serde_json::json!("运行模式")
+        );
         assert_eq!(
             v["settings"][0]["validate"][0]["message"]["en"],
             serde_json::json!("Backend mode is required")
@@ -6044,10 +6506,12 @@ mod tests {
     #[test]
     fn settings_p2_aliases_limits() {
         let ok8: Vec<String> = (0..8).map(|i| format!("alias{}", i)).collect();
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "a", "type": "text", "aliases": ok8}
-        ])))
-        .is_ok());
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "a", "type": "text", "aliases": ok8}
+            ])))
+            .is_ok()
+        );
 
         let too_many: Vec<String> = (0..9).map(|i| format!("alias{}", i)).collect();
         assert!(
@@ -6066,10 +6530,12 @@ mod tests {
         ]))
         .contains("too long"));
 
-        assert!(PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
-            {"key": "a", "type": "text", "aliases": ["x".repeat(40)]}
-        ])))
-        .is_ok());
+        assert!(
+            PluginManager::validate_manifest(&decl_manifest(serde_json::json!([
+                {"key": "a", "type": "text", "aliases": ["x".repeat(40)]}
+            ])))
+            .is_ok()
+        );
     }
 
     /// P2 — host-side text selection: use `en` if present; otherwise the lexicographically first key (BTreeMap iteration order).
@@ -6088,8 +6554,12 @@ mod tests {
             "plain"
         );
         assert_eq!(
-            map(&[("zh-Hans", "后端模式"), ("en", "Backend mode"), ("vi", "Chế độ backend")])
-                .pick_host_locale(),
+            map(&[
+                ("zh-Hans", "后端模式"),
+                ("en", "Backend mode"),
+                ("vi", "Chế độ backend")
+            ])
+            .pick_host_locale(),
             "Backend mode"
         );
         assert_eq!(
@@ -6108,15 +6578,17 @@ mod tests {
             eprintln!("skip: no python3");
             return;
         }
-        let base = std::env::temp_dir().join(format!("opencapx-settings-p2-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("opencapx-settings-p2-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         std::env::set_var("OPENCAPX_SECRETS_DIR", base.join("secrets"));
         crate::core::set_shared_store(store.clone());
 
@@ -6155,7 +6627,9 @@ mod tests {
             .to_string(),
         )
         .unwrap();
-        let id = PluginManager::shared().install_from_dir(&src).expect("install");
+        let id = PluginManager::shared()
+            .install_from_dir(&src)
+            .expect("install");
         assert_eq!(id, "com.opencapx.p2-settings");
 
         assert_eq!(
@@ -6204,12 +6678,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-scaffold-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // The default plugin directory of shared-store tests is not isolated, so it is uniformly redirected to a temp directory.
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         crate::core::set_shared_store(store.clone());
@@ -6258,7 +6733,10 @@ mod tests {
         assert!(manifest.contains("Scaffold Test"));
         assert!(!manifest.contains("com.example.my-plugin"));
         let py_src = std::fs::read_to_string(out_dir.join("bin").join("plugin.py")).unwrap();
-        assert!(!py_src.contains("MyPlugin"), "class placeholder not rewritten");
+        assert!(
+            !py_src.contains("MyPlugin"),
+            "class placeholder not rewritten"
+        );
 
         // overwrite refusal: a second scaffold in the same directory must fail
         let again = run(&[
@@ -6267,10 +6745,15 @@ mod tests {
             "--dir",
             out_dir.to_str().unwrap(),
         ]);
-        assert!(!again.status.success(), "must refuse to overwrite existing dir");
+        assert!(
+            !again.status.success(),
+            "must refuse to overwrite existing dir"
+        );
 
         // installable: real install + start handshake + registered
-        let id = PluginManager::shared().install_from_dir(&out_dir).expect("install scaffold");
+        let id = PluginManager::shared()
+            .install_from_dir(&out_dir)
+            .expect("install scaffold");
         assert_eq!(id, "com.opencapx.scaffold-test");
         assert!(PluginManager::shared().list().iter().any(|p| p.id == id));
         PluginManager::shared().uninstall(&id).expect("uninstall");
@@ -6292,12 +6775,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-e2e-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
 
@@ -6311,7 +6795,10 @@ mod tests {
         for i in 0..32 {
             seed[i] = u8::from_str_radix(&seed_text[i * 2..i * 2 + 2], 16).unwrap();
         }
-        let trusted_path = repo.join("fixtures").join("signing").join("trusted-keys.json");
+        let trusted_path = repo
+            .join("fixtures")
+            .join("signing")
+            .join("trusted-keys.json");
         std::env::set_var("OPENCAPX_TRUSTED_KEYS", &trusted_path);
         let trusted = crate::core::plugin_sig::load_trusted_keys_from(&trusted_path);
         let official_env = format!("{}={}", key_id, pubkey_hex(seed));
@@ -6341,7 +6828,8 @@ mod tests {
             }]
         });
         let signed =
-            crate::core::registry::sign_index(idx_raw.to_string().as_bytes(), &seed, key_id).unwrap();
+            crate::core::registry::sign_index(idx_raw.to_string().as_bytes(), &seed, key_id)
+                .unwrap();
 
         // 2) verify: index signature-verification chain (positive case; the tamper negative case is in the registry/verify tests)
         std::env::set_var("OPENCAPX_REGISTRY_OFFICIAL_KEYS", &official_env);
@@ -6388,8 +6876,9 @@ mod tests {
             "revokedKeys": [{"keyId": key_id, "at": 200, "reason": "e2e drill"}],
             "entries": []
         });
-        let signed2 = crate::core::registry::sign_index(idx2_raw.to_string().as_bytes(), &seed, key_id)
-            .unwrap();
+        let signed2 =
+            crate::core::registry::sign_index(idx2_raw.to_string().as_bytes(), &seed, key_id)
+                .unwrap();
         std::env::set_var("OPENCAPX_REGISTRY_OFFICIAL_KEYS", &official_env);
         let index2 = crate::core::registry::verify_index(signed2.as_bytes()).unwrap();
         std::env::remove_var("OPENCAPX_REGISTRY_OFFICIAL_KEYS");
@@ -6402,18 +6891,26 @@ mod tests {
             .unwrap();
         assert_eq!(row.status, "stopped");
         assert_eq!(row.revoked_key.as_deref(), Some(key_id));
-        assert!(PluginManager::shared().start(&id).unwrap_err().contains("revoked"));
+        assert!(PluginManager::shared()
+            .start(&id)
+            .unwrap_err()
+            .contains("revoked"));
         let err = install_confirmed(&v011).unwrap_err();
         assert!(err.contains("plugin revoked"), "got: {}", err);
 
         // 7) reopen: explicit reopen → clear marker → can start
         crate::core::revocation::reopen(&id).expect("reopen");
-        PluginManager::shared().start(&id).expect("start after reopen");
+        PluginManager::shared()
+            .start(&id)
+            .expect("start after reopen");
 
         // 8) uninstall: rows/directory/process all cleared
         PluginManager::shared().uninstall(&id).expect("uninstall");
         assert!(!PluginManager::shared().list().iter().any(|p| p.id == id));
-        assert!(!base.join("plugins").join(&id).exists(), "plugin dir must be gone");
+        assert!(
+            !base.join("plugins").join(&id).exists(),
+            "plugin dir must be gone"
+        );
 
         std::env::remove_var("OPENCAPX_TRUSTED_KEYS");
         std::env::remove_var("OPENCAPX_PLUGINS_DIR");
@@ -6432,12 +6929,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-corrupt-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
 
@@ -6474,11 +6972,9 @@ mod tests {
             })
             .unwrap_or_default();
         assert!(
-            !entries
-                .iter()
-                .any(|n| n == "com.opencapx.echo-vision"
-                    || n.starts_with(".tmp-")
-                    || n.starts_with(".old-")),
+            !entries.iter().any(|n| n == "com.opencapx.echo-vision"
+                || n.starts_with(".tmp-")
+                || n.starts_with(".old-")),
             "no dest/staging leftovers: {:?}",
             entries
         );
@@ -6505,12 +7001,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-diskfull-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
 
@@ -6539,7 +7036,10 @@ mod tests {
         make_zip(
             &fresh,
             &[
-                ("opencapx-plugin.json".to_string(), fresh_manifest.to_string()),
+                (
+                    "opencapx-plugin.json".to_string(),
+                    fresh_manifest.to_string(),
+                ),
                 ("bin/echo_vision.py".to_string(), "print('x')".to_string()),
             ],
         );
@@ -6585,12 +7085,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-revrace-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
 
@@ -6612,23 +7113,24 @@ mod tests {
         std::fs::create_dir_all(src1.join("bin")).unwrap();
         std::fs::write(src1.join("bin").join("echo_vision.py"), &script).unwrap();
         std::fs::write(src1.join("opencapx-plugin.json"), mk_manifest("0.1.0")).unwrap();
-        let id = PluginManager::shared().install_from_dir(&src1).expect("install v1");
+        let id = PluginManager::shared()
+            .install_from_dir(&src1)
+            .expect("install v1");
 
         let src2 = base.join("src-020");
         copy_tree(&src1, &src2);
         std::fs::write(src2.join("opencapx-plugin.json"), mk_manifest("0.2.0")).unwrap();
 
-        let index: crate::core::registry::RegistryIndex = serde_json::from_value(
-            serde_json::json!({
+        let index: crate::core::registry::RegistryIndex =
+            serde_json::from_value(serde_json::json!({
                 "schemaVersion": 2,
                 "generatedAt": 9,
                 "publishers": [],
                 "revokedKeys": [{ "keyId": key_id, "at": 9, "reason": "mid-update race" }],
                 "entries": [],
                 "indexSignature": { "alg": "ed25519", "keyId": "k", "sig": "0" }
-            }),
-        )
-        .unwrap();
+            }))
+            .unwrap();
 
         // concurrent: update (v0.2.0) vs revocation scan
         let src2c = src2.clone();
@@ -6636,7 +7138,12 @@ mod tests {
         let h_sweep = std::thread::spawn(move || crate::core::revocation::sweep_with(&index));
         let r_update = h_update.join().expect("update thread");
         let hits = h_sweep.join().expect("sweep thread");
-        assert_eq!(hits.len(), 1, "sweep must hit the installed plugin: {:?}", hits);
+        assert_eq!(
+            hits.len(),
+            1,
+            "sweep must hit the installed plugin: {:?}",
+            hits
+        );
 
         // final state consistent: revocation marker + stopped + version old or new; the update failure must be caused by the revocation
         let row = PluginManager::shared()
@@ -6644,12 +7151,24 @@ mod tests {
             .into_iter()
             .find(|p| p.id == id)
             .unwrap();
-        assert_eq!(row.revoked_key.as_deref(), Some(key_id), "revocation marker must land");
+        assert_eq!(
+            row.revoked_key.as_deref(),
+            Some(key_id),
+            "revocation marker must land"
+        );
         assert_eq!(row.status, "stopped");
         let ver = installed_version(&store, &id).unwrap();
-        assert!(ver == "0.1.0" || ver == "0.2.0", "coherent version: {}", ver);
+        assert!(
+            ver == "0.1.0" || ver == "0.2.0",
+            "coherent version: {}",
+            ver
+        );
         if let Err(e) = &r_update {
-            assert!(e.contains("revoked"), "update error must be revocation: {}", e);
+            assert!(
+                e.contains("revoked"),
+                "update error must be revocation: {}",
+                e
+            );
         }
         let leftovers: Vec<String> = std::fs::read_dir(base.join("plugins"))
             .map(|rd| {
@@ -6658,11 +7177,15 @@ mod tests {
                     .collect()
             })
             .unwrap_or_default();
-        assert!(!leftovers.iter().any(|n| n.starts_with(".tmp-") || n.starts_with(".old-")));
+        assert!(!leftovers
+            .iter()
+            .any(|n| n.starts_with(".tmp-") || n.starts_with(".old-")));
 
         // reopen path works
         crate::core::revocation::reopen(&id).expect("reopen");
-        PluginManager::shared().start(&id).expect("start after reopen");
+        PluginManager::shared()
+            .start(&id)
+            .expect("start after reopen");
 
         PluginManager::shared().stop(&id);
         std::env::remove_var("OPENCAPX_PLUGINS_DIR");
@@ -6681,12 +7204,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-legacy-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
@@ -6737,7 +7261,11 @@ mod tests {
         assert_eq!(id2, id);
         assert_eq!(installed_version(&store, &id).as_deref(), Some("0.2.0"));
         let view = PluginManager::settings_view(&id).expect("settings view");
-        assert_eq!(view.settings.len(), 1, "new settings[] visible after upgrade");
+        assert_eq!(
+            view.settings.len(),
+            1,
+            "new settings[] visible after upgrade"
+        );
 
         PluginManager::shared().stop(&id);
         std::env::remove_var("OPENCAPX_PLUGINS_DIR");
@@ -6756,12 +7284,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-v1pkg-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
@@ -6809,13 +7338,15 @@ mod tests {
         );
         let mut signed_manifest = manifest;
         signed_manifest["sha256"] = serde_json::Value::String(hash);
-        signed_manifest["signature"] =
-            serde_json::json!({"keyId": key_id, "sig": sig});
+        signed_manifest["signature"] = serde_json::json!({"keyId": key_id, "sig": sig});
         let signed = base.join("v1-signed.ocplugin");
         make_zip(
             &signed,
             &[
-                ("opencapx-plugin.json".to_string(), signed_manifest.to_string()),
+                (
+                    "opencapx-plugin.json".to_string(),
+                    signed_manifest.to_string(),
+                ),
                 ("bin/echo_vision.py".to_string(), script),
             ],
         );
@@ -6841,12 +7372,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-budget-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
 
@@ -6880,12 +7412,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-drill-rev-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
 
@@ -6901,7 +7434,9 @@ mod tests {
         }
         std::env::set_var(
             "OPENCAPX_TRUSTED_KEYS",
-            repo.join("fixtures").join("signing").join("trusted-keys.json"),
+            repo.join("fixtures")
+                .join("signing")
+                .join("trusted-keys.json"),
         );
         let official_env = format!("{}={}", key_id, pubkey_hex(seed));
 
@@ -6933,7 +7468,10 @@ mod tests {
         std::env::set_var("OPENCAPX_REGISTRY_OFFICIAL_KEYS", &official_env);
         let index = crate::core::registry::verify_index(signed.as_bytes()).expect("index verifies");
         std::env::remove_var("OPENCAPX_REGISTRY_OFFICIAL_KEYS");
-        println!("[2/6] revocation index signed+verified (keyId={}, at=300)", key_id);
+        println!(
+            "[2/6] revocation index signed+verified (keyId={}, at=300)",
+            key_id
+        );
 
         // [3/6] sweep: default-disable + event
         let rx = crate::core::event::EventBus::shared().subscribe();
@@ -6942,7 +7480,10 @@ mod tests {
         let mut saw_revoked = false;
         while let Ok(e) = rx.try_recv() {
             if e.kind == "plugin.revoked" {
-                assert_eq!(e.payload.get("keyId").and_then(|v| v.as_str()), Some(key_id));
+                assert_eq!(
+                    e.payload.get("keyId").and_then(|v| v.as_str()),
+                    Some(key_id)
+                );
                 saw_revoked = true;
             }
         }
@@ -6960,7 +7501,10 @@ mod tests {
         assert_eq!(row.revoked_key.as_deref(), Some(key_id));
 
         // [4/6] block start and update
-        assert!(PluginManager::shared().start(&id).unwrap_err().contains("revoked"));
+        assert!(PluginManager::shared()
+            .start(&id)
+            .unwrap_err()
+            .contains("revoked"));
         let err = install_confirmed(&pkg).unwrap_err();
         assert!(err.contains("plugin revoked"), "got: {}", err);
         println!("[4/6] start/update blocked: {}", err);
@@ -6996,7 +7540,9 @@ mod tests {
         println!("[5/6] reopened; ack={:?}; re-sweep hits=0", ack);
 
         // [6/6] resume running
-        PluginManager::shared().start(&id).expect("start after reopen");
+        PluginManager::shared()
+            .start(&id)
+            .expect("start after reopen");
         assert!(PluginManager::shared()
             .list()
             .iter()
@@ -7100,13 +7646,25 @@ mod tests {
         let p1 = pid.clone();
         let c1 = captured.clone();
         let h1 = std::thread::spawn(move || {
-            enqueue_permission_request(p1, "image.read".to_string(), None, Some(json!(11)), mk_reply(c1));
+            enqueue_permission_request(
+                p1,
+                "image.read".to_string(),
+                None,
+                Some(json!(11)),
+                mk_reply(c1),
+            );
         });
         std::thread::sleep(std::time::Duration::from_millis(30));
         let p2 = pid.clone();
         let c2 = captured.clone();
         let h2 = std::thread::spawn(move || {
-            enqueue_permission_request(p2, "image.read".to_string(), None, Some(json!(12)), mk_reply(c2));
+            enqueue_permission_request(
+                p2,
+                "image.read".to_string(),
+                None,
+                Some(json!(12)),
+                mk_reply(c2),
+            );
         });
         h1.join().unwrap();
         h2.join().unwrap();
@@ -7149,8 +7707,8 @@ mod tests {
         assert!(PluginManager::validate_manifest(&manifest_with_timeout(Some(1))).is_ok());
         assert!(PluginManager::validate_manifest(&manifest_with_timeout(Some(600))).is_ok());
         for bad in [0u32, 601] {
-            let err = PluginManager::validate_manifest(&manifest_with_timeout(Some(bad)))
-                .unwrap_err();
+            let err =
+                PluginManager::validate_manifest(&manifest_with_timeout(Some(bad))).unwrap_err();
             assert!(err.contains("timeoutSecs"), "got: {}", err);
         }
     }
@@ -7170,12 +7728,13 @@ mod tests {
         let base = std::env::temp_dir().join(format!("opencapx-slow-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         std::fs::create_dir_all(base.join("plugins")).unwrap();
@@ -7208,7 +7767,9 @@ for line in sys.stdin:
             r#"{"id":"com.example.slow","name":"Slow","version":"0.1.0","apiVersion":"1","type":"capability","runtime":{"type":"process","command":"python3","args":["bin/slow.py"]},"capabilities":[{"id":"demo.slow","permission":"demo.run","default":"ask","timeoutSecs":1}],"permissions":["demo.run"]}"#,
         )
         .unwrap();
-        let id = PluginManager::shared().install_from_dir(&src).expect("install slow");
+        let id = PluginManager::shared()
+            .install_from_dir(&src)
+            .expect("install slow");
         assert_eq!(id, "com.example.slow");
 
         // 1) declaration written to DB: timeout_for parses 1 second; string form → no declared timeout
@@ -7219,7 +7780,8 @@ for line in sys.stdin:
         );
         let rows = crate::core::declaration::all(&store);
         assert!(
-            rows.iter().any(|d| d.capability == "demo.slow" && d.timeout_secs == Some(1)),
+            rows.iter()
+                .any(|d| d.capability == "demo.slow" && d.timeout_secs == Some(1)),
             "rows: {:?}",
             rows
         );
@@ -7233,7 +7795,9 @@ for line in sys.stdin:
         );
 
         // 2) call times out by the declared value (~1s, not the default 60s)
-        let proc = PluginManager::shared().ensure_running(&id).expect("running");
+        let proc = PluginManager::shared()
+            .ensure_running(&id)
+            .expect("running");
         let timeout = std::time::Duration::from_secs(
             crate::core::declaration::timeout_for(&store, &id, "demo.slow").unwrap() as u64,
         );
@@ -7265,12 +7829,13 @@ for line in sys.stdin:
         let base = std::env::temp_dir().join(format!("opencapx-payload-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         std::fs::create_dir_all(base.join("plugins")).unwrap();
@@ -7297,7 +7862,10 @@ for line in sys.stdin:
         let small = json!({"city": "Beijing"});
         let err2 = crate::core::capability::execute("weather.current", &small, None).unwrap_err();
         // v1.5: plugin-layer permission denial carries an explainable error (the permission name is returned with the error, mapped to 40002 on the rpc side)
-        assert_eq!(err2, "plugin_permission_denied:weather.read", "gate deny, not payload gate");
+        assert_eq!(
+            err2, "plugin_permission_denied:weather.read",
+            "gate deny, not payload gate"
+        );
 
         PluginManager::shared().stop(&id);
         std::env::remove_var("OPENCAPX_PLUGINS_DIR");
@@ -7317,19 +7885,27 @@ for line in sys.stdin:
             }))
             .unwrap()
         }
-        assert!(PluginManager::validate_manifest(&m_with_sandbox(serde_json::json!({}))).is_ok(), "empty block = minimal permissions");
-        assert!(PluginManager::validate_manifest(&m_with_sandbox(serde_json::json!({"network": "none"}))).is_ok());
         assert!(
-            PluginManager::validate_manifest(&m_with_sandbox(
-                serde_json::json!({"network": "out", "fs": {"write": ["plugin-data"]}})
-            ))
-            .is_ok()
+            PluginManager::validate_manifest(&m_with_sandbox(serde_json::json!({}))).is_ok(),
+            "empty block = minimal permissions"
         );
-        let err = PluginManager::validate_manifest(&m_with_sandbox(serde_json::json!({"network": "host"})))
-            .unwrap_err();
+        assert!(PluginManager::validate_manifest(&m_with_sandbox(
+            serde_json::json!({"network": "none"})
+        ))
+        .is_ok());
+        assert!(PluginManager::validate_manifest(&m_with_sandbox(
+            serde_json::json!({"network": "out", "fs": {"write": ["plugin-data"]}})
+        ))
+        .is_ok());
+        let err = PluginManager::validate_manifest(&m_with_sandbox(
+            serde_json::json!({"network": "host"}),
+        ))
+        .unwrap_err();
         assert!(err.contains("sandbox.network"), "got: {}", err);
-        let err = PluginManager::validate_manifest(&m_with_sandbox(serde_json::json!({"fs": {"write": ["/tmp"]}})))
-            .unwrap_err();
+        let err = PluginManager::validate_manifest(&m_with_sandbox(
+            serde_json::json!({"fs": {"write": ["/tmp"]}}),
+        ))
+        .unwrap_err();
         assert!(err.contains("fs.write"), "got: {}", err);
         // a pet has no process: it must not carry sandbox
         let pet: Manifest = serde_json::from_value(serde_json::json!({
@@ -7358,19 +7934,23 @@ for line in sys.stdin:
         let base = std::env::temp_dir().join(format!("opencapx-sbx-forced-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         std::env::set_var("OPENCAPX_PLUGIN_DATA_DIR", base.join("plugin-data"));
         std::fs::create_dir_all(base.join("plugins")).unwrap();
 
         let escape_file = base.join("escape.txt");
-        let data_file = base.join("plugin-data").join("com.example.sbx").join("probe.json");
+        let data_file = base
+            .join("plugin-data")
+            .join("com.example.sbx")
+            .join("probe.json");
         let src = base.join("sbx-src");
         std::fs::create_dir_all(src.join("bin")).unwrap();
         std::fs::write(
@@ -7413,17 +7993,25 @@ for line in sys.stdin:
         )
         .unwrap();
         // dev install (unsigned, trusted=false) → declared sandbox → enforced (the switch is false by default)
-        let id = PluginManager::shared().install_from_dir(&src).expect("install");
+        let id = PluginManager::shared()
+            .install_from_dir(&src)
+            .expect("install");
         assert_eq!(id, "com.example.sbx");
         assert!(
             !sandbox_enforcement_enabled(),
             "the switch stays false by default, proving that enforcement does not depend on the switch"
         );
-        let proc = PluginManager::shared().ensure_running(&id).expect("running");
+        let proc = PluginManager::shared()
+            .ensure_running(&id)
+            .expect("running");
         let r = proc
             .call("demo.sbx", json!({}), std::time::Duration::from_secs(20))
             .expect("probe");
-        assert_eq!(r["escape"], "denied", "an unsigned declared sandbox must be enforced: {:?}", r);
+        assert_eq!(
+            r["escape"], "denied",
+            "an unsigned declared sandbox must be enforced: {:?}",
+            r
+        );
         assert_eq!(r["data"], "ok", "plugin-data write allowed: {:?}", r);
 
         PluginManager::shared().stop(&id);
@@ -7446,15 +8034,17 @@ for line in sys.stdin:
             eprintln!("skip: no sandbox-exec");
             return;
         }
-        let base = std::env::temp_dir().join(format!("opencapx-sbx-trusted-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("opencapx-sbx-trusted-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         std::env::set_var("OPENCAPX_PLUGIN_DATA_DIR", base.join("plugin-data"));
@@ -7463,7 +8053,9 @@ for line in sys.stdin:
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         std::env::set_var(
             "OPENCAPX_TRUSTED_KEYS",
-            repo.join("fixtures").join("signing").join("trusted-keys.json"),
+            repo.join("fixtures")
+                .join("signing")
+                .join("trusted-keys.json"),
         );
         let seed_text =
             std::fs::read_to_string(repo.join("fixtures").join("signing").join("key.seed.hex"))
@@ -7527,7 +8119,9 @@ for line in sys.stdin:
         let id = install_confirmed(&pkg).expect("install trusted signed");
         assert_eq!(id, "com.example.sbx2");
         assert!(!sandbox_enforcement_enabled(), "the switch defaults to OFF");
-        let proc = PluginManager::shared().ensure_running(&id).expect("running");
+        let proc = PluginManager::shared()
+            .ensure_running(&id)
+            .expect("running");
         let r = proc
             .call("demo.sbx", json!({}), std::time::Duration::from_secs(20))
             .expect("probe off");
@@ -7537,12 +8131,20 @@ for line in sys.stdin:
         // 2) switch ON + restart: the same package is sandboxed (the policy is read live at start)
         set_sandbox_enforcement(true).expect("switch on");
         PluginManager::shared().stop(&id);
-        PluginManager::shared().start(&id).expect("restart under sandbox");
-        let proc = PluginManager::shared().ensure_running(&id).expect("running 2");
+        PluginManager::shared()
+            .start(&id)
+            .expect("restart under sandbox");
+        let proc = PluginManager::shared()
+            .ensure_running(&id)
+            .expect("running 2");
         let r2 = proc
             .call("demo.sbx", json!({}), std::time::Duration::from_secs(20))
             .expect("probe on");
-        assert_eq!(r2["escape"], "denied", "ON: trusted declaring plugin is sandboxed: {:?}", r2);
+        assert_eq!(
+            r2["escape"], "denied",
+            "ON: trusted declaring plugin is sandboxed: {:?}",
+            r2
+        );
         assert_eq!(r2["data"], "ok", "plugin-data write allowed: {:?}", r2);
 
         PluginManager::shared().stop(&id);
@@ -7565,12 +8167,13 @@ for line in sys.stdin:
         let base = std::env::temp_dir().join(format!("opencapx-things-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         std::fs::create_dir_all(base.join("plugins")).unwrap();
@@ -7592,7 +8195,9 @@ for line in sys.stdin:
             m["storePath"] = serde_json::Value::String(store_file.display().to_string());
             std::fs::write(&mpath, serde_json::to_string(&m).unwrap()).unwrap();
         }
-        let id = PluginManager::shared().install_from_dir(&src).expect("install things-demo");
+        let id = PluginManager::shared()
+            .install_from_dir(&src)
+            .expect("install things-demo");
         assert_eq!(id, "com.opencapx.things-demo");
         assert!(PluginManager::shared()
             .list()
@@ -7600,8 +8205,18 @@ for line in sys.stdin:
             .any(|p| p.id == id && p.status == "running"));
 
         // static permission (not declaration-derived) → can be explicitly granted; with no UI the default ask is quickly rejected.
-        assert!(crate::core::permission::set_decision(&store, &id, "things.write", "granted"));
-        assert!(crate::core::permission::set_decision(&store, &id, "things.read", "granted"));
+        assert!(crate::core::permission::set_decision(
+            &store,
+            &id,
+            "things.write",
+            "granted"
+        ));
+        assert!(crate::core::permission::set_decision(
+            &store,
+            &id,
+            "things.read",
+            "granted"
+        ));
 
         // write: add → the store lands at the manifest storePath
         let added = crate::core::capability::execute(
@@ -7618,15 +8233,20 @@ for line in sys.stdin:
         );
 
         // read: list contains the todo just written
-        let listed = crate::core::capability::execute("things.list", &json!({}), None)
-            .expect("things.list");
+        let listed =
+            crate::core::capability::execute("things.list", &json!({}), None).expect("things.list");
         let todos = listed["todos"].as_array().expect("todos array");
         assert!(
             todos.iter().any(|t| t["title"] == json!("buy milk")),
             "todos: {}",
             listed
         );
-        assert_eq!(listed["via"], json!("demo"), "demo backend provenance marker: {}", listed);
+        assert_eq!(
+            listed["via"],
+            json!("demo"),
+            "demo backend provenance marker: {}",
+            listed
+        );
 
         PluginManager::shared().stop(&id);
         std::env::remove_var("OPENCAPX_PLUGINS_DIR");
@@ -7643,15 +8263,17 @@ for line in sys.stdin:
             eprintln!("skip: no python3");
             return;
         }
-        let base = std::env::temp_dir().join(format!("opencapx-wd-reenable-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("opencapx-wd-reenable-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         std::fs::create_dir_all(base.join("plugins")).unwrap();
@@ -7692,7 +8314,10 @@ for line in sys.stdin:
             .get(&id)
             .cloned()
             .expect("watchdog #2");
-        assert!(!std::sync::Arc::ptr_eq(&old, &new), "the map should be replaced with a new instance");
+        assert!(
+            !std::sync::Arc::ptr_eq(&old, &new),
+            "the map should be replaced with a new instance"
+        );
 
         mgr.stop(&id);
         std::env::remove_var("OPENCAPX_PLUGINS_DIR");
@@ -7715,12 +8340,13 @@ for line in sys.stdin:
         let base = std::env::temp_dir().join(format!("opencapx-weather-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         // after soak, weather-demo declares sandbox (unsigned dev install = enforced sandbox): the store lands by default in
@@ -7740,7 +8366,9 @@ for line in sys.stdin:
             .expect("install weather-demo");
         assert_eq!(id, "com.example.weather-demo");
         assert!(
-            mgr.list().iter().any(|p| p.id == id && p.status == "running"),
+            mgr.list()
+                .iter()
+                .any(|p| p.id == id && p.status == "running"),
             "declared-domain plugin must reach running"
         );
 
@@ -7756,8 +8384,14 @@ for line in sys.stdin:
         assert!(decls.iter().any(|d| d.capability == "weather.set_home"
             && d.permission == "weather.write"
             && d.default_decision == "denied"));
-        assert_eq!(stored_decision(&store, &id, "weather.read").as_deref(), Some("ask"));
-        assert_eq!(stored_decision(&store, &id, "weather.write").as_deref(), Some("denied"));
+        assert_eq!(
+            stored_decision(&store, &id, "weather.read").as_deref(),
+            Some("ask")
+        );
+        assert_eq!(
+            stored_decision(&store, &id, "weather.write").as_deref(),
+            Some("denied")
+        );
         let doms = crate::core::declaration::domains(&store);
         assert_eq!(doms.len(), 1, "domains: {:?}", doms);
         assert_eq!(doms[0].0, "weather");
@@ -7775,18 +8409,34 @@ for line in sys.stdin:
 
         // 3) the three offline-verifiable ones of the four once-only enforcement points
         use crate::core::permission;
-        assert!(!permission::can_always(&store, "weather.read"), "enforcement points 1/2");
+        assert!(
+            !permission::can_always(&store, "weather.read"),
+            "enforcement points 1/2"
+        );
         assert!(
             !permission::set_decision(&store, &id, "weather.read", "granted"),
             "enforcement point 3: the settings page / write-back must not turn a declared permission into granted"
         );
         assert!(
-            !crate::core::identity::set_agent_decision(&store, "agent-any", "weather.read", "granted"),
+            !crate::core::identity::set_agent_decision(
+                &store,
+                "agent-any",
+                "weather.read",
+                "granted"
+            ),
             "enforcement point 3 (agent half)"
         );
         // can be turned off: denied is allowed
-        assert!(permission::set_decision(&store, &id, "weather.read", "denied"));
-        assert_eq!(permission::check(&store, &id, "weather.read"), permission::Decision::Denied);
+        assert!(permission::set_decision(
+            &store,
+            &id,
+            "weather.read",
+            "denied"
+        ));
+        assert_eq!(
+            permission::check(&store, &id, "weather.read"),
+            permission::Decision::Denied
+        );
 
         // 4) fails closed with no UI (in production this hop is an Allow once popup)
         assert_eq!(
@@ -7797,7 +8447,11 @@ for line in sys.stdin:
         // 5) the plugin really answers (call the plugin process directly, bypassing the permission gate already verified in 4)
         let proc = mgr.ensure_running(&id).expect("plugin running");
         let out = proc
-            .call("weather.current", json!({ "city": "Shenzhen" }), Duration::from_secs(10))
+            .call(
+                "weather.current",
+                json!({ "city": "Shenzhen" }),
+                Duration::from_secs(10),
+            )
             .expect("plugin answered weather.current");
         assert_eq!(out["city"], "Shenzhen");
         assert_eq!(out["via"], "weather-demo/local-table");
@@ -7857,11 +8511,14 @@ for line in sys.stdin:
     }
 
     #[test]
-    fn ocplugin_rejects_unsafe_paths() {        let base = std::env::temp_dir().join(format!("opencapx-ocp2-{}", std::process::id()));
+    fn ocplugin_rejects_unsafe_paths() {
+        let base = std::env::temp_dir().join(format!("opencapx-ocp2-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
         // shares the process-level env OPENCAPX_PLUGINS_DIR with ocplugin_install_runs, serialized under a lock.
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         let entries = echo_zip_entries();
         let mut bad = entries;
@@ -7871,14 +8528,24 @@ for line in sys.stdin:
         let err = install_confirmed(&zip_path).unwrap_err();
         assert!(err.contains("unsafe path"), "got: {}", err);
         assert!(!base.join("evil.txt").exists());
-        assert!(!Path::new("../evil.txt").exists(), "nothing should be written inside the repo");
+        assert!(
+            !Path::new("../evil.txt").exists(),
+            "nothing should be written inside the repo"
+        );
 
         // manifest missing
-        make_zip(&base.join("nomanifest.ocplugin"), &[("bin/x.py".to_string(), "x".to_string())]);
+        make_zip(
+            &base.join("nomanifest.ocplugin"),
+            &[("bin/x.py".to_string(), "x".to_string())],
+        );
         let err2 = PluginManager::shared()
             .install_ocplugin(&base.join("nomanifest.ocplugin"))
             .unwrap_err();
-        assert!(err2.contains("missing opencapx-plugin.json"), "got: {}", err2);
+        assert!(
+            err2.contains("missing opencapx-plugin.json"),
+            "got: {}",
+            err2
+        );
         std::env::remove_var("OPENCAPX_PLUGINS_DIR");
         let _ = std::fs::remove_dir_all(&base);
     }
@@ -7903,10 +8570,13 @@ for line in sys.stdin:
             "permissions": ["image.read", "camera", "filesystem.write", "process.execute"]
         }"#;
         let zip_path = base.join("test.ocplugin");
-        make_zip(&zip_path, &[
-            ("opencapx-plugin.json".to_string(), manifest.to_string()),
-            ("bin/run.py".to_string(), "# placeholder".to_string()),
-        ]);
+        make_zip(
+            &zip_path,
+            &[
+                ("opencapx-plugin.json".to_string(), manifest.to_string()),
+                ("bin/run.py".to_string(), "# placeholder".to_string()),
+            ],
+        );
 
         // calls the static method directly (not install_ocplugin), writing no DB / spawning nothing.
         let p = PluginManager::preview_ocplugin(&zip_path).expect("preview");
@@ -7914,7 +8584,10 @@ for line in sys.stdin:
         assert_eq!(p.name, "Test Vision");
         assert_eq!(p.version, "0.3.1");
         assert_eq!(p.ptype, "capability");
-        assert_eq!(p.description.as_deref(), Some("Reads pixels, returns text."));
+        assert_eq!(
+            p.description.as_deref(),
+            Some("Reads pixels, returns text.")
+        );
         assert_eq!(p.capabilities, vec!["image.analyze", "image.ocr"]);
         assert_eq!(p.permissions.len(), 4);
         // the high_risk markers align exactly with core::permission::HIGH_RISK.
@@ -7929,7 +8602,10 @@ for line in sys.stdin:
         assert_eq!(by_name["process.execute"], true);
 
         // a zip missing the manifest must also be explicitly rejected, not returned as an empty object.
-        make_zip(&base.join("nomanifest.ocplugin"), &[("bin/x.py".to_string(), "x".to_string())]);
+        make_zip(
+            &base.join("nomanifest.ocplugin"),
+            &[("bin/x.py".to_string(), "x".to_string())],
+        );
         let err = PluginManager::preview_ocplugin(&base.join("nomanifest.ocplugin")).unwrap_err();
         assert!(err.contains("missing opencapx-plugin.json"), "got: {}", err);
 
@@ -8018,7 +8694,9 @@ for line in sys.stdin:
     /// Restart backfill: rows with DB auto_reload=1 re-enter the polling set, with the current mtime as the baseline.
     #[test]
     fn auto_reload_restores_from_db_on_boot() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("opencapx-ar-restore-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -8043,7 +8721,11 @@ for line in sys.stdin:
             });
         }
         let mgr = PluginManager::shared();
-        assert_eq!(mgr.restore_auto_reload(), Some(1), "only auto_reload=1 row restored");
+        assert_eq!(
+            mgr.restore_auto_reload(),
+            Some(1),
+            "only auto_reload=1 row restored"
+        );
         assert!(mgr.auto_reload_set.lock().unwrap().contains("com.x.ar"));
         assert!(!mgr.auto_reload_set.lock().unwrap().contains("com.x.noar"));
         assert!(
@@ -8102,12 +8784,13 @@ sys.exit(1)
         )
         .unwrap();
 
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&dir.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         let bus = crate::core::event::EventBus::shared();
         let mgr = PluginManager::shared();
@@ -8130,8 +8813,7 @@ sys.exit(1)
                             ev.payload
                                 .get("retry")
                                 .and_then(|v| v.as_u64())
-                                .unwrap_or(0)
-                                as u32,
+                                .unwrap_or(0) as u32,
                         );
                     }
                     if ev.kind == "plugin.watchdog_disabled" {
@@ -8143,7 +8825,10 @@ sys.exit(1)
             }
         }
         mgr.stop(&id);
-        assert!(saw_restart, "watchdog should have triggered at least one restart");
+        assert!(
+            saw_restart,
+            "watchdog should have triggered at least one restart"
+        );
         assert!(saw_disabled, "watchdog should disable after max retries");
         assert!(retry_count >= 2, "should have escalated past first retry");
         let _ = std::fs::remove_dir_all(&dir);
@@ -8203,12 +8888,13 @@ for line in sys.stdin:
         )
         .unwrap();
 
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&dir.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         let bus = crate::core::event::EventBus::shared();
         // start the fanout thread (the real app starts it in main.rs setup)
@@ -8303,12 +8989,13 @@ for line in sys.stdin:
         )
         .unwrap();
 
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&dir.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         let bus = crate::core::event::EventBus::shared();
         let mgr = PluginManager::shared();
@@ -8335,7 +9022,9 @@ for line in sys.stdin:
         while start.elapsed() < std::time::Duration::from_secs(10) {
             match rx.recv_timeout(std::time::Duration::from_millis(500)) {
                 Ok(ev) => {
-                    if ev.kind == "plugin.auto_reloaded" && ev.payload.get("pluginId").and_then(|v| v.as_str()) == Some(id.as_str()) {
+                    if ev.kind == "plugin.auto_reloaded"
+                        && ev.payload.get("pluginId").and_then(|v| v.as_str()) == Some(id.as_str())
+                    {
                         saw = true;
                         break;
                     }
@@ -8386,12 +9075,13 @@ for line in sys.stdin:
         )
         .unwrap();
 
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&dir.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         let bus = crate::core::event::EventBus::shared();
         let mgr = PluginManager::shared();
@@ -8406,10 +9096,8 @@ for line in sys.stdin:
             match sub.recv_timeout(std::time::Duration::from_millis(200)) {
                 Ok(ev) => {
                     if ev.kind == "plugin.log"
-                        && ev.payload.get("pluginId").and_then(|v| v.as_str())
-                            == Some(id.as_str())
-                        && ev.payload.get("source").and_then(|v| v.as_str())
-                            == Some("reverse")
+                        && ev.payload.get("pluginId").and_then(|v| v.as_str()) == Some(id.as_str())
+                        && ev.payload.get("source").and_then(|v| v.as_str()) == Some("reverse")
                         && ev.payload.get("level").and_then(|v| v.as_str()) == Some("warn")
                         && ev.payload.get("message").and_then(|v| v.as_str())
                             == Some("hello-from-reverse")
@@ -8531,12 +9219,13 @@ for line in sys.stdin:
 "#,
         ).unwrap();
 
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&dir.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         let bus = crate::core::event::EventBus::shared();
         let mgr = PluginManager::shared();
@@ -8552,7 +9241,10 @@ for line in sys.stdin:
         // the config file should be deleted
         assert!(!crate::core::config::config_path(&id).exists());
         // M8 hardening boundary: the source directory of a directory install (dev/test) belongs to the user and must not be deleted on uninstall
-        assert!(plugin_dir.exists(), "dir-install source must survive uninstall");
+        assert!(
+            plugin_dir.exists(),
+            "dir-install source must survive uninstall"
+        );
         // the sqlite plugins table has no such id
         let still: Option<String> = store.lock().ok().and_then(|s| {
             s.with_conn_ref(|c| {
@@ -8573,8 +9265,7 @@ for line in sys.stdin:
         while start.elapsed() < std::time::Duration::from_secs(2) {
             if let Ok(ev) = sub.recv_timeout(std::time::Duration::from_millis(200)) {
                 if ev.kind == "plugin.uninstalled"
-                    && ev.payload.get("pluginId").and_then(|v| v.as_str())
-                        == Some(id.as_str())
+                    && ev.payload.get("pluginId").and_then(|v| v.as_str()) == Some(id.as_str())
                 {
                     got = true;
                     break;
@@ -8609,16 +9300,23 @@ for line in sys.stdin:
                 .as_nanos()
         ));
         let _ = std::fs::remove_dir_all(&dir);
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&dir.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         let mut s = store.lock().unwrap();
-        let path_a = std::env::temp_dir().join(format!("opencapx-uprev-me-{}", std::process::id())).to_string_lossy().to_string();
-        let path_b = std::env::temp_dir().join(format!("opencapx-uprev-other-{}", std::process::id())).to_string_lossy().to_string();
+        let path_a = std::env::temp_dir()
+            .join(format!("opencapx-uprev-me-{}", std::process::id()))
+            .to_string_lossy()
+            .to_string();
+        let path_b = std::env::temp_dir()
+            .join(format!("opencapx-uprev-other-{}", std::process::id()))
+            .to_string_lossy()
+            .to_string();
         s.with_conn(|c| {
             c.execute(
                 "INSERT OR REPLACE INTO plugins (id, version, type, status, path, manifest, auto_reload) VALUES (?1, ?2, ?3, 'running', ?4, ?5, 1)",
@@ -8650,10 +9348,17 @@ for line in sys.stdin:
         assert_eq!(preview.name, "Me");
         assert_eq!(preview.version, "0.1.0");
         assert_eq!(preview.auto_reload, true, "auto_reload should be surfaced");
-        assert_eq!(preview.config_exists, true, "an existing config file should be detected");
+        assert_eq!(
+            preview.config_exists, true,
+            "an existing config file should be detected"
+        );
         assert_eq!(preview.permission_count, 2);
         assert_eq!(preview.capability_count, 2);
-        assert_eq!(preview.dependents, vec![other_id.to_string()], "other plugins sharing image.analyze should be listed as dependents");
+        assert_eq!(
+            preview.dependents,
+            vec![other_id.to_string()],
+            "other plugins sharing image.analyze should be listed as dependents"
+        );
 
         // a nonexistent id → Err
         let err = mgr.uninstall_preview("not-real-7");
@@ -8679,18 +9384,35 @@ for line in sys.stdin:
 
         // brings its own temp DB + holds TEST_STORE_LOCK: list() re-reads the global store,
         // and without the lock a parallel set_shared_store test could swap the DB between insert and read → nodes=0.
-        let dir = std::env::temp_dir().join(format!("opencapx-dg-store-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
-                crate::core::storage::Storage::open(&dir.join("t.db")).unwrap(),
-            ),
+        let dir = std::env::temp_dir().join(format!(
+            "opencapx-dg-store-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
         ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = std::fs::remove_dir_all(&dir);
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
+                crate::core::storage::Storage::open(&dir.join("t.db")).unwrap(),
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
-        let path_a = std::env::temp_dir().join(format!("opencapx-dg-a-{}", std::process::id())).to_string_lossy().to_string();
-        let path_b = std::env::temp_dir().join(format!("opencapx-dg-b-{}", std::process::id())).to_string_lossy().to_string();
-        let path_c = std::env::temp_dir().join(format!("opencapx-dg-c-{}", std::process::id())).to_string_lossy().to_string();
+        let path_a = std::env::temp_dir()
+            .join(format!("opencapx-dg-a-{}", std::process::id()))
+            .to_string_lossy()
+            .to_string();
+        let path_b = std::env::temp_dir()
+            .join(format!("opencapx-dg-b-{}", std::process::id()))
+            .to_string_lossy()
+            .to_string();
+        let path_c = std::env::temp_dir()
+            .join(format!("opencapx-dg-c-{}", std::process::id()))
+            .to_string_lossy()
+            .to_string();
         {
             let mut s = store.lock().unwrap();
             s.with_conn(|c| {
@@ -8717,21 +9439,35 @@ for line in sys.stdin:
         assert_eq!(graph.nodes[0].id, id_a);
         assert_eq!(graph.nodes[1].id, id_b);
         assert_eq!(graph.nodes[2].id, id_c);
-        assert_eq!(graph.nodes[0].capabilities, vec!["image.analyze", "file.read"]);
+        assert_eq!(
+            graph.nodes[0].capabilities,
+            vec!["image.analyze", "file.read"]
+        );
 
         // 2 edges (a↔b share image.analyze, b↔c share camera), a↔c share nothing
         assert_eq!(graph.edges.len(), 2);
-        let ab = graph.edges.iter().find(|e| (e.from == id_a && e.to == id_b)).expect("a↔b");
+        let ab = graph
+            .edges
+            .iter()
+            .find(|e| (e.from == id_a && e.to == id_b))
+            .expect("a↔b");
         assert_eq!(ab.shared, vec!["image.analyze".to_string()]);
-        let bc = graph.edges.iter().find(|e| (e.from == id_b && e.to == id_c)).expect("b↔c");
+        let bc = graph
+            .edges
+            .iter()
+            .find(|e| (e.from == id_b && e.to == id_c))
+            .expect("b↔c");
         assert_eq!(bc.shared, vec!["camera".to_string()]);
 
         // cleanup
         let mut s = store.lock().unwrap();
         s.with_conn(|c| {
-            c.execute("DELETE FROM plugins WHERE id = ?1", [id_a]).unwrap_or(0);
-            c.execute("DELETE FROM plugins WHERE id = ?1", [id_b]).unwrap_or(0);
-            c.execute("DELETE FROM plugins WHERE id = ?1", [id_c]).unwrap_or(0)
+            c.execute("DELETE FROM plugins WHERE id = ?1", [id_a])
+                .unwrap_or(0);
+            c.execute("DELETE FROM plugins WHERE id = ?1", [id_b])
+                .unwrap_or(0);
+            c.execute("DELETE FROM plugins WHERE id = ?1", [id_c])
+                .unwrap_or(0)
         });
         drop(s);
         let _ = std::fs::remove_dir_all(&dir);
@@ -8776,7 +9512,12 @@ for line in sys.stdin:
             .into_iter()
             .filter(|e| e.payload.get("pluginId").and_then(|v| v.as_str()) == Some(id))
             .collect();
-        assert_eq!(mine.len(), 3, "there should be exactly 3 lifecycle events, actually {}", mine.len());
+        assert_eq!(
+            mine.len(),
+            3,
+            "there should be exactly 3 lifecycle events, actually {}",
+            mine.len()
+        );
         let names: Vec<&str> = mine.iter().map(|e| e.kind.as_str()).collect();
         assert!(names.contains(&"plugin.lifecycle.starting"));
         assert!(names.contains(&"plugin.lifecycle.running"));
@@ -8787,7 +9528,9 @@ for line in sys.stdin:
     /// F5 — list() surfaces missing_dependencies for plugins with unmet dependencies (used for the settings-page warning).
     #[test]
     fn list_reports_missing_dependencies() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("opencapx-missdep-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store: SharedStore = Arc::new(Mutex::new(crate::core::storage::StoreEnum::Db(
@@ -8804,7 +9547,11 @@ for line in sys.stdin:
                         "dependencies":{"com.x.b":">=1.2.0"}}"#],
             ).unwrap_or(0));
         }
-        let dto = PluginManager::shared().list().into_iter().find(|d| d.id == "com.x.a").unwrap();
+        let dto = PluginManager::shared()
+            .list()
+            .into_iter()
+            .find(|d| d.id == "com.x.a")
+            .unwrap();
         assert_eq!(dto.missing_dependencies.len(), 1);
         assert_eq!(dto.missing_dependencies[0].id, "com.x.b");
         assert_eq!(dto.missing_dependencies[0].requirement, ">=1.2.0");
@@ -8828,7 +9575,9 @@ for line in sys.stdin:
             return;
         }
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-        use crate::core::process::{EnvPolicy, OnReverse, PluginProcess, Reply, RuntimeSpec, SandboxSpec};
+        use crate::core::process::{
+            EnvPolicy, OnReverse, PluginProcess, Reply, RuntimeSpec, SandboxSpec,
+        };
         use std::collections::HashMap;
         let on_reverse: OnReverse = std::sync::Arc::new(|_v: serde_json::Value, _r: Reply| {});
 
@@ -8862,8 +9611,12 @@ for line in sys.stdin:
 
         for (dir, id, calls) in cases {
             let root = repo.join("plugins").join(dir);
-            let m = PluginManager::read_manifest(&root).unwrap_or_else(|e| panic!("{}: {}", dir, e));
-            let decl = m.sandbox.as_ref().unwrap_or_else(|| panic!("{} did not declare sandbox", dir));
+            let m =
+                PluginManager::read_manifest(&root).unwrap_or_else(|e| panic!("{}: {}", dir, e));
+            let decl = m
+                .sandbox
+                .as_ref()
+                .unwrap_or_else(|| panic!("{} did not declare sandbox", dir));
             assert!(validate_sandbox(decl).is_ok());
 
             let profile = super::super::sandbox::sandbox_profile(id, decl);
@@ -8875,8 +9628,16 @@ for line in sys.stdin:
                 args: rt.args,
                 env: rt.env.clone().into_iter().collect::<HashMap<_, _>>(),
             };
-            let proc = PluginProcess::spawn(id, &root, &spec, "soak", on_reverse.clone(), &EnvPolicy::default(), Some(&SandboxSpec { profile, tmp_dir }))
-                .unwrap_or_else(|e| panic!("{} spawn: {}", dir, e));
+            let proc = PluginProcess::spawn(
+                id,
+                &root,
+                &spec,
+                "soak",
+                on_reverse.clone(),
+                &EnvPolicy::default(),
+                Some(&SandboxSpec { profile, tmp_dir }),
+            )
+            .unwrap_or_else(|e| panic!("{} spawn: {}", dir, e));
 
             let init = proc
                 .call("plugin.initialize", json!({ "coreVersion": env!("CARGO_PKG_VERSION"), "apiVersion": "1", "pluginId": id }), std::time::Duration::from_secs(20))
@@ -8887,13 +9648,25 @@ for line in sys.stdin:
                 let out = proc
                     .call(method, params.clone(), std::time::Duration::from_secs(20))
                     .unwrap_or_else(|e| panic!("{} {}: {}", dir, method, e));
-                eprintln!("[soak] {}.{} -> {}", id, method, serde_json::to_string(&out).unwrap_or_default());
+                eprintln!(
+                    "[soak] {}.{} -> {}",
+                    id,
+                    method,
+                    serde_json::to_string(&out).unwrap_or_default()
+                );
             }
 
             // write-path destination: store.json must appear in plugin-data (= the profile's only writable area).
             if *id != "com.opencapx.echo-vision" {
-                let store = super::super::sandbox::plugin_data_root().join(id).join("store.json");
-                assert!(store.is_file(), "{} should write the store under plugin-data: {}", dir, store.display());
+                let store = super::super::sandbox::plugin_data_root()
+                    .join(id)
+                    .join("store.json");
+                assert!(
+                    store.is_file(),
+                    "{} should write the store under plugin-data: {}",
+                    dir,
+                    store.display()
+                );
             }
 
             proc.shutdown();
@@ -8918,12 +9691,13 @@ for line in sys.stdin:
         std::fs::create_dir_all(&base).unwrap();
         std::env::set_var("OPENCAPX_TRACES_DIR", base.join("traces"));
 
-        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
+        let store: SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
                 crate::core::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            )));
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(store.clone());
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
         std::fs::create_dir_all(base.join("plugins")).unwrap();
@@ -8943,8 +9717,15 @@ for line in sys.stdin:
             m["storePath"] = serde_json::Value::String(store_file.display().to_string());
             std::fs::write(&mpath, serde_json::to_string(&m).unwrap()).unwrap();
         }
-        let id = PluginManager::shared().install_from_dir(&src).expect("install things-demo");
-        assert!(crate::core::permission::set_decision(&store, &id, "things.read", "granted"));
+        let id = PluginManager::shared()
+            .install_from_dir(&src)
+            .expect("install things-demo");
+        assert!(crate::core::permission::set_decision(
+            &store,
+            &id,
+            "things.read",
+            "granted"
+        ));
 
         let tid = crate::core::req_trace::begin("ag_pt", "", "");
         let out = crate::core::capability::execute("things.list", &json!({}), Some("ag_pt"));
@@ -8956,8 +9737,14 @@ for line in sys.stdin:
                 .join(format!("{}.ndjson", tid)),
         )
         .unwrap_or_default();
-        assert!(text.contains("\"name\":\"plugin."), "the plugin span should be on disk: {text}");
-        assert!(text.contains("\"sessionId\":"), "the span should carry a sessionId linking it to the plugin_trace dump: {text}");
+        assert!(
+            text.contains("\"name\":\"plugin."),
+            "the plugin span should be on disk: {text}"
+        );
+        assert!(
+            text.contains("\"sessionId\":"),
+            "the span should carry a sessionId linking it to the plugin_trace dump: {text}"
+        );
 
         PluginManager::shared().stop(&id);
         std::env::remove_var("OPENCAPX_PLUGINS_DIR");
@@ -8974,34 +9761,46 @@ for line in sys.stdin:
         std::fs::create_dir_all(&dir).unwrap();
         let write = |body: &str| std::fs::write(dir.join("opencapx-plugin.json"), body).unwrap();
         // legal: label/section/aliases/visible are available consistently with other types
-        write(&format!(r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
+        write(&format!(
+            r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
             "runtime":{{"type":"process","command":"python3"}},"capabilities":["image.analyze"],
-            "settings":[{{"key":"tags","type":"list","label":"Tags"}}]}}"#));
+            "settings":[{{"key":"tags","type":"list","label":"Tags"}}]}}"#
+        ));
         assert!(PluginManager::read_manifest(&dir).is_ok());
         // default rejected
-        write(&format!(r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
+        write(&format!(
+            r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
             "runtime":{{"type":"process","command":"python3"}},"capabilities":["image.analyze"],
-            "settings":[{{"key":"tags","type":"list","default":[]}}]}}"#));
+            "settings":[{{"key":"tags","type":"list","default":[]}}]}}"#
+        ));
         let err = PluginManager::read_manifest(&dir).unwrap_err();
         assert!(err.contains("list setting tags"), "{err}");
         // options rejected
-        write(&format!(r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
+        write(&format!(
+            r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
             "runtime":{{"type":"process","command":"python3"}},"capabilities":["image.analyze"],
-            "settings":[{{"key":"tags","type":"list","options":["a"]}}]}}"#));
-        assert!(PluginManager::read_manifest(&dir).unwrap_err().contains("list setting tags"));
+            "settings":[{{"key":"tags","type":"list","options":["a"]}}]}}"#
+        ));
+        assert!(PluginManager::read_manifest(&dir)
+            .unwrap_err()
+            .contains("list setting tags"));
         // min / max / pick likewise rejected: range and selection fields are meaningless for list
         for extra in ["\"min\":1", "\"max\":9", "\"pick\":\"file\""] {
-            write(&format!(r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
+            write(&format!(
+                r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
                 "runtime":{{"type":"process","command":"python3"}},"capabilities":["image.analyze"],
-                "settings":[{{"key":"tags","type":"list",{extra}}}]}}"#));
+                "settings":[{{"key":"tags","type":"list",{extra}}}]}}"#
+            ));
             let err = PluginManager::read_manifest(&dir).unwrap_err();
             assert!(err.contains("list setting tags"), "{extra} → {err}");
         }
         // a predicate referencing a list key: rejected at install time — list values do not enter settings_view, so the predicate always reads undefined,
         // and allowing it would only give the author a row that never appears.
-        write(&format!(r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
+        write(&format!(
+            r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
             "runtime":{{"type":"process","command":"python3"}},"capabilities":["image.analyze"],
-            "settings":[{{"key":"tags","type":"list"}},{{"key":"plain","type":"text","visible":{{"op":"isSet","key":"tags","value":true}}}}]}}"#));
+            "settings":[{{"key":"tags","type":"list"}},{{"key":"plain","type":"text","visible":{{"op":"isSet","key":"tags","value":true}}}}]}}"#
+        ));
         let err = PluginManager::read_manifest(&dir).unwrap_err();
         assert!(
             err.contains("list setting \"tags\" cannot be referenced by a predicate"),
@@ -9014,27 +9813,44 @@ for line in sys.stdin:
     /// value is the storage/comparison surface; label is display only; the deprecated text must be non-empty and localizable.
     #[test]
     fn settings_structured_option_fields() {
-        let dir = std::env::temp_dir().join(format!("opencapx-structured-options-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "opencapx-structured-options-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let write = |body: &str| std::fs::write(dir.join("opencapx-plugin.json"), body).unwrap();
         let base = r#"{"id":"com.x.parity","name":"P","version":"1.0.0","apiVersion":"1","type":"capability",
             "runtime":{"type":"process","command":"python3"},"capabilities":["image.analyze"],"settings":[__SET__]}"#;
         // structured options: default lands on a value (not on a label)
-        write(&base.replace("__SET__", r#"{"key":"mode","type":"dropdown","default":"fast","order":2,
-            "options":["slow",{"value":"fast","label":{"en":"Fast","zh-Hans":"快速"}}]}"#));
+        write(&base.replace(
+            "__SET__",
+            r#"{"key":"mode","type":"dropdown","default":"fast","order":2,
+            "options":["slow",{"value":"fast","label":{"en":"Fast","zh-Hans":"快速"}}]}"#,
+        ));
         let m = PluginManager::read_manifest(&dir).expect("structured options + order ok");
         assert_eq!(m.settings[0].order, Some(2));
         // default matches the option's value, not the label
-        write(&base.replace("__SET__", r#"{"key":"mode","type":"dropdown","default":"Fast",
-            "options":[{"value":"fast","label":{"en":"Fast"}}]}"#));
-        assert!(PluginManager::read_manifest(&dir).unwrap_err().contains("default must be one of options[]"));
+        write(&base.replace(
+            "__SET__",
+            r#"{"key":"mode","type":"dropdown","default":"Fast",
+            "options":[{"value":"fast","label":{"en":"Fast"}}]}"#,
+        ));
+        assert!(PluginManager::read_manifest(&dir)
+            .unwrap_err()
+            .contains("default must be one of options[]"));
         // deprecated: legal localizable text
-        write(&base.replace("__SET__", r#"{"key":"legacy","type":"text","order":1,
-            "deprecated":{"en":"Use mode instead.","zh-Hans":"请改用 mode。"},"default":""}"#));
+        write(&base.replace(
+            "__SET__",
+            r#"{"key":"legacy","type":"text","order":1,
+            "deprecated":{"en":"Use mode instead.","zh-Hans":"请改用 mode。"},"default":""}"#,
+        ));
         assert!(PluginManager::read_manifest(&dir).is_ok());
         // deprecated: blank text rejected
-        write(&base.replace("__SET__", r#"{"key":"legacy","type":"text","deprecated":{"en":"  "}}"#));
+        write(&base.replace(
+            "__SET__",
+            r#"{"key":"legacy","type":"text","deprecated":{"en":"  "}}"#,
+        ));
         let err = PluginManager::read_manifest(&dir).unwrap_err();
         assert!(err.contains("deprecated"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
@@ -9043,7 +9859,9 @@ for line in sys.stdin:
     /// list values do not enter settings_view.values; set_setting_value writing a list key → Err.
     #[test]
     fn settings_list_not_settable_and_not_in_view() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("opencapx-list-view-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let installed = dir.join("installed");
@@ -9062,8 +9880,13 @@ for line in sys.stdin:
         }).unwrap();
         crate::core::set_shared_store(store.clone());
         let view = PluginManager::settings_view("com.x.list").expect("view");
-        assert!(!view.values.contains_key("tags"), "list value must not leak into view: {:?}", view.values);
-        let err = PluginManager::set_setting_value("com.x.list", "tags", &serde_json::json!(["a"])).unwrap_err();
+        assert!(
+            !view.values.contains_key("tags"),
+            "list value must not leak into view: {:?}",
+            view.values
+        );
+        let err = PluginManager::set_setting_value("com.x.list", "tags", &serde_json::json!(["a"]))
+            .unwrap_err();
         assert!(err.contains("managed by its plugin"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -9071,7 +9894,9 @@ for line in sys.stdin:
     /// list op guard: undeclared key / non-list type → Err (no spawn).
     #[test]
     fn settings_list_op_guards() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("opencapx-list-op-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let installed = dir.join("installed");
@@ -9089,9 +9914,13 @@ for line in sys.stdin:
             ).unwrap()
         }).unwrap();
         crate::core::set_shared_store(store.clone());
-        let err = PluginManager::invoke_setting_list_op("com.x.list", "nope", "list", None, None, None).unwrap_err();
+        let err =
+            PluginManager::invoke_setting_list_op("com.x.list", "nope", "list", None, None, None)
+                .unwrap_err();
         assert!(err.contains("not declared"), "{err}");
-        let err = PluginManager::invoke_setting_list_op("com.x.list", "plain", "list", None, None, None).unwrap_err();
+        let err =
+            PluginManager::invoke_setting_list_op("com.x.list", "plain", "list", None, None, None)
+                .unwrap_err();
         assert!(err.contains("not a list"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -9114,7 +9943,9 @@ for line in sys.stdin:
         // this lock must be taken before TEST_STORE_LOCK (that is the order across the suite); taking it the other way would create a cycle with a test that "already holds
         // the traces lock and is waiting on the store lock".
         let _tg = crate::core::plugin_trace::traces_env_lock();
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // the plugin process's span persistence goes through plugin_trace::traces_root(); without redirection it would leave a test tree in the real
         // ~/.opencapx/traces/<id>/; the guard ensures this process-level variable is cleared even when an assertion panics,
         // not leaving it for later tests.
@@ -9199,26 +10030,36 @@ for line in sys.stdin:
         std::fs::create_dir_all(src.join("bin")).unwrap();
         let script = std::fs::read_to_string(
             Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("..").join("plugins").join("echo-vision")
-                .join("bin").join("echo_vision.py"),
-        ).unwrap();
+                .join("..")
+                .join("plugins")
+                .join("echo-vision")
+                .join("bin")
+                .join("echo_vision.py"),
+        )
+        .unwrap();
         std::fs::write(src.join("bin").join("echo_vision.py"), script).unwrap();
         let manifest = std::fs::read_to_string(
             Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("..").join("plugins").join("echo-vision")
+                .join("..")
+                .join("plugins")
+                .join("echo-vision")
                 .join("opencapx-plugin.json"),
-        ).unwrap();
+        )
+        .unwrap();
         std::fs::write(src.join("opencapx-plugin.json"), manifest).unwrap();
-        let id = PluginManager::shared().install_from_dir(&src).expect("install");
+        let id = PluginManager::shared()
+            .install_from_dir(&src)
+            .expect("install");
         assert_eq!(id, "com.opencapx.echo-vision");
 
         // every op writes the list into this file via the plugin's config.set; note down "the bytes this test wrote"
         // so the guard can prove "this content was written by me" on any path (an assertion panic included).
-        let mut call = |op: &str, index: Option<usize>, to: Option<usize>, value: Option<String>| {
-            let out = PluginManager::invoke_setting_list_op(&id, "tags", op, index, to, value);
-            cfg_guard.written = std::fs::read(&cfg_path).ok();
-            out
-        };
+        let mut call =
+            |op: &str, index: Option<usize>, to: Option<usize>, value: Option<String>| {
+                let out = PluginManager::invoke_setting_list_op(&id, "tags", op, index, to, value);
+                cfg_guard.written = std::fs::read(&cfg_path).ok();
+                out
+            };
         let empty = call("list", None, None, None).expect("list");
         assert_eq!(empty, serde_json::json!([]), "fresh install → empty list");
         let one = call("add", None, None, Some("alpha".into())).expect("add");
@@ -9241,7 +10082,7 @@ for line in sys.stdin:
         // with 2 items insert-pop and swap produce the same result, so 3 items are needed to tell them apart.
         call("add", None, None, Some("gamma".into())).expect("add 3");
         call("add", None, None, Some("delta".into())).expect("add 4"); // ["beta","gamma","delta"]
-        // 1) move(0 → 2): correct ["gamma","delta","beta"]; swap would give ["delta","gamma","beta"].
+                                                                       // 1) move(0 → 2): correct ["gamma","delta","beta"]; swap would give ["delta","gamma","beta"].
         let moved_tail = call("move", Some(0), Some(2), None).expect("move to tail");
         assert_eq!(
             moved_tail,

@@ -159,7 +159,11 @@ mod tests {
         assert_eq!(from_locale("zh-Hans"), Lang::ZhHans);
         assert_eq!(from_locale("vi"), Lang::Vi);
         assert_eq!(from_locale("en"), Lang::En);
-        assert_eq!(from_locale("zh-Hant"), Lang::En, "a not-yet-translated language falls back to English");
+        assert_eq!(
+            from_locale("zh-Hant"),
+            Lang::En,
+            "a not-yet-translated language falls back to English"
+        );
         assert_eq!(from_locale(""), Lang::En);
     }
 
@@ -208,10 +212,18 @@ mod tests {
     #[test]
     fn english_menu_items_use_title_case() {
         // macOS menu convention: capitalize the first letter of every content word (prepositions not tested)
-        for item in [EN.show_pet, EN.show_bubble, EN.open_settings, EN.clear_finished, EN.no_active_agents] {
+        for item in [
+            EN.show_pet,
+            EN.show_bubble,
+            EN.open_settings,
+            EN.clear_finished,
+            EN.no_active_agents,
+        ] {
             let words: Vec<&str> = item.split(' ').collect();
             assert!(
-                words.iter().all(|w| w.chars().next().map(|c| c.is_uppercase()).unwrap_or(true)),
+                words
+                    .iter()
+                    .all(|w| w.chars().next().map(|c| c.is_uppercase()).unwrap_or(true)),
                 "not title case: {item}"
             );
         }
@@ -228,7 +240,10 @@ mod tests {
     #[test]
     fn fill_replaces_in_order_and_tolerates_missing_args() {
         assert_eq!(fill("{} waiting for you", &["2"]), "2 waiting for you");
-        assert_eq!(fill("{} needs input — {}", &["Gemini CLI", "perm"]), "Gemini CLI needs input — perm");
+        assert_eq!(
+            fill("{} needs input — {}", &["Gemini CLI", "perm"]),
+            "Gemini CLI needs input — perm"
+        );
         // With too few arguments the remaining template is preserved (no panic)
         assert_eq!(fill("{} · {}", &["a"]), "a · {}");
         assert_eq!(fill("no placeholder", &["a"]), "no placeholder");

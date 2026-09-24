@@ -170,15 +170,15 @@ impl Storage {
         );
         // Session body (the last assistant text in the transcript tail): the bubble's second line.
         // Only in the active table — the archive is a historical view keeping only message/model, not the body.
-        let _ = self.conn.execute_batch(
-            "ALTER TABLE sessions ADD COLUMN speech TEXT NOT NULL DEFAULT ''",
-        );
+        let _ = self
+            .conn
+            .execute_batch("ALTER TABLE sessions ADD COLUMN speech TEXT NOT NULL DEFAULT ''");
         // Session's full working directory (bubble grouping + branch lookup). A separate batch:
         // rusqlite's execute_batch stops at the first failing statement,
         // so a statement mixed with an existing column would skip cwd "because speech already exists".
-        let _ = self.conn.execute_batch(
-            "ALTER TABLE sessions ADD COLUMN cwd TEXT NOT NULL DEFAULT ''",
-        );
+        let _ = self
+            .conn
+            .execute_batch("ALTER TABLE sessions ADD COLUMN cwd TEXT NOT NULL DEFAULT ''");
         // Phase 37: Probe self-check — status text (passed/failed/pending) + timestamp + JSON report.
         let _ = self.conn.execute_batch(
             "ALTER TABLE plugins ADD COLUMN probe_status TEXT;
@@ -188,9 +188,9 @@ impl Storage {
         // Migration backfill: auto_reload is a later-added column — old DBs lack it at CREATE, while plugin::list()'s
         // SELECT references it directly; a missing column makes the whole plugin list read empty (startup restore then fails).
         // A separate batch: execute_batch stops at the first failing statement, so it cannot be merged into the group above.
-        let _ = self.conn.execute_batch(
-            "ALTER TABLE plugins ADD COLUMN auto_reload INTEGER NOT NULL DEFAULT 0",
-        );
+        let _ = self
+            .conn
+            .execute_batch("ALTER TABLE plugins ADD COLUMN auto_reload INTEGER NOT NULL DEFAULT 0");
         // M4: revocation channel columns — revoked_key=publisher key that hit registry revokedKeys
         // (non-NULL means default-disabled; the start gate rejects based on it); revoked_at=hit time;
         // revocation_ack=key the user explicitly reopened and exempted (sweep no longer re-disables).
@@ -206,9 +206,9 @@ impl Storage {
             .execute_batch("ALTER TABLE plugins ADD COLUMN last_version TEXT");
         // S4: per-capability call timeout — the object-form declared timeoutSecs (seconds, 1..=600);
         // NULL = default CALL_TIMEOUT (60s). Backfilled in old DBs; declaration reading depends on it.
-        let _ = self.conn.execute_batch(
-            "ALTER TABLE capability_declarations ADD COLUMN timeout_secs INTEGER",
-        );
+        let _ = self
+            .conn
+            .execute_batch("ALTER TABLE capability_declarations ADD COLUMN timeout_secs INTEGER");
         // Phase 38: per-plugin update channel preference (stable / beta / dev). The table is separate from plugins
         // because channel is a user preference (may change), not metadata the plugin carries.
         let _ = self.conn.execute_batch(
@@ -467,7 +467,9 @@ impl Storage {
         let Ok(mut stmt) = self.conn.prepare(
             "SELECT id, type, source, timestamp, payload FROM events
              WHERE type LIKE ?1 ORDER BY timestamp DESC LIMIT ?2",
-        ) else { return Vec::new() };
+        ) else {
+            return Vec::new();
+        };
         let pat = format!("{}%", kind_prefix);
         let it = stmt.query_map(rusqlite::params![pat, limit as i64], |r| {
             let payload: String = r.get(4)?;
@@ -479,7 +481,9 @@ impl Storage {
                 payload: serde_json::from_str(&payload).unwrap_or(serde_json::Value::Null),
             })
         });
-        it.ok().map(|i| i.filter_map(|x| x.ok()).collect()).unwrap_or_default()
+        it.ok()
+            .map(|i| i.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
     }
 
     /// Phase 35 — Audit search/filter: kind prefix + full text + time range + limit.
@@ -513,7 +517,9 @@ impl Storage {
                AND (?3 = 0 OR timestamp >= ?3)
                AND (?4 = 0 OR timestamp <= ?4)
              ORDER BY timestamp DESC LIMIT ?5",
-        ) else { return Vec::new() };
+        ) else {
+            return Vec::new();
+        };
         let it = stmt.query_map(
             rusqlite::params![
                 prefix_pat_str,
@@ -533,7 +539,9 @@ impl Storage {
                 })
             },
         );
-        it.ok().map(|i| i.filter_map(|x| x.ok()).collect()).unwrap_or_default()
+        it.ok()
+            .map(|i| i.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
     }
 
     fn prune_events(&mut self, now: u64) -> rusqlite::Result<()> {
@@ -674,7 +682,9 @@ impl SessionSink for Storage {
     }
 
     fn dismiss(&mut self, id: &str) {
-        let _ = self.conn.execute("DELETE FROM sessions WHERE id = ?1", [id]);
+        let _ = self
+            .conn
+            .execute("DELETE FROM sessions WHERE id = ?1", [id]);
     }
 
     fn clear(&mut self) {
@@ -938,7 +948,11 @@ pub struct AlertingEndpointRow {
     pub template: Option<String>,
     /// Phase 58: the sample JSON the user fills in while editing a template in the settings UI, used as the input envelope for live preview.
     /// `None` = use an empty `{}` as the payload during preview (only top-level fields are rendered). 16 KB limit.
-    #[serde(default, rename = "templateSample", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "templateSample",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub template_sample: Option<String>,
     /// Phase 72 — per-source severity override, a JSON-serialized `Vec<(source, severity)>`.
     /// `None` or a parse failure → the endpoint is treated as having no override (uses the propagation result).
@@ -1115,7 +1129,10 @@ pub struct CapabilityStat {
     #[serde(rename = "failCount")]
     pub fail_count: i64,
     /// Failure counts aggregated by error_kind (only samples with result != 'ok').
-    #[serde(rename = "errors", skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    #[serde(
+        rename = "errors",
+        skip_serializing_if = "std::collections::BTreeMap::is_empty"
+    )]
     pub errors: std::collections::BTreeMap<String, i64>,
 }
 
@@ -1153,7 +1170,9 @@ impl Storage {
         let Ok(mut stmt) = self.conn.prepare(
             "SELECT id, plugin_id, score, comment, ts FROM plugin_ratings
              WHERE plugin_id = ?1 ORDER BY ts DESC LIMIT ?2",
-        ) else { return Vec::new() };
+        ) else {
+            return Vec::new();
+        };
         stmt.query_map(rusqlite::params![plugin_id, limit as i64], |r| {
             Ok(PluginRating {
                 id: r.get(0)?,
@@ -1207,14 +1226,19 @@ impl Storage {
 
     /// Phase 37 — read the most recent probe report. Returns (status, at, report_json).
     pub fn get_probe_report(&self, plugin_id: &str) -> Option<(String, u64, String)> {
-        let mut stmt = self.conn.prepare(
-            "SELECT probe_status, probe_at, probe_report FROM plugins WHERE id = ?1",
-        ).ok()?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT probe_status, probe_at, probe_report FROM plugins WHERE id = ?1")
+            .ok()?;
         stmt.query_row(rusqlite::params![plugin_id], |r| {
             let status: Option<String> = r.get(0)?;
             let at: Option<i64> = r.get(1)?;
             let report: Option<String> = r.get(2)?;
-            Ok((status.unwrap_or_default(), at.unwrap_or(0) as u64, report.unwrap_or_default()))
+            Ok((
+                status.unwrap_or_default(),
+                at.unwrap_or(0) as u64,
+                report.unwrap_or_default(),
+            ))
         })
         .ok()
         .filter(|(s, _, _)| !s.is_empty())
@@ -1231,7 +1255,10 @@ impl Storage {
 
     /// Phase 38 — fetch all (plugin_id, channel) at once. Used for batch filtering in check_plugin_updates.
     pub fn list_plugin_channels(&self) -> Vec<(String, String)> {
-        let Ok(mut stmt) = self.conn.prepare("SELECT plugin_id, channel FROM plugin_channel") else {
+        let Ok(mut stmt) = self
+            .conn
+            .prepare("SELECT plugin_id, channel FROM plugin_channel")
+        else {
             return Vec::new();
         };
         stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
@@ -1312,8 +1339,12 @@ impl Storage {
 
     /// Phase 38 — global key/value config (used for defaultChannel). A nonexistent key returns None.
     pub fn get_setting(&self, key: &str) -> Option<String> {
-        let mut stmt = self.conn.prepare("SELECT v FROM settings_kv WHERE k = ?1").ok()?;
-        stmt.query_row(rusqlite::params![key], |r| r.get::<_, String>(0)).ok()
+        let mut stmt = self
+            .conn
+            .prepare("SELECT v FROM settings_kv WHERE k = ?1")
+            .ok()?;
+        stmt.query_row(rusqlite::params![key], |r| r.get::<_, String>(0))
+            .ok()
     }
 
     /// Phase 38 — write global key/value.
@@ -1356,10 +1387,9 @@ impl Storage {
             return Vec::new();
         };
         let mut rows: Vec<(i64, f64, i64, i64, i64)> = stmt
-            .query_map(
-                rusqlite::params![plugin_id, from_ts, limit as i64],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
-            )
+            .query_map(rusqlite::params![plugin_id, from_ts, limit as i64], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+            })
             .ok()
             .map(|i| i.filter_map(|x| x.ok()).collect())
             .unwrap_or_default();
@@ -1474,11 +1504,7 @@ impl Storage {
     }
 
     /// Fetch due pending rows (called by the retry loop). limit defaults to 50 to avoid scanning too many at once.
-    pub fn fetch_due_failed_deliveries(
-        &self,
-        now_ts: u64,
-        limit: usize,
-    ) -> Vec<FailedDeliveryRow> {
+    pub fn fetch_due_failed_deliveries(&self, now_ts: u64, limit: usize) -> Vec<FailedDeliveryRow> {
         let Ok(mut stmt) = self.conn.prepare(
             "SELECT id, source, url, payload, first_attempt_ts, last_attempt_ts,
                     attempts, max_attempts, last_error, next_retry_ts, state, endpoint_id
@@ -1658,9 +1684,13 @@ impl Storage {
         .ok()
         .map(|i| {
             i.filter_map(|x| x.ok())
-                .map(|(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)| {
-                    self.parse_endpoint_row(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)
-                })
+                .map(
+                    |(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)| {
+                        self.parse_endpoint_row(
+                            id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so,
+                        )
+                    },
+                )
                 .collect()
         })
         .unwrap_or_default()
@@ -1693,9 +1723,13 @@ impl Storage {
         .ok()
         .map(|i| {
             i.filter_map(|x| x.ok())
-                .map(|(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)| {
-                    self.parse_endpoint_row(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)
-                })
+                .map(
+                    |(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)| {
+                        self.parse_endpoint_row(
+                            id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so,
+                        )
+                    },
+                )
                 .collect()
         })
         .unwrap_or_default()
@@ -1727,15 +1761,16 @@ impl Storage {
             ))
         })
         .ok()
-        .map(|(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)| {
-            self.parse_endpoint_row(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)
-        })
+        .map(
+            |(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)| {
+                self.parse_endpoint_row(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)
+            },
+        )
     }
 
     /// Upsert: update when there is an id, otherwise use the passed-in id (generated by the caller).
     pub fn upsert_alerting_endpoint(&mut self, row: &AlertingEndpointRow) {
-        let headers_json =
-            serde_json::to_string(&row.headers).unwrap_or_else(|_| "[]".into());
+        let headers_json = serde_json::to_string(&row.headers).unwrap_or_else(|_| "[]".into());
         let source_filter_json =
             serde_json::to_string(&row.source_filter).unwrap_or_else(|_| "[]".into());
         let _ = self.conn.execute(
@@ -1791,26 +1826,43 @@ impl Storage {
             "SELECT id, name, description, kind, template, sample, builtin, version, changelog, created_at
                FROM template_presets WHERE builtin = 0 ORDER BY created_at ASC",
         ).map_err(|e| format!("prepare list_user_template_presets: {}", e))?;
-        let rows = stmt.query_map([], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, Option<String>>(2)?,
-                r.get::<_, String>(3)?,
-                r.get::<_, String>(4)?,
-                r.get::<_, Option<String>>(5)?,
-                r.get::<_, i64>(6)?,
-                r.get::<_, i64>(7)?,
-                r.get::<_, Option<String>>(8)?,
-                r.get::<_, i64>(9)?,
-            ))
-        }).map_err(|e| format!("query list_user_template_presets: {}", e))?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, String>(4)?,
+                    r.get::<_, Option<String>>(5)?,
+                    r.get::<_, i64>(6)?,
+                    r.get::<_, i64>(7)?,
+                    r.get::<_, Option<String>>(8)?,
+                    r.get::<_, i64>(9)?,
+                ))
+            })
+            .map_err(|e| format!("query list_user_template_presets: {}", e))?;
         let mut out = Vec::new();
         for row in rows {
-            let (id, name, description, kind, template, sample, builtin, version, changelog, created_at) =
-                row.map_err(|e| format!("row: {}", e))?;
+            let (
+                id,
+                name,
+                description,
+                kind,
+                template,
+                sample,
+                builtin,
+                version,
+                changelog,
+                created_at,
+            ) = row.map_err(|e| format!("row: {}", e))?;
             out.push(TemplatePresetRow {
-                id, name, description, kind, template, sample,
+                id,
+                name,
+                description,
+                kind,
+                template,
+                sample,
                 builtin: builtin != 0,
                 version: version.max(1) as u32,
                 changelog,
@@ -1854,10 +1906,13 @@ impl Storage {
 
     /// Delete only builtin=0 rows (avoid accidental deletion of built-ins). Returns true when actually deleted.
     pub fn delete_template_preset(&mut self, id: &str) -> bool {
-        let n = self.conn.execute(
-            "DELETE FROM template_presets WHERE id = ?1 AND builtin = 0",
-            rusqlite::params![id],
-        ).unwrap_or(0);
+        let n = self
+            .conn
+            .execute(
+                "DELETE FROM template_presets WHERE id = ?1 AND builtin = 0",
+                rusqlite::params![id],
+            )
+            .unwrap_or(0);
         n > 0
     }
 
@@ -2080,9 +2135,11 @@ impl Storage {
 
     /// Upsert a route (id overwrites; created_at keeps the old value to avoid UI jumps). Added in Phase 51.
     pub fn upsert_alerting_route(&mut self, row: &RouteRuleRow) {
-        let ids_json = serde_json::to_string(&row.target_endpoint_ids).unwrap_or_else(|_| "[]".into());
+        let ids_json =
+            serde_json::to_string(&row.target_endpoint_ids).unwrap_or_else(|_| "[]".into());
         let tags_json = serde_json::to_string(&row.tags).unwrap_or_else(|_| "[]".into());
-        let recipients_json = serde_json::to_string(&row.recipients).unwrap_or_else(|_| "[]".into());
+        let recipients_json =
+            serde_json::to_string(&row.recipients).unwrap_or_else(|_| "[]".into());
         let _ = self.conn.execute(
             "INSERT INTO alerting_routes
              (id, name, priority, enabled, kind_pattern, payload_path, payload_match,
@@ -2320,10 +2377,13 @@ impl Storage {
         source: &str,
         origin: &str,
     ) -> Option<SeverityHintRow> {
-        let mut stmt = self.conn.prepare(
-            "SELECT source, severity, origin, plugin_id, updated_at
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT source, severity, origin, plugin_id, updated_at
              FROM alerting_severity_hints WHERE source = ?1 AND origin = ?2 LIMIT 1",
-        ).ok()?;
+            )
+            .ok()?;
         stmt.query_row(rusqlite::params![source, origin], |r| {
             Ok(SeverityHintRow {
                 source: r.get(0)?,
@@ -2388,7 +2448,9 @@ impl Storage {
                        ROW_NUMBER() OVER (PARTITION BY capability, plugin_id ORDER BY ts DESC) AS rn
                 FROM capability_stats
              ) WHERE rn <= ?1 ORDER BY capability ASC, ts DESC",
-        ) else { return Vec::new() };
+        ) else {
+            return Vec::new();
+        };
         // (cap, plugin, elapsed, ts, result, error_kind)
         let rows: Vec<(String, String, i64, i64, String, Option<String>)> = stmt
             .query_map([n as i64], |r| {
@@ -2452,9 +2514,7 @@ impl Storage {
                 for (_, _, result, error_kind) in &samples {
                     if result != "ok" {
                         fail_count += 1;
-                        let kind = error_kind
-                            .clone()
-                            .unwrap_or_else(|| "unknown".to_string());
+                        let kind = error_kind.clone().unwrap_or_else(|| "unknown".to_string());
                         *errors.entry(kind).or_insert(0) += 1;
                     }
                 }
@@ -2688,8 +2748,9 @@ impl Storage {
     }
 
     pub fn upsert_alerting_escalation(&mut self, row: &EscalationRuleRow) {
-        let ids_json = serde_json::to_string(row.target_endpoint_ids.as_ref().unwrap_or(&Vec::new()))
-            .unwrap_or_else(|_| "[]".into());
+        let ids_json =
+            serde_json::to_string(row.target_endpoint_ids.as_ref().unwrap_or(&Vec::new()))
+                .unwrap_or_else(|_| "[]".into());
         let _ = self.conn.execute(
             "INSERT INTO alerting_escalations
              (id, name, kind_pattern, escalate_after_secs, target_severity,
@@ -2894,13 +2955,9 @@ impl StoreEnum {
         updated_at: i64,
     ) -> Result<(), String> {
         match self {
-            StoreEnum::Db(x) => x.upsert_alerting_severity_hint(
-                source,
-                severity,
-                origin,
-                plugin_id,
-                updated_at,
-            ),
+            StoreEnum::Db(x) => {
+                x.upsert_alerting_severity_hint(source, severity, origin, plugin_id, updated_at)
+            }
             StoreEnum::Mem(_) => Ok(()),
         }
     }
@@ -2922,7 +2979,9 @@ impl StoreEnum {
         origin: &str,
     ) -> bool {
         match self {
-            StoreEnum::Db(x) => x.delete_alerting_severity_hint_by_source_and_origin(source, origin),
+            StoreEnum::Db(x) => {
+                x.delete_alerting_severity_hint_by_source_and_origin(source, origin)
+            }
             StoreEnum::Mem(_) => false,
         }
     }
@@ -2933,7 +2992,9 @@ impl StoreEnum {
         plugin_id: &str,
     ) -> usize {
         match self {
-            StoreEnum::Db(x) => x.delete_alerting_severity_hints_by_origin_plugin(origin, plugin_id),
+            StoreEnum::Db(x) => {
+                x.delete_alerting_severity_hints_by_origin_plugin(origin, plugin_id)
+            }
             StoreEnum::Mem(_) => 0,
         }
     }
@@ -3081,7 +3142,10 @@ pub fn open_default() -> StoreEnum {
     match Storage::open(&path) {
         Ok(s) => StoreEnum::Db(s),
         Err(e) => {
-            eprintln!("[storage] sqlite unavailable ({}), falling back to memory", e);
+            eprintln!(
+                "[storage] sqlite unavailable ({}), falling back to memory",
+                e
+            );
             StoreEnum::Mem(super::agent::SessionStore::new())
         }
     }
@@ -3184,12 +3248,18 @@ mod tests {
         let mut s = sess("sp1", AgentState::Working);
         s.speech = "Let me first look at the bubble rendering path.".into();
         db.upsert(s);
-        assert_eq!(db.get("sp1").unwrap().speech, "Let me first look at the bubble rendering path.");
+        assert_eq!(
+            db.get("sp1").unwrap().speech,
+            "Let me first look at the bubble rendering path."
+        );
         let mut later = sess("sp1", AgentState::Working);
         later.model = "claude-sonnet-4-5".into();
         db.upsert(later);
         let back = db.get("sp1").unwrap();
-        assert_eq!(back.speech, "", "storage writes faithfully (stickiness is event::ingest's job)");
+        assert_eq!(
+            back.speech, "",
+            "storage writes faithfully (stickiness is event::ingest's job)"
+        );
         assert_eq!(back.model, "claude-sonnet-4-5");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -3198,7 +3268,8 @@ mod tests {
     fn plugins_auto_reload_column_migrates_old_db() {
         // an old DB's plugins table has no auto_reload column (created before it) → open()'s migration should add it:
         // plugin::list()'s SELECT references it directly; a missing column makes the whole plugin list read empty.
-        let dir = std::env::temp_dir().join(format!("opencapx-db-autoreload-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("opencapx-db-autoreload-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("old.db");
@@ -3220,7 +3291,11 @@ mod tests {
         // after migration the column exists (the SELECT would error if it were missing) + old rows are readable with a default of 0
         let auto: i64 = db
             .conn
-            .query_row("SELECT auto_reload FROM plugins WHERE id = 'com.x'", [], |r| r.get(0))
+            .query_row(
+                "SELECT auto_reload FROM plugins WHERE id = 'com.x'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(auto, 0, "old rows default auto_reload to 0");
         let _ = std::fs::remove_dir_all(&dir);
@@ -3234,8 +3309,9 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("t.db");
         let now = crate::core::agent::now_secs();
-        let store: SharedStore =
-            std::sync::Arc::new(std::sync::Mutex::new(StoreEnum::Db(Storage::open(&path).unwrap())));
+        let store: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(StoreEnum::Db(
+            Storage::open(&path).unwrap(),
+        )));
         {
             // insert after open: the startup path prunes, so inserting first would get cleared by it.
             let mut g = store.lock().unwrap();
@@ -3254,7 +3330,11 @@ mod tests {
             assert_eq!(inserted, Some(2));
         }
         assert_eq!(prune_events_shared(&store), 1, "only old rows cleared");
-        assert_eq!(prune_events_shared(&store), 0, "repeated runs are idempotent");
+        assert_eq!(
+            prune_events_shared(&store),
+            0,
+            "repeated runs are idempotent"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -3299,9 +3379,11 @@ mod tests {
         // after migration the column exists + old rows are NULL (no successful handshake yet)
         let v: Option<String> = db
             .conn
-            .query_row("SELECT last_version FROM plugins WHERE id = 'com.x'", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT last_version FROM plugins WHERE id = 'com.x'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(v, None, "old rows have an empty last_version");
         let _ = std::fs::remove_dir_all(&dir);
@@ -3363,7 +3445,10 @@ mod tests {
         db.upsert(live);
 
         assert_eq!(db.sweep(5300), 1);
-        assert!(db.get("old").is_none(), "expired session left the active table");
+        assert!(
+            db.get("old").is_none(),
+            "expired session left the active table"
+        );
         assert!(db.get("live").is_some());
 
         let hist = db.list_session_archive(10);
@@ -3481,11 +3566,39 @@ mod tests {
         let mut db = tmpdb("filter");
         let cases = [
             ("p1", "permission.granted", 100, "image.read", "granted", ""),
-            ("p2", "permission.denied", 200, "shell.exec", "denied", "high-risk"),
-            ("p3", "permission.ask", 300, "camera", "ask", "user-decision"),
-            ("l1", "plugin.lifecycle.starting", 150, "echo-vision", "", ""),
+            (
+                "p2",
+                "permission.denied",
+                200,
+                "shell.exec",
+                "denied",
+                "high-risk",
+            ),
+            (
+                "p3",
+                "permission.ask",
+                300,
+                "camera",
+                "ask",
+                "user-decision",
+            ),
+            (
+                "l1",
+                "plugin.lifecycle.starting",
+                150,
+                "echo-vision",
+                "",
+                "",
+            ),
             ("c1", "capability.completed", 250, "image.analyze", "ok", ""),
-            ("p4", "permission.granted", 400, "image.read", "granted", "rematch"),
+            (
+                "p4",
+                "permission.granted",
+                400,
+                "image.read",
+                "granted",
+                "rematch",
+            ),
         ];
         for (id, kind, ts, plugin, decision, reason) in cases {
             db.insert_event(&OpencapxEvent {
@@ -3508,9 +3621,13 @@ mod tests {
         assert!(only_perm.iter().all(|e| e.kind.starts_with("permission.")));
 
         // 2) kind_prefix + query (full-text match "den") — only p2's kind/payload contains "den" (the other
-//   permission.* events have reasons "high-risk"/"user-decision"/"rematch", with no den substring)
+        //   permission.* events have reasons "high-risk"/"user-decision"/"rematch", with no den substring)
         let denied = db.list_events_filtered(Some("permission."), Some("den"), None, None, 50);
-        assert_eq!(denied.len(), 1, "permission.* + 'den' matches only p2 (permission.denied)");
+        assert_eq!(
+            denied.len(),
+            1,
+            "permission.* + 'den' matches only p2 (permission.denied)"
+        );
         assert_eq!(denied[0].id, "p2");
 
         // 3) time range since..until
@@ -3522,14 +3639,13 @@ mod tests {
         assert!(ids.contains(&"c1"));
 
         // 4) combination: permission.* + full text + time
-        let combo = db.list_events_filtered(
-            Some("permission."),
-            Some("image"),
-            Some(50),
-            Some(500),
-            50,
+        let combo =
+            db.list_events_filtered(Some("permission."), Some("image"), Some(50), Some(500), 50);
+        assert_eq!(
+            combo.len(),
+            2,
+            "permission.* and payload contains image and ts ∈ [50,500]"
         );
-        assert_eq!(combo.len(), 2, "permission.* and payload contains image and ts ∈ [50,500]");
         let combo_ids: Vec<&str> = combo.iter().map(|e| e.id.as_str()).collect();
         assert!(combo_ids.contains(&"p1"));
         assert!(combo_ids.contains(&"p4"));
@@ -3542,7 +3658,11 @@ mod tests {
         // if "_" were a wildcard it would match payloads like "pluginId":"echo-vision", image.read (no _), shell.exec (no _)…
         // so the fuzzy search "_" below should match only payloads actually containing _ (0 here → verifies no over-matching)
         let underscore = db.list_events_filtered(None, Some("_"), None, None, 50);
-        assert_eq!(underscore.len(), 0, "an unescaped _ would match every event; escaped, it matches only a literal underscore");
+        assert_eq!(
+            underscore.len(),
+            0,
+            "an unescaped _ would match every event; escaped, it matches only a literal underscore"
+        );
 
         // 7) empty query / None query behave identically
         let none_q = db.list_events_filtered(Some("permission."), None, None, None, 50);
@@ -3561,7 +3681,8 @@ mod tests {
         assert!(db.add_rating("com.x.demo-7", 0, None, 100).is_err());
         assert!(db.add_rating("com.x.demo-7", 6, None, 100).is_err());
 
-        db.add_rating("com.x.demo-7", 5, Some("love it"), 100).unwrap();
+        db.add_rating("com.x.demo-7", 5, Some("love it"), 100)
+            .unwrap();
         db.add_rating("com.x.demo-7", 3, None, 200).unwrap();
         db.add_rating("com.x.demo-7", 4, Some("good"), 300).unwrap();
         // noise: another plugin id that must not be included.
@@ -3654,8 +3775,13 @@ mod tests {
         assert!(rows.iter().all(|r| r.last_used_at > 0));
 
         // returns [] when empty
-        assert!(Storage::open(&dir.join("t.db")).unwrap().capability_stats_summary(50).is_empty()
-            == false); // the same file has data; just verify the call does not crash
+        assert!(
+            Storage::open(&dir.join("t.db"))
+                .unwrap()
+                .capability_stats_summary(50)
+                .is_empty()
+                == false
+        ); // the same file has data; just verify the call does not crash
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -3664,7 +3790,8 @@ mod tests {
     /// Verifies: ok paths are computed into p50/p95, failures are not; fail_count and errors aggregate by error_kind.
     #[test]
     fn capability_stats_summary_tracks_failures_and_errors() {
-        let dir = std::env::temp_dir().join(format!("opencapx-capstats-fail-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("opencapx-capstats-fail-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut db = Storage::open(&dir.join("t.db")).unwrap();
 
@@ -3736,14 +3863,7 @@ mod tests {
                 Some("rpc_error"),
             );
         }
-        db.record_capability_call(
-            "image.analyze",
-            "plug-b",
-            200,
-            3_010,
-            "ok",
-            None,
-        );
+        db.record_capability_call("image.analyze", "plug-b", 200, 3_010, "ok", None);
 
         let rows2 = db.capability_stats_summary(50);
         let b = rows2.iter().find(|r| r.plugin_id == "plug-b").unwrap();
@@ -3795,7 +3915,10 @@ mod tests {
         assert_eq!(back2.max_retries, 3); // other fields keep the default
 
         // list fetches both plugins at once
-        db.upsert_health_config("plug-y", &crate::core::health::PluginHealthConfig::default());
+        db.upsert_health_config(
+            "plug-y",
+            &crate::core::health::PluginHealthConfig::default(),
+        );
         let all = db.list_health_configs();
         let ids: Vec<&str> = all.iter().map(|(id, _)| id.as_str()).collect();
         assert!(ids.contains(&"plug-x"));

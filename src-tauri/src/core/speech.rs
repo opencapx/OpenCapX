@@ -82,32 +82,21 @@ pub fn synthesize(input: &Value) -> Result<Value, String> {
     let (out_path, mut cmd) = {
         let out = dir.join(format!("speech-{}.aiff", nanos()));
         let mut c = std::process::Command::new("say");
-        c.args(say_args(
-            &out.to_string_lossy(),
-            &text,
-            &voice,
-            wpm,
-        ));
+        c.args(say_args(&out.to_string_lossy(), &text, &voice, wpm));
         (out, c)
     };
     #[cfg(target_os = "linux")]
     let (out_path, mut cmd) = {
         let out = dir.join(format!("speech-{}.wav", nanos()));
         let mut c = std::process::Command::new("espeak");
-        c.args(espeak_args(
-            &out.to_string_lossy(),
-            &text,
-            &voice,
-            wpm,
-        ));
+        c.args(espeak_args(&out.to_string_lossy(), &text, &voice, wpm));
         (out, c)
     };
     #[cfg(target_os = "windows")]
     let (out_path, mut cmd) = {
         let out = dir.join(format!("speech-{}.wav", nanos()));
         // System.Speech Rate ∈ [-10, 10]; speed=1.0 → 0
-        let rate10 = (((input.get("speed").and_then(|s| s.as_f64()).unwrap_or(1.0) - 1.0)
-            * 10.0)
+        let rate10 = (((input.get("speed").and_then(|s| s.as_f64()).unwrap_or(1.0) - 1.0) * 10.0)
             .round() as i64)
             .clamp(-10, 10);
         let mut script = String::from(
@@ -138,15 +127,13 @@ pub fn synthesize(input: &Value) -> Result<Value, String> {
 
     #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     {
-        let status = cmd
-            .status()
-            .map_err(|e| {
-                #[cfg(target_os = "linux")]
-                let hint = " (install espeak)";
-                #[cfg(not(target_os = "linux"))]
-                let hint = "";
-                format!("speech engine failed{}: {}", hint, e)
-            })?;
+        let status = cmd.status().map_err(|e| {
+            #[cfg(target_os = "linux")]
+            let hint = " (install espeak)";
+            #[cfg(not(target_os = "linux"))]
+            let hint = "";
+            format!("speech engine failed{}: {}", hint, e)
+        })?;
         if !status.success() {
             return Err(format!("speech engine exited {:?}", status.code()));
         }
@@ -196,7 +183,18 @@ mod tests {
     #[test]
     fn say_args_full_voice_rate() {
         let a = say_args("/tmp/x.aiff", "hi there", &Some("Tingting".into()), 350);
-        assert_eq!(a, vec!["-o", "/tmp/x.aiff", "-v", "Tingting", "-r", "350", "hi there"]);
+        assert_eq!(
+            a,
+            vec![
+                "-o",
+                "/tmp/x.aiff",
+                "-v",
+                "Tingting",
+                "-r",
+                "350",
+                "hi there"
+            ]
+        );
         // The default rate does not include -r
         let a = say_args("/tmp/x.aiff", "hi", &None, 175);
         assert_eq!(a, vec!["-o", "/tmp/x.aiff", "hi"]);

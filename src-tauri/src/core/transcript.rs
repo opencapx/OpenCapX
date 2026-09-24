@@ -152,7 +152,11 @@ fn message_text(v: &Value) -> String {
     };
     let mut out = String::new();
     for b in arr {
-        let is_text = b.get("type").and_then(|t| t.as_str()).map(|t| t == "text").unwrap_or(false);
+        let is_text = b
+            .get("type")
+            .and_then(|t| t.as_str())
+            .map(|t| t == "text")
+            .unwrap_or(false);
         if !is_text {
             continue;
         }
@@ -217,7 +221,10 @@ mod tests {
     fn reads_last_assistant_text_model_title_usage() {
         let path = tmpfile("basic", SAMPLE);
         let tail = read_tail(&path).expect("tail");
-        assert_eq!(tail.latest_assistant_text, "Fixed it. Should I also add a test?");
+        assert_eq!(
+            tail.latest_assistant_text,
+            "Fixed it. Should I also add a test?"
+        );
         assert_eq!(tail.model, "claude-sonnet-4-5");
         assert_eq!(tail.title, "Fix login redirect");
         let usage = tail.usage.expect("usage");
@@ -277,7 +284,10 @@ mod tests {
     #[test]
     fn missing_file_and_garbage_lines_are_ignored() {
         assert!(read_tail("/nonexistent/opencapx/transcript.jsonl").is_none());
-        let path = tmpfile("garbage", "not json\n{\"type\":\"summary\",\"summary\":\"s\"}\n");
+        let path = tmpfile(
+            "garbage",
+            "not json\n{\"type\":\"summary\",\"summary\":\"s\"}\n",
+        );
         let tail = read_tail(&path).expect("tail");
         assert_eq!(tail.title, "s");
         std::fs::remove_file(path).ok();

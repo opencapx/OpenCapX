@@ -120,7 +120,8 @@ mod tests {
     use std::path::PathBuf;
 
     fn tmpdir(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("opencapx-project-{}-{}", std::process::id(), tag));
+        let d =
+            std::env::temp_dir().join(format!("opencapx-project-{}-{}", std::process::id(), tag));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -167,7 +168,10 @@ mod tests {
             format!("gitdir: {}\n", gitdir.to_str().unwrap()),
         )
         .unwrap();
-        assert_eq!(branch_for(wt.to_str().unwrap()), Some("feat/wt".to_string()));
+        assert_eq!(
+            branch_for(wt.to_str().unwrap()),
+            Some("feat/wt".to_string())
+        );
     }
 
     #[test]

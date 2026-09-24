@@ -77,7 +77,11 @@ pub fn verify_package(
     let manifest: Option<Manifest> = match read_manifest(archive) {
         Ok(m) => {
             match PluginManager::validate_manifest(&m) {
-                Ok(()) => report.push("manifest", true, "schema/lexical/reserved-domains passed".to_string()),
+                Ok(()) => report.push(
+                    "manifest",
+                    true,
+                    "schema/lexical/reserved-domains passed".to_string(),
+                ),
                 Err(e) => report.push("manifest", false, e),
             }
             Some(m)
@@ -98,10 +102,7 @@ pub fn verify_package(
                     format!(
                         "sandbox: network={} fs.write={:?}",
                         sb.network.as_deref().unwrap_or("none"),
-                        sb.fs
-                            .as_ref()
-                            .map(|f| f.write.clone())
-                            .unwrap_or_default()
+                        sb.fs.as_ref().map(|f| f.write.clone()).unwrap_or_default()
                     ),
                 ),
                 Err(e) => (false, e),
@@ -132,7 +133,10 @@ pub fn verify_package(
         VerifyOutcome::UnknownKey { key_id } => report.push(
             "signature",
             false,
-            format!("keyId not registered (trusted-keys / registry publishers): {}", key_id),
+            format!(
+                "keyId not registered (trusted-keys / registry publishers): {}",
+                key_id
+            ),
         ),
         other => report.push(
             "signature",
@@ -147,13 +151,21 @@ pub fn verify_package(
     // ④ declaration consistency (mapping reconciliation).
     match &manifest {
         Some(m) => check_declaration(&mut report, m),
-        None => report.push("declaration", false, "manifest unreadable, cannot reconcile".to_string()),
+        None => report.push(
+            "declaration",
+            false,
+            "manifest unreadable, cannot reconcile".to_string(),
+        ),
     }
 
     // ⑤ dependency existence (check entries when an index is present; without an index → format validation already covered in ①).
     match &manifest {
         Some(m) => check_dependencies(&mut report, m, index),
-        None => report.push("dependency", false, "manifest unreadable, cannot verify".to_string()),
+        None => report.push(
+            "dependency",
+            false,
+            "manifest unreadable, cannot verify".to_string(),
+        ),
     }
 
     report.ok = report.checks.iter().all(|c| c.ok);
@@ -241,12 +253,19 @@ fn check_static(
         if let Some(rt) = &m.runtime {
             let base = rt.command.rsplit('/').next().unwrap_or(&rt.command);
             if SHELLS.contains(&base) && rt.args.iter().any(|a| a == "-c") {
-                findings.push(format!("runtime.command wrapped in shell -c: {}", rt.command));
+                findings.push(format!(
+                    "runtime.command wrapped in shell -c: {}",
+                    rt.command
+                ));
             }
         }
     }
     if findings.is_empty() {
-        report.push("static", true, "oversize/traversal/blacklist/credential scan passed".to_string());
+        report.push(
+            "static",
+            true,
+            "oversize/traversal/blacklist/credential scan passed".to_string(),
+        );
     } else {
         report.push("static", false, findings.join("; "));
     }
@@ -261,10 +280,16 @@ fn scan_text_findings(name: &str, text: &str, out: &mut Vec<String>) {
     for (i, line) in text.lines().enumerate() {
         let n = i + 1;
         if is_pipe_to_shell(line) {
-            out.push(format!("{}:{} download piped to shell (curl|sh style)", name, n));
+            out.push(format!(
+                "{}:{} download piped to shell (curl|sh style)",
+                name, n
+            ));
         }
         if let Some(label) = find_secret(line) {
-            out.push(format!("{}:{} suspected plaintext credential ({})", name, n, label));
+            out.push(format!(
+                "{}:{} suspected plaintext credential ({})",
+                name, n, label
+            ));
         }
     }
 }
@@ -332,12 +357,19 @@ fn check_declaration(report: &mut VerifyReport, m: &Manifest) {
     for c in &m.capabilities {
         if let Some((perm, _)) = c.mapping() {
             if !m.permissions.iter().any(|p| p == perm) {
-                findings.push(format!("mapped permission {} not listed in permissions[]", perm));
+                findings.push(format!(
+                    "mapped permission {} not listed in permissions[]",
+                    perm
+                ));
             }
         }
     }
     if findings.is_empty() {
-        report.push("declaration", true, "mapping reconciliation passed".to_string());
+        report.push(
+            "declaration",
+            true,
+            "mapping reconciliation passed".to_string(),
+        );
     } else {
         report.push("declaration", false, findings.join("; "));
     }
@@ -348,7 +380,10 @@ fn check_dependencies(report: &mut VerifyReport, m: &Manifest, index: Option<&Re
         report.push(
             "dependency",
             true,
-            format!("{} dependencies passed format validation (no index, skipping existence)", m.dependencies.len()),
+            format!(
+                "{} dependencies passed format validation (no index, skipping existence)",
+                m.dependencies.len()
+            ),
         );
         return;
     };
@@ -359,7 +394,11 @@ fn check_dependencies(report: &mut VerifyReport, m: &Manifest, index: Option<&Re
         }
     }
     if findings.is_empty() {
-        report.push("dependency", true, "dependency existence passed".to_string());
+        report.push(
+            "dependency",
+            true,
+            "dependency existence passed".to_string(),
+        );
     } else {
         report.push("dependency", false, findings.join("; "));
     }
@@ -422,7 +461,8 @@ mod tests {
         let f = std::fs::File::create(path).unwrap();
         let mut w = zip::ZipWriter::new(f);
         for (name, data) in entries {
-            w.start_file(name.clone(), SimpleFileOptions::default()).unwrap();
+            w.start_file(name.clone(), SimpleFileOptions::default())
+                .unwrap();
             w.write_all(data).unwrap();
         }
         w.finish().unwrap();
@@ -500,7 +540,12 @@ mod tests {
         crate::core::pack::pack_dir(&src, &TEST_SEED, TEST_KEY_ID, &pkg).unwrap();
 
         let idx = index_with(&["com.test.pkg"], false);
-        let report = verify_package(&pkg, &keys_with(TEST_SEED), Some(&idx), &GateLimits::default());
+        let report = verify_package(
+            &pkg,
+            &keys_with(TEST_SEED),
+            Some(&idx),
+            &GateLimits::default(),
+        );
         assert!(report.ok, "checks: {:?}", report.checks);
         assert_eq!(report.check_ok("manifest"), Some(true));
         assert_eq!(report.check_ok("signature"), Some(true));
@@ -550,7 +595,13 @@ mod tests {
     fn gate_rejects_bad_signature() {
         let dir = test_dir("badsig");
         let pkg = dir.join("bad.ocplugin");
-        make_signed(&pkg, &base_manifest("com.test.pkg"), &[], TEST_SEED, TEST_KEY_ID);
+        make_signed(
+            &pkg,
+            &base_manifest("com.test.pkg"),
+            &[],
+            TEST_SEED,
+            TEST_KEY_ID,
+        );
         // The registered key is B's public key: same keyId, verification must fail
         let report = verify_package(&pkg, &keys_with(TEST_SEED_B), None, &GateLimits::default());
         assert!(!report.ok);
@@ -563,9 +614,20 @@ mod tests {
     fn gate_rejects_revoked_publisher() {
         let dir = test_dir("revoked");
         let pkg = dir.join("revoked.ocplugin");
-        make_signed(&pkg, &base_manifest("com.test.pkg"), &[], TEST_SEED, TEST_KEY_ID);
+        make_signed(
+            &pkg,
+            &base_manifest("com.test.pkg"),
+            &[],
+            TEST_SEED,
+            TEST_KEY_ID,
+        );
         let idx = index_with(&["com.test.pkg"], true);
-        let report = verify_package(&pkg, &keys_with(TEST_SEED), Some(&idx), &GateLimits::default());
+        let report = verify_package(
+            &pkg,
+            &keys_with(TEST_SEED),
+            Some(&idx),
+            &GateLimits::default(),
+        );
         assert!(!report.ok);
         assert_eq!(report.check_ok("signature"), Some(false));
         let _ = std::fs::remove_dir_all(&dir);
@@ -597,7 +659,13 @@ mod tests {
     fn gate_rejects_oversize_package() {
         let dir = test_dir("oversize");
         let pkg = dir.join("big.ocplugin");
-        make_signed(&pkg, &base_manifest("com.test.pkg"), &[], TEST_SEED, TEST_KEY_ID);
+        make_signed(
+            &pkg,
+            &base_manifest("com.test.pkg"),
+            &[],
+            TEST_SEED,
+            TEST_KEY_ID,
+        );
         let limits = GateLimits {
             max_package_bytes: 8,
             max_total_bytes: 8,
@@ -631,7 +699,12 @@ mod tests {
         m["dependencies"] = json!({ "com.example.ghost": "^1.0" });
         make_signed(&pkg, &m, &[], TEST_SEED, TEST_KEY_ID);
         let idx = index_with(&["com.test.pkg"], false);
-        let report = verify_package(&pkg, &keys_with(TEST_SEED), Some(&idx), &GateLimits::default());
+        let report = verify_package(
+            &pkg,
+            &keys_with(TEST_SEED),
+            Some(&idx),
+            &GateLimits::default(),
+        );
         assert!(!report.ok);
         assert_eq!(report.check_ok("dependency"), Some(false));
         let _ = std::fs::remove_dir_all(&dir);
@@ -706,7 +779,11 @@ mod tests {
         let r2 = verify_package(&pkg2, &keys_with(TEST_SEED), None, &GateLimits::default());
         assert!(!r2.ok);
         assert_eq!(r2.check_ok("manifest"), Some(false));
-        assert_eq!(r2.check_ok("sandbox"), Some(false), "check type 6 also proactively rejects illegal declarations");
+        assert_eq!(
+            r2.check_ok("sandbox"),
+            Some(false),
+            "check type 6 also proactively rejects illegal declarations"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

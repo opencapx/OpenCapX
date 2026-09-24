@@ -1,7 +1,9 @@
 //! Event Bus: unified event structure, synchronous broadcast, absorbing the existing ingest path.
 //! See docs/events.md.
 
-use super::agent::{dto_to_session, process_body, session_to_dto, Session, SessionDto, SessionSink};
+use super::agent::{
+    dto_to_session, process_body, session_to_dto, Session, SessionDto, SessionSink,
+};
 use super::storage::SharedStore;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::{Receiver, Sender};
@@ -169,7 +171,10 @@ pub fn ingest(
     // Fill in the model name, and for Stop re-check "done / asking" (read the transcript tail).
     // If unreadable, skip silently; event handling is unaffected.
     super::agent::enrich_from_transcript(&mut dto, body);
-    eprintln!("[ingest] id={} agent={} state={}", dto.id, dto.agent, dto.state);
+    eprintln!(
+        "[ingest] id={} agent={} state={}",
+        dto.id, dto.agent, dto.state
+    );
     let prev_session = store.lock().ok().and_then(|s| s.get(&dto.id));
     let prev: Option<String> = prev_session
         .as_ref()
@@ -277,9 +282,15 @@ mod tests {
         let bus = EventBus::new();
         let rx1 = bus.subscribe();
         let rx2 = bus.subscribe();
-        bus.publish(&OpencapxEvent::new("agent.started", "test", serde_json::json!({})));
+        bus.publish(&OpencapxEvent::new(
+            "agent.started",
+            "test",
+            serde_json::json!({}),
+        ));
         assert!(rx1.recv_timeout(std::time::Duration::from_secs(1)).is_ok());
-        assert!(rx2.recv_timeout(std::time::Duration::from_millis(100)).is_ok());
+        assert!(rx2
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .is_ok());
     }
 
     #[test]
@@ -309,7 +320,14 @@ mod tests {
         )));
         let bus = EventBus::new();
         let rx = bus.subscribe();
-        ingest(None, &store, &bus, r#"{"agent":"codex","text":"running tool"}"#, "unknown", None);
+        ingest(
+            None,
+            &store,
+            &bus,
+            r#"{"agent":"codex","text":"running tool"}"#,
+            "unknown",
+            None,
+        );
         // The event must land in the DB and be active at "now" (retention policy in is_active)
         assert_eq!(store.lock().unwrap().all().len(), 1);
         assert_eq!(
@@ -389,7 +407,10 @@ mod tests {
         );
         let after = store.lock().unwrap().get("sticky").unwrap();
         assert_eq!(after.message, "Edit b.ts");
-        assert_eq!(after.speech, "Let me check the render path first.", "the body must not be wiped by the following event");
+        assert_eq!(
+            after.speech, "Let me check the render path first.",
+            "the body must not be wiped by the following event"
+        );
     }
 
     /// cwd is a sticky field too: when later events carry no cwd, it must not wipe the grouping key to an empty string,
@@ -454,8 +475,16 @@ mod tests {
             None,
         );
 
-        assert_eq!(super::super::req_trace::list_hook_traces("ag_x_01").len(), 1, "viewer key hits");
-        assert_eq!(super::super::req_trace::list_hook_traces("aider").len(), 1, "anonymous falls back to kind");
+        assert_eq!(
+            super::super::req_trace::list_hook_traces("ag_x_01").len(),
+            1,
+            "viewer key hits"
+        );
+        assert_eq!(
+            super::super::req_trace::list_hook_traces("aider").len(),
+            1,
+            "anonymous falls back to kind"
+        );
         // The authenticated stream must not leak into the kind directory
         let caller_lines = super::super::req_trace::read_hook_trace("ag_x_01", "s-caller", 10);
         assert!(matches!(

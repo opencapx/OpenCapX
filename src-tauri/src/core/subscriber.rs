@@ -16,10 +16,15 @@ struct Inner {
 
 impl Inner {
     fn new() -> Self {
-        Self { by_kind: HashMap::new() }
+        Self {
+            by_kind: HashMap::new(),
+        }
     }
     fn subscribe(&mut self, plugin: &str, kind: &str) {
-        self.by_kind.entry(kind.to_string()).or_default().insert(plugin.to_string());
+        self.by_kind
+            .entry(kind.to_string())
+            .or_default()
+            .insert(plugin.to_string());
     }
     fn unsubscribe(&mut self, plugin: &str, kind: &str) {
         if let Some(set) = self.by_kind.get_mut(kind) {
@@ -41,7 +46,11 @@ impl Inner {
 /// S3 — per-plugin kind cap (overridden by the `subscribe_max_kinds` setting; default 32).
 fn max_kinds_per_plugin() -> usize {
     super::shared_store()
-        .and_then(|s| s.lock().ok().and_then(|g| g.get_setting("subscribe_max_kinds")))
+        .and_then(|s| {
+            s.lock()
+                .ok()
+                .and_then(|g| g.get_setting("subscribe_max_kinds"))
+        })
         .and_then(|v| v.parse::<usize>().ok())
         .map(|n| n.max(1))
         .unwrap_or(PLUGIN_MAX_KINDS)
@@ -68,12 +77,19 @@ impl SubscriptionRegistry {
         }
         let mut g = self.inner.lock().map_err(|_| "poisoned".to_string())?;
         // S3 — per-plugin kind cap: an already-subscribed kind passes idempotently; a new kind over the cap is rejected (prevents registry bloat).
-        let already = g.by_kind.get(kind).map(|s| s.contains(plugin)).unwrap_or(false);
+        let already = g
+            .by_kind
+            .get(kind)
+            .map(|s| s.contains(plugin))
+            .unwrap_or(false);
         if !already {
             let count = g.by_kind.values().filter(|s| s.contains(plugin)).count();
             let cap = max_kinds_per_plugin();
             if count >= cap {
-                return Err(format!("subscribe limit reached for plugin ({} kinds)", cap));
+                return Err(format!(
+                    "subscribe limit reached for plugin ({} kinds)",
+                    cap
+                ));
             }
         }
         g.subscribe(plugin, kind);
@@ -102,7 +118,8 @@ pub fn spawn_fanout(bus: Arc<super::event::EventBus>, mgr: Arc<super::plugin::Pl
         loop {
             match rx.recv() {
                 Ok(ev) => {
-                    let subs = super::subscriber::SubscriptionRegistry::shared().subscribers(&ev.kind);
+                    let subs =
+                        super::subscriber::SubscriptionRegistry::shared().subscribers(&ev.kind);
                     if subs.is_empty() {
                         continue;
                     }
@@ -152,7 +169,10 @@ mod tests {
         let s1 = r.subscribers(&k1);
         assert_eq!(s1, vec!["b".to_string()]);
         r.unsubscribe("b", &k1);
-        assert!(r.subscribers(&k1).is_empty(), "empty set entry should be removed");
+        assert!(
+            r.subscribers(&k1).is_empty(),
+            "empty set entry should be removed"
+        );
     }
 
     #[test]

@@ -51,8 +51,15 @@ fn conn_id() -> &'static str {
 /// Output channel: every path that writes stdout (responses / errors / notifications) funnels here,
 /// flushed by a single writer thread — concurrent writes from the tool thread, SSE thread, and cancel path do not interleave.
 enum Out {
-    Response { id: Value, result: Value },
-    Error { id: Value, code: i64, message: String },
+    Response {
+        id: Value,
+        result: Value,
+    },
+    Error {
+        id: Value,
+        code: i64,
+        message: String,
+    },
     /// server → client notification (no id, no response needed)
     Notification(Value),
 }
@@ -81,7 +88,9 @@ pub fn run() -> ! {
         for o in rx {
             match o {
                 Out::Response { id, result } => write_message(&mut writer, Some(id), result),
-                Out::Error { id, code, message } => write_error(&mut writer, Some(id), code, &message),
+                Out::Error { id, code, message } => {
+                    write_error(&mut writer, Some(id), code, &message)
+                }
                 Out::Notification(v) => {
                     let _ = write_line(&mut writer, &v);
                 }
@@ -161,14 +170,24 @@ fn handle_message(msg: &Value, out: &Sender<Out>) {
             });
         }
         "ping" => {
-            let _ = out.send(Out::Response { id, result: json!({}) });
+            let _ = out.send(Out::Response {
+                id,
+                result: json!({}),
+            });
         }
         "tools/list" => {
-            let _ = out.send(Out::Response { id, result: json!({ "tools": tools() }) });
+            let _ = out.send(Out::Response {
+                id,
+                result: json!({ "tools": tools() }),
+            });
         }
         "tools/call" => {
             let params = msg.get("params").cloned().unwrap_or(Value::Null);
-            let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+            let name = params
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("")
+                .to_string();
             let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
             if let Some(schema) = tool_schema(&name) {
                 if let Err(reason) = validate(arguments.clone(), schema) {
@@ -258,7 +277,7 @@ fn start_sse(out: Sender<Out>) {
             loop {
                 line.clear();
                 match reader.read_line(&mut line) {
-                    Ok(0) => break,           // Core closed the stream
+                    Ok(0) => break, // Core closed the stream
                     Ok(_) => {
                         if let Some(ev) = parse_sse_data(&line) {
                             forward_subscription_event(&ev, &out);
@@ -285,7 +304,9 @@ fn forward_subscription_event(ev: &Value, out: &Sender<Out>) {
         return;
     }
     let Some(p) = ev.get("payload") else { return };
-    let Some(sid) = p.get("subscriptionId").and_then(|s| s.as_str()) else { return };
+    let Some(sid) = p.get("subscriptionId").and_then(|s| s.as_str()) else {
+        return;
+    };
     let mine = sub_ids().lock().map(|m| m.contains(sid)).unwrap_or(false);
     if !mine {
         return;
@@ -306,7 +327,9 @@ fn forward_subscription_event(ev: &Value, out: &Sender<Out>) {
 
 /// Successful subscribe reply → record in this process's subscription set (used for SSE filtering).
 fn track_subscribe(body: &str) {
-    let Ok(v) = serde_json::from_str::<Value>(body) else { return };
+    let Ok(v) = serde_json::from_str::<Value>(body) else {
+        return;
+    };
     if v.get("ok").and_then(|o| o.as_bool()) != Some(true) {
         return;
     }
@@ -319,7 +342,9 @@ fn track_subscribe(body: &str) {
 
 /// Successful unsubscribe reply → remove from the subscription set.
 fn track_unsubscribe(body: &str) {
-    let Ok(v) = serde_json::from_str::<Value>(body) else { return };
+    let Ok(v) = serde_json::from_str::<Value>(body) else {
+        return;
+    };
     if v.get("ok").and_then(|o| o.as_bool()) != Some(true) {
         return;
     }
@@ -444,7 +469,10 @@ fn call_tool(name: &str, arguments: &Value, request_id: Option<&str>) -> Value {
             let ok = v.get("ok").and_then(|o| o.as_bool()).unwrap_or(false);
             text_result(&body, !ok)
         }
-        None => text_result("OpenCapX app is not running (start the app, then retry)", true),
+        None => text_result(
+            "OpenCapX app is not running (start the app, then retry)",
+            true,
+        ),
     }
 }
 
@@ -515,7 +543,10 @@ mod tests {
     fn call(msg: Value) -> Value {
         let (tx, rx) = mpsc::channel();
         handle_message(&msg, &tx);
-        to_wire(rx.recv_timeout(Duration::from_secs(5)).expect("response arrives"))
+        to_wire(
+            rx.recv_timeout(Duration::from_secs(5))
+                .expect("response arrives"),
+        )
     }
 
     /// Out → wire JSON (equivalent to the writer thread's write_message/write_error output).
@@ -549,7 +580,11 @@ mod tests {
             "opencapx.subscribe",
             "opencapx.unsubscribe",
         ] {
-            assert!(names.contains(&expected.to_string()), "missing {}", expected);
+            assert!(
+                names.contains(&expected.to_string()),
+                "missing {}",
+                expected
+            );
         }
     }
 
@@ -559,7 +594,10 @@ mod tests {
         let schema = tool_schema("opencapx.set_state").expect("schema exists");
         let en = schema["properties"]["state"]["enum"].as_array().unwrap();
         assert_eq!(en.len(), 8, "{:?}", en);
-        assert!(en.contains(&json!("permission")), "A8:permission must be in the enum");
+        assert!(
+            en.contains(&json!("permission")),
+            "A8:permission must be in the enum"
+        );
         assert!(en.contains(&json!("thinking")));
         assert!(en.contains(&json!("sleeping")));
     }
@@ -574,14 +612,20 @@ mod tests {
     fn validate_covers_required_type_enum_minitems() {
         let s = json!({"type":"object","properties":{"q":{"type":"string"}},"required":["q"]});
         assert!(validate(json!({"q":"x"}), &s).is_ok());
-        assert!(validate(json!({}), &s).unwrap_err().contains("missing required field q"));
+        assert!(validate(json!({}), &s)
+            .unwrap_err()
+            .contains("missing required field q"));
         let s = json!({"enum":["a","b"]});
         assert!(validate(json!("c"), &s).unwrap_err().contains("enum"));
         assert!(validate(json!("a"), &s).is_ok());
         let s = json!({"type":"array","minItems":2,"items":{"type":"string"}});
-        assert!(validate(json!(["a"]), &s).unwrap_err().contains("too short"));
+        assert!(validate(json!(["a"]), &s)
+            .unwrap_err()
+            .contains("too short"));
         let s = json!({"type":"number"});
-        assert!(validate(json!("x"), &s).unwrap_err().contains("expected type"));
+        assert!(validate(json!("x"), &s)
+            .unwrap_err()
+            .contains("expected type"));
     }
 
     #[test]
@@ -603,7 +647,10 @@ mod tests {
             "params":{"name":"opencapx.list_capabilities","arguments":{}}
         }));
         assert!(v.get("error").is_none(), "got error: {:?}", v);
-        assert!(v["result"]["isError"].as_bool().unwrap(), "app not running should be isError");
+        assert!(
+            v["result"]["isError"].as_bool().unwrap(),
+            "app not running should be isError"
+        );
     }
 
     /// notifications/cancelled: unknown requestId → silent (the client already got a normal response);
@@ -616,7 +663,10 @@ mod tests {
             &json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":99}}),
             &tx,
         );
-        assert!(rx.recv_timeout(Duration::from_millis(150)).is_err(), "unknown id gets no response");
+        assert!(
+            rx.recv_timeout(Duration::from_millis(150)).is_err(),
+            "unknown id gets no response"
+        );
         // Pending: id=42 registered in the table (simulating insertion before the worker starts)
         let flag = Arc::new(AtomicBool::new(false));
         pending().lock().unwrap().insert("42".into(), flag.clone());
@@ -627,14 +677,23 @@ mod tests {
         let v = to_wire(rx.recv_timeout(Duration::from_secs(5)).unwrap());
         assert_eq!(v["error"]["code"], json!(-32800));
         assert_eq!(v["id"], json!(42));
-        assert!(flag.load(Ordering::SeqCst), "worker discards the result based on this");
-        assert!(pending().lock().unwrap().get("42").is_none(), "table entry removed");
+        assert!(
+            flag.load(Ordering::SeqCst),
+            "worker discards the result based on this"
+        );
+        assert!(
+            pending().lock().unwrap().get("42").is_none(),
+            "table entry removed"
+        );
         // Duplicate cancel: no longer in the table → silent
         handle_message(
             &json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":42}}),
             &tx,
         );
-        assert!(rx.recv_timeout(Duration::from_millis(150)).is_err(), "duplicate cancel gets no response");
+        assert!(
+            rx.recv_timeout(Duration::from_millis(150)).is_err(),
+            "duplicate cancel gets no response"
+        );
     }
 
     /// Worker wrap-up race: cancel arrives first (flag already set) → late result is discarded;
@@ -648,7 +707,8 @@ mod tests {
         assert!(removed.is_some());
         flag.store(true, Ordering::SeqCst);
         // Worker's view: remove returns None (already taken by cancel) + flag true → discard
-        let cancelled = pending().lock().unwrap().remove("7").is_none() || flag.load(Ordering::SeqCst);
+        let cancelled =
+            pending().lock().unwrap().remove("7").is_none() || flag.load(Ordering::SeqCst);
         assert!(cancelled);
         // Normal path: worker itself removes Some + flag false → send response
         let flag2 = Arc::new(AtomicBool::new(false));
@@ -671,7 +731,10 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         // Not holding the subscription → do not forward
         forward_subscription_event(&ev, &tx);
-        assert!(rx.recv_timeout(Duration::from_millis(150)).is_err(), "someone else's subscription is not forwarded");
+        assert!(
+            rx.recv_timeout(Duration::from_millis(150)).is_err(),
+            "someone else's subscription is not forwarded"
+        );
         // Holding it → forward as an opencapx.event notification, params shape aligned with mcp.md
         sub_ids().lock().unwrap().insert("sub_1".into());
         forward_subscription_event(&ev, &tx);
