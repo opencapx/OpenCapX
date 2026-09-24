@@ -78,8 +78,15 @@ fn ollama_default_model(base_url: &str) -> Result<String, String> {
     let resp = client
         .get(format!("{}/api/tags", base_url.trim_end_matches('/')))
         .send()
-        .map_err(|e| format!("vision provider unreachable: {} (start Ollama or set OPEN_CAPX_OLLAMA_URL)", e))?;
-    let v: Value = resp.json().map_err(|e| format!("vision provider bad tags response: {}", e))?;
+        .map_err(|e| {
+            format!(
+                "vision provider unreachable: {} (start Ollama or set OPEN_CAPX_OLLAMA_URL)",
+                e
+            )
+        })?;
+    let v: Value = resp
+        .json()
+        .map_err(|e| format!("vision provider bad tags response: {}", e))?;
     v.get("models")
         .and_then(|m| m.as_array())
         .and_then(|a| a.first())
@@ -90,7 +97,12 @@ fn ollama_default_model(base_url: &str) -> Result<String, String> {
 }
 
 /// Ollama /api/generate (non-streaming). Returns the model text.
-fn ollama_generate(base_url: &str, model: &str, prompt: &str, image_b64: &str) -> Result<String, String> {
+fn ollama_generate(
+    base_url: &str,
+    model: &str,
+    prompt: &str,
+    image_b64: &str,
+) -> Result<String, String> {
     let client = reqwest::blocking::Client::builder()
         .timeout(VISION_TIMEOUT)
         .build()
@@ -105,16 +117,26 @@ fn ollama_generate(base_url: &str, model: &str, prompt: &str, image_b64: &str) -
         .post(format!("{}/api/generate", base_url.trim_end_matches('/')))
         .json(&body)
         .send()
-        .map_err(|e| format!("vision provider unreachable: {} (start Ollama or set OPEN_CAPX_OLLAMA_URL)", e))?;
+        .map_err(|e| {
+            format!(
+                "vision provider unreachable: {} (start Ollama or set OPEN_CAPX_OLLAMA_URL)",
+                e
+            )
+        })?;
     let status = resp.status();
     let text = resp
         .text()
         .map_err(|e| format!("vision provider read failed: {}", e))?;
     if !status.is_success() {
         // Model not pulled, etc.: pass through Ollama's error body verbatim (usually contains "model not found")
-        return Err(format!("vision provider HTTP {}: {}", status.as_u16(), text.chars().take(200).collect::<String>()));
+        return Err(format!(
+            "vision provider HTTP {}: {}",
+            status.as_u16(),
+            text.chars().take(200).collect::<String>()
+        ));
     }
-    let v: Value = serde_json::from_str(&text).map_err(|e| format!("vision provider bad response: {}", e))?;
+    let v: Value =
+        serde_json::from_str(&text).map_err(|e| format!("vision provider bad response: {}", e))?;
     v.get("response")
         .and_then(|r| r.as_str())
         .map(|s| s.trim().to_string())
@@ -218,7 +240,9 @@ fn capture_args(
     _window: Option<i64>,
 ) -> Result<Vec<String>, String> {
     if _window.is_some() {
-        return Err("window capture not supported on Linux builtin (use region or full screen)".into());
+        return Err(
+            "window capture not supported on Linux builtin (use region or full screen)".into(),
+        );
     }
     let mut args = Vec::new();
     if let Some(r) = region {
@@ -227,7 +251,9 @@ fn capture_args(
         let w = r.get("width").and_then(|v| v.as_i64());
         let h = r.get("height").and_then(|v| v.as_i64());
         match (x, y, w, h) {
-            (Some(x), Some(y), Some(w), Some(h)) => args.push(format!("-a={},{},{},{}", x, y, w, h)),
+            (Some(x), Some(y), Some(w), Some(h)) => {
+                args.push(format!("-a={},{},{},{}", x, y, w, h))
+            }
             _ => return Err("invalid region: x, y, width, height (integers) all required".into()),
         }
     }
@@ -273,15 +299,13 @@ pub fn capture(input: &Value) -> Result<Value, String> {
         let out = dir.join(format!("screen-{}.png", nanos));
         let out_str = out.to_string_lossy().to_string();
         let args = capture_args(&out_str, region, window)?;
-        let status = capture_command(args)
-            .status()
-            .map_err(|e| {
-                #[cfg(target_os = "linux")]
-                let hint = " (install scrot)";
-                #[cfg(not(target_os = "linux"))]
-                let hint = "";
-                format!("capture command failed{}: {}", hint, e)
-            })?;
+        let status = capture_command(args).status().map_err(|e| {
+            #[cfg(target_os = "linux")]
+            let hint = " (install scrot)";
+            #[cfg(not(target_os = "linux"))]
+            let hint = "";
+            format!("capture command failed{}: {}", hint, e)
+        })?;
         if !status.success() {
             // The most common macOS cause is a missing "Screen Recording" TCC permission (the capture is only the wallpaper or fails outright)
             return Err(format!(
@@ -330,10 +354,11 @@ fn clamp_region(
 #[cfg(target_os = "windows")]
 fn capture_windows(input: &Value) -> Result<Value, String> {
     if input.get("window").and_then(|w| w.as_i64()).is_some() {
-        return Err("window capture not supported on Windows builtin (use region or full screen)".into());
+        return Err(
+            "window capture not supported on Windows builtin (use region or full screen)".into(),
+        );
     }
-    let monitors =
-        xcap::Monitor::all().map_err(|e| format!("capture monitors failed: {}", e))?;
+    let monitors = xcap::Monitor::all().map_err(|e| format!("capture monitors failed: {}", e))?;
     let monitor = monitors.first().ok_or("no monitor found")?;
     let mut img = monitor
         .capture_image()
@@ -361,7 +386,8 @@ fn capture_windows(input: &Value) -> Result<Value, String> {
         .unwrap_or(0);
     let out = dir.join(format!("screen-{}.png", nanos));
     let out_str = out.to_string_lossy().to_string();
-    img.save(&out).map_err(|e| format!("capture save failed: {}", e))?;
+    img.save(&out)
+        .map_err(|e| format!("capture save failed: {}", e))?;
     Ok(json!({ "image": out_str }))
 }
 
@@ -378,7 +404,9 @@ mod tests {
     #[test]
     fn analyze_requires_image() {
         assert!(analyze(&json!({})).unwrap_err().contains("image"));
-        assert!(analyze(&json!({ "image": "" })).unwrap_err().contains("empty"));
+        assert!(analyze(&json!({ "image": "" }))
+            .unwrap_err()
+            .contains("empty"));
     }
 
     /// Ollama unreachable (nothing listening on port 1) → honest error with guidance.
@@ -387,8 +415,7 @@ mod tests {
     fn analyze_reports_unreachable_provider() {
         let _g = lock();
         std::env::set_var("OPEN_CAPX_OLLAMA_URL", "http://127.0.0.1:1");
-        let err = analyze(&json!({ "image": "data:image/png;base64,aGVsbG8=" }))
-            .unwrap_err();
+        let err = analyze(&json!({ "image": "data:image/png;base64,aGVsbG8=" })).unwrap_err();
         std::env::remove_var("OPEN_CAPX_OLLAMA_URL");
         assert!(err.contains("unreachable"), "{}", err);
     }
@@ -409,7 +436,9 @@ mod tests {
             load_image_b64("data:image/png;base64,QUJD").unwrap(),
             "QUJD"
         );
-        assert!(load_image_b64("/nonexistent/opencapx.png").unwrap_err().contains("read failed"));
+        assert!(load_image_b64("/nonexistent/opencapx.png")
+            .unwrap_err()
+            .contains("read failed"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -418,7 +447,12 @@ mod tests {
     fn capture_args_full_region_window() {
         let a = capture_args("/tmp/x.png", None, None).unwrap();
         assert_eq!(a, vec!["-x", "/tmp/x.png"]);
-        let a = capture_args("/tmp/x.png", Some(&json!({"x":1,"y":2,"width":3,"height":4})), None).unwrap();
+        let a = capture_args(
+            "/tmp/x.png",
+            Some(&json!({"x":1,"y":2,"width":3,"height":4})),
+            None,
+        )
+        .unwrap();
         assert_eq!(a, vec!["-x", "-R1,2,3,4", "/tmp/x.png"]);
         let a = capture_args("/tmp/x.png", None, Some(77)).unwrap();
         assert_eq!(a, vec!["-x", "-l77", "/tmp/x.png"]);
@@ -430,7 +464,12 @@ mod tests {
     fn capture_args_region_and_window_rejected() {
         let a = capture_args("/tmp/x.png", None, None).unwrap();
         assert_eq!(a, vec!["/tmp/x.png"]);
-        let a = capture_args("/tmp/x.png", Some(&json!({"x":1,"y":2,"width":3,"height":4})), None).unwrap();
+        let a = capture_args(
+            "/tmp/x.png",
+            Some(&json!({"x":1,"y":2,"width":3,"height":4})),
+            None,
+        )
+        .unwrap();
         assert_eq!(a, vec!["-a=1,2,3,4", "/tmp/x.png"]);
         assert!(capture_args("/tmp/x.png", None, Some(7)).is_err());
     }
@@ -450,11 +489,20 @@ mod tests {
     #[test]
     fn clamp_region_clamps_and_rejects() {
         // Pass through as-is
-        assert_eq!(clamp_region(1920, 1080, 0, 0, 800, 600).unwrap(), (0, 0, 800, 600));
+        assert_eq!(
+            clamp_region(1920, 1080, 0, 0, 800, 600).unwrap(),
+            (0, 0, 800, 600)
+        );
         // Negative origin clamps to 0
-        assert_eq!(clamp_region(1920, 1080, -50, -50, 800, 600).unwrap(), (0, 0, 800, 600));
+        assert_eq!(
+            clamp_region(1920, 1080, -50, -50, 800, 600).unwrap(),
+            (0, 0, 800, 600)
+        );
         // Out-of-bounds origin + oversize → clamps to the bound, width/height shrink
-        assert_eq!(clamp_region(1920, 1080, 1900, 1000, 800, 600).unwrap(), (1900, 1000, 20, 80));
+        assert_eq!(
+            clamp_region(1920, 1080, 1900, 1000, 800, 600).unwrap(),
+            (1900, 1000, 20, 80)
+        );
         // w/h ≤ 0 errors
         assert!(clamp_region(1920, 1080, 0, 0, 0, 600).is_err());
         assert!(clamp_region(1920, 1080, 0, 0, 800, -1).is_err());
@@ -467,7 +515,9 @@ mod tests {
     #[test]
     fn default_model_unreachable_errors() {
         let _g = lock();
-        assert!(ollama_default_model("http://127.0.0.1:1").unwrap_err().contains("unreachable"));
+        assert!(ollama_default_model("http://127.0.0.1:1")
+            .unwrap_err()
+            .contains("unreachable"));
     }
 
     /// v1.2 ocr: missing image errors; an unreachable provider errors honestly (env lock reuses the module's lock).

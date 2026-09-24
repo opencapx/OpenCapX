@@ -15,73 +15,73 @@ pub fn home_dir() -> Option<PathBuf> {
 
 pub mod agent;
 pub mod alerting;
+pub mod appctl;
+pub mod audio;
+pub mod automation;
 pub mod backup;
 pub mod browser;
 pub mod capability;
 pub mod cli;
 pub mod clipboard;
 pub mod config;
+pub mod context;
 pub mod declaration;
 pub mod event;
 pub mod event_replay;
-pub mod hotkey;
 pub mod health;
+pub mod hotkey;
 pub mod i18n;
 pub mod identity;
+pub mod inputctl;
 pub mod kill_switch;
-pub mod safe_mode;
 pub mod lifecycle_order;
 pub mod log_search;
 pub mod marketplace;
+pub mod media;
+pub mod messages;
 pub mod notification;
 pub mod osperm;
+pub mod pack;
 pub mod permission;
 pub mod pet;
 pub mod petpack;
-pub mod pack;
+pub mod pim;
 pub mod plugin;
 pub mod plugin_deps;
 pub mod plugin_metrics;
 pub mod plugin_sig;
 pub mod plugin_trace;
-pub mod process;
+pub mod power;
+pub mod printer;
 pub mod probe;
+pub mod process;
 pub mod profile;
 pub mod project;
-pub mod rpc;
-pub mod req_trace;
 pub mod registry;
+pub mod req_trace;
 pub mod retention;
-pub mod rules;
 pub mod revocation;
+pub mod rpc;
+pub mod rules;
+pub mod safe_mode;
 pub mod sandbox;
-pub mod verify;
 pub mod scope;
+pub mod settings;
+pub mod signing;
 pub mod sla;
 pub mod speech;
 pub mod storage;
-pub mod subscription;
-pub mod vision;
-pub mod context;
-pub mod automation;
-pub mod appctl;
-pub mod audio;
-pub mod inputctl;
-pub mod pim;
-pub mod media;
-pub mod power;
-pub mod settings;
-pub mod signing;
-pub mod printer;
-pub mod messages;
-pub mod windowctl;
 pub mod subscriber;
+pub mod subscription;
 pub mod throttle;
-pub mod tray;
 pub mod transcript;
+pub mod tray;
+pub mod verify;
+pub mod vision;
+pub mod windowctl;
 
-use storage::SharedStore;
 use std::sync::{Mutex, OnceLock, RwLock};
+use storage::SharedStore;
 
 pub use config::PluginConfigEntry;
 
@@ -100,7 +100,11 @@ pub fn set_shared_store(s: SharedStore) {
 }
 
 pub fn shared_store() -> Option<SharedStore> {
-    SHARED_STORE.read().expect("store poisoned").as_ref().cloned()
+    SHARED_STORE
+        .read()
+        .expect("store poisoned")
+        .as_ref()
+        .cloned()
 }
 
 /// Phase 46 — called on a profile switch: replace the current store, returning the old one.

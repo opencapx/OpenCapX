@@ -324,7 +324,8 @@ pub fn location(_input: &Value) -> Result<Value, String> {
         // swift cold start + location window: 15s total budget (the script self-terminates at 7s)
         let out = super::appctl::run_with_timeout(cmd, std::time::Duration::from_secs(15));
         let _ = std::fs::remove_file(&path);
-        let out = out.map_err(|e| format!("swift failed: {} (install Xcode Command Line Tools)", e))?;
+        let out =
+            out.map_err(|e| format!("swift failed: {} (install Xcode Command Line Tools)", e))?;
         let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
         if !stdout.is_empty() {
             if let Ok(v) = serde_json::from_str::<Value>(&stdout) {
@@ -335,7 +336,8 @@ pub fn location(_input: &Value) -> Result<Value, String> {
         }
         let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
         let detail = if stderr.is_empty() {
-            "no fix within timeout (first run may need the Location prompt; retry after granting)".to_string()
+            "no fix within timeout (first run may need the Location prompt; retry after granting)"
+                .to_string()
         } else {
             stderr.chars().take(300).collect()
         };
@@ -457,7 +459,11 @@ pub fn notes(input: &Value) -> Result<Value, String> {
 /// Reminders: `id|name|due|completed` lines. incomplete_only defaults to true (only incomplete ones).
 #[cfg(target_os = "macos")]
 fn reminders_script(incomplete_only: bool, limit: i64) -> String {
-    let filter = if incomplete_only { "completed of r is false" } else { "true" };
+    let filter = if incomplete_only {
+        "completed of r is false"
+    } else {
+        "true"
+    };
     format!(
         r#"{h}tell application "Reminders"
 	set out to ""
@@ -510,8 +516,10 @@ pub fn reminders_read(input: &Value) -> Result<Value, String> {
                 REM_LIMIT_MAX
             ));
         }
-        let incomplete_only =
-            input.get("incomplete_only").and_then(|b| b.as_bool()).unwrap_or(true);
+        let incomplete_only = input
+            .get("incomplete_only")
+            .and_then(|b| b.as_bool())
+            .unwrap_or(true);
         let out = osascript(&reminders_script(incomplete_only, limit))?;
         Ok(json!({ "reminders": parse_reminders(&out) }))
     }
@@ -557,11 +565,17 @@ pub fn reminders_write(input: &Value) -> Result<Value, String> {
             return Err("invalid input: name must be non-empty".into());
         }
         if name.chars().count() > REM_NAME_MAX {
-            return Err(format!("invalid input: name must be ≤{} chars", REM_NAME_MAX));
+            return Err(format!(
+                "invalid input: name must be ≤{} chars",
+                REM_NAME_MAX
+            ));
         }
         let body = input.get("body").and_then(|b| b.as_str()).unwrap_or("");
         if body.chars().count() > REM_BODY_MAX {
-            return Err(format!("invalid input: body must be ≤{} chars", REM_BODY_MAX));
+            return Err(format!(
+                "invalid input: body must be ≤{} chars",
+                REM_BODY_MAX
+            ));
         }
         // Newlines/tabs are illegal in AppleScript literals; flatten them
         let body = body.replace(['\n', '\r', '\t'], " ");
@@ -650,7 +664,8 @@ mod tests {
 
     #[test]
     fn parses_photos_output() {
-        let (count, photos) = parse_photos("42\r\nID1|Sunset|2026-09-01 10:00:00\r\n\r\nID2|Cat|\r\n");
+        let (count, photos) =
+            parse_photos("42\r\nID1|Sunset|2026-09-01 10:00:00\r\n\r\nID2|Cat|\r\n");
         assert_eq!(count, 42);
         assert_eq!(photos.len(), 2);
         assert_eq!(photos[0]["id"], json!("ID1"));
@@ -684,7 +699,8 @@ mod tests {
         assert_eq!(ns[0]["name"], json!("Groce"));
         assert_eq!(ns[0]["snippet"], json!("ry list|bread & butter"));
         assert_eq!(ns[1]["snippet"], json!(""));
-        let rs = parse_reminders("R1|Buy milk|vendredi 20 septembre 09:00:00|0\r\nR2|Done thing||1\r\n");
+        let rs =
+            parse_reminders("R1|Buy milk|vendredi 20 septembre 09:00:00|0\r\nR2|Done thing||1\r\n");
         assert_eq!(rs.len(), 2);
         assert_eq!(rs[0]["due"], json!("vendredi 20 septembre 09:00:00"));
         assert_eq!(rs[0]["completed"], json!(false));
@@ -724,15 +740,27 @@ mod tests {
     #[test]
     fn validates_v14_inputs() {
         assert!(notes(&json!({ "limit": 0 })).unwrap_err().contains("limit"));
-        assert!(notes(&json!({ "limit": 101 })).unwrap_err().contains("limit"));
-        assert!(reminders_read(&json!({ "limit": 0 })).unwrap_err().contains("limit"));
-        assert!(reminders_read(&json!({ "limit": 201 })).unwrap_err().contains("limit"));
-        assert!(reminders_write(&json!({})).unwrap_err().contains("name"));
-        assert!(reminders_write(&json!({ "name": "  " })).unwrap_err().contains("non-empty"));
-        assert!(reminders_write(&json!({ "name": "x".repeat(501) })).unwrap_err().contains("500"));
-        assert!(reminders_write(&json!({ "name": "x", "body": "y".repeat(2001) }))
+        assert!(notes(&json!({ "limit": 101 }))
             .unwrap_err()
-            .contains("2000"));
+            .contains("limit"));
+        assert!(reminders_read(&json!({ "limit": 0 }))
+            .unwrap_err()
+            .contains("limit"));
+        assert!(reminders_read(&json!({ "limit": 201 }))
+            .unwrap_err()
+            .contains("limit"));
+        assert!(reminders_write(&json!({})).unwrap_err().contains("name"));
+        assert!(reminders_write(&json!({ "name": "  " }))
+            .unwrap_err()
+            .contains("non-empty"));
+        assert!(reminders_write(&json!({ "name": "x".repeat(501) }))
+            .unwrap_err()
+            .contains("500"));
+        assert!(
+            reminders_write(&json!({ "name": "x", "body": "y".repeat(2001) }))
+                .unwrap_err()
+                .contains("2000")
+        );
         assert!(mail(&json!({ "limit": 0 })).unwrap_err().contains("limit"));
         assert!(mail(&json!({ "limit": 51 })).unwrap_err().contains("limit"));
     }
@@ -759,21 +787,37 @@ mod tests {
         assert!(calendar(&json!({})).unwrap_err().contains("macOS-only"));
         assert!(location(&json!({})).unwrap_err().contains("macOS-only"));
         assert!(notes(&json!({})).unwrap_err().contains("macOS-only"));
-        assert!(reminders_read(&json!({})).unwrap_err().contains("macOS-only"));
-        assert!(reminders_write(&json!({})).unwrap_err().contains("macOS-only"));
+        assert!(reminders_read(&json!({}))
+            .unwrap_err()
+            .contains("macOS-only"));
+        assert!(reminders_write(&json!({}))
+            .unwrap_err()
+            .contains("macOS-only"));
         assert!(mail(&json!({})).unwrap_err().contains("macOS-only"));
     }
 
     #[cfg(target_os = "macos")]
     #[test]
     fn validates_limits() {
-        assert!(photos(&json!({ "limit": 0 })).unwrap_err().contains("limit"));
-        assert!(photos(&json!({ "limit": 101 })).unwrap_err().contains("limit"));
+        assert!(photos(&json!({ "limit": 0 }))
+            .unwrap_err()
+            .contains("limit"));
+        assert!(photos(&json!({ "limit": 101 }))
+            .unwrap_err()
+            .contains("limit"));
         assert!(contacts(&json!({})).unwrap_err().contains("query"));
-        assert!(contacts(&json!({ "query": "" })).unwrap_err().contains("non-empty"));
-        assert!(contacts(&json!({ "query": "x".repeat(201) })).unwrap_err().contains("200"));
-        assert!(calendar(&json!({ "days": 0 })).unwrap_err().contains("days"));
-        assert!(calendar(&json!({ "days": 32 })).unwrap_err().contains("days"));
+        assert!(contacts(&json!({ "query": "" }))
+            .unwrap_err()
+            .contains("non-empty"));
+        assert!(contacts(&json!({ "query": "x".repeat(201) }))
+            .unwrap_err()
+            .contains("200"));
+        assert!(calendar(&json!({ "days": 0 }))
+            .unwrap_err()
+            .contains("days"));
+        assert!(calendar(&json!({ "days": 32 }))
+            .unwrap_err()
+            .contains("days"));
     }
 
     #[cfg(target_os = "macos")]
@@ -828,8 +872,8 @@ mod tests {
     #[test]
     #[ignore = "touches real Reminders TCC and CREATES a reminder; run with --ignored manually"]
     fn reminders_write_real_manual() {
-        let out = reminders_write(&json!({ "name": "opencapx test reminder (safe to delete)" }))
-            .unwrap();
+        let out =
+            reminders_write(&json!({ "name": "opencapx test reminder (safe to delete)" })).unwrap();
         assert_eq!(out["ok"], json!(true));
     }
 

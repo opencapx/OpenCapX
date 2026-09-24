@@ -94,12 +94,10 @@ pub fn run_probe(plugin_id: &str, declared_capabilities: &[String]) -> ProbeRepo
             Ok(value) => {
                 let elapsed = call_start.elapsed().as_millis() as u64;
                 // The plugin should return {"ok": true|false, ...}; a missing ok field is treated as ok (default true).
-                let ok = value
-                    .get("ok")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true);
+                let ok = value.get("ok").and_then(|v| v.as_bool()).unwrap_or(true);
                 let error = if !ok {
-                    value.get("error")
+                    value
+                        .get("error")
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string())
                         .or_else(|| Some("plugin reported not ok".into()))
@@ -130,7 +128,12 @@ pub fn run_probe(plugin_id: &str, declared_capabilities: &[String]) -> ProbeRepo
     let (status, summary) = if passed == total {
         (
             "passed".to_string(),
-            format!("✓ {}/{} capabilities passed ({:.2}s)", passed, total, total_ms as f64 / 1000.0),
+            format!(
+                "✓ {}/{} capabilities passed ({:.2}s)",
+                passed,
+                total,
+                total_ms as f64 / 1000.0
+            ),
         )
     } else {
         let failed: Vec<String> = results
@@ -143,7 +146,12 @@ pub fn run_probe(plugin_id: &str, declared_capabilities: &[String]) -> ProbeRepo
             .collect();
         (
             "failed".to_string(),
-            format!("✗ {}/{} failed: {}", total - passed, total, failed.join("; ")),
+            format!(
+                "✗ {}/{} failed: {}",
+                total - passed,
+                total,
+                failed.join("; ")
+            ),
         )
     };
 
@@ -161,7 +169,12 @@ pub fn save_report(report: &ProbeReport) {
     if let Some(store) = super::shared_store() {
         if let Ok(mut s) = store.lock() {
             let json = serde_json::to_string(report).unwrap_or_else(|_| "{}".into());
-            s.set_probe_status(&report.plugin_id, &report.status, Some(&json), report.ran_at);
+            s.set_probe_status(
+                &report.plugin_id,
+                &report.status,
+                Some(&json),
+                report.ran_at,
+            );
         }
     }
 }

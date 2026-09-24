@@ -175,7 +175,12 @@ mod tests {
     use crate::core::rules::RulesFile;
 
     fn rule(json: &str) -> Rule {
-        RulesFile::parse(json).unwrap().rules.into_iter().next().unwrap()
+        RulesFile::parse(json)
+            .unwrap()
+            .rules
+            .into_iter()
+            .next()
+            .unwrap()
     }
 
     fn prepend_rule() -> Rule {
@@ -198,14 +203,20 @@ mod tests {
     #[test]
     fn prepends_simple() {
         let r = prepend_rule();
-        assert_eq!(apply(&r, "curl https://x"), Some("sandbox curl https://x".into()));
+        assert_eq!(
+            apply(&r, "curl https://x"),
+            Some("sandbox curl https://x".into())
+        );
     }
 
     #[test]
     fn preserves_sudo_lead() {
         let r = prepend_rule();
         // Critical: it must be "sudo sandbox curl ...", never "sandbox sudo curl ..."
-        assert_eq!(apply(&r, "sudo curl https://x"), Some("sudo sandbox curl https://x".into()));
+        assert_eq!(
+            apply(&r, "sudo curl https://x"),
+            Some("sudo sandbox curl https://x".into())
+        );
     }
 
     #[test]
@@ -243,7 +254,10 @@ mod tests {
                "then":{"action":"rewrite","replace_binary":{"from":"curl","to":"scurl"}}}]}"#,
         );
         assert_eq!(apply(&r, "curl https://x"), Some("scurl https://x".into()));
-        assert_eq!(apply(&r, "sudo curl https://x"), Some("sudo scurl https://x".into()));
+        assert_eq!(
+            apply(&r, "sudo curl https://x"),
+            Some("sudo scurl https://x".into())
+        );
         assert_eq!(apply(&r, "wget https://x"), None);
     }
 
@@ -254,8 +268,14 @@ mod tests {
               {"id":"proxy","when":{"stage":"tool_pre","command":{"prefix":"curl "}},
                "then":{"action":"rewrite","env":{"HTTPS_PROXY":"http://127.0.0.1:9"}}}]}"#,
         );
-        assert_eq!(apply(&r, "curl https://x"), Some("HTTPS_PROXY=http://127.0.0.1:9 curl https://x".into()));
-        assert_eq!(apply(&r, "HTTPS_PROXY=http://127.0.0.1:9 curl https://x"), None);
+        assert_eq!(
+            apply(&r, "curl https://x"),
+            Some("HTTPS_PROXY=http://127.0.0.1:9 curl https://x".into())
+        );
+        assert_eq!(
+            apply(&r, "HTTPS_PROXY=http://127.0.0.1:9 curl https://x"),
+            None
+        );
     }
 
     #[test]

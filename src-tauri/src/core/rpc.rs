@@ -89,7 +89,8 @@ fn tool_permission(tool: &str, input: &Value, store: &SharedStore) -> Option<Str
 /// Cancellation flag for in-flight requests (mcp.md "Cancellation" v2: /rpc carries requestId,
 /// POST /rpc/cancel sets it). ask polls it to finish early.
 fn cancels() -> &'static Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>> {
-    static C: OnceLock<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>> = OnceLock::new();
+    static C: OnceLock<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>> =
+        OnceLock::new();
     C.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -139,7 +140,10 @@ pub fn handle(
     if let Some(perm) = tool_permission(tool, &input, store) {
         let granted = gate_agent(store, agent_id, &perm, "mcp") == Decision::Granted;
         // trace: Agent-layer decision result (including denial, since denial is the request's final state)
-        super::req_trace::event("permission.agent", json!({ "permission": perm, "granted": granted }));
+        super::req_trace::event(
+            "permission.agent",
+            json!({ "permission": perm, "granted": granted }),
+        );
         if !granted {
             return err_code("permission_denied", 40001, &format!(
                 "agent layer: {} — ask the user to grant it (OpenCapX Settings → Permissions) or retry to trigger the ask prompt",
@@ -168,7 +172,10 @@ pub fn handle(
 /// opencapx.subscribe (mcp.md "Subscription Tool Pair"): validate the type + write to the in-memory subscription table + start a watcher.
 /// conn_id binds the MCP connection (cleaned up on SSE disconnect); an empty string = no connection context (tests/internal calls).
 fn subscribe_tool(bus: &Arc<EventBus>, agent_id: &str, conn_id: &str, input: &Value) -> String {
-    let capability = input.get("capability").and_then(|c| c.as_str()).unwrap_or("");
+    let capability = input
+        .get("capability")
+        .and_then(|c| c.as_str())
+        .unwrap_or("");
     if capability.is_empty() {
         return err_json("capability is required");
     }
@@ -182,7 +189,10 @@ fn subscribe_tool(bus: &Arc<EventBus>, agent_id: &str, conn_id: &str, input: &Va
 /// opencapx.unsubscribe: idempotent; a non-existent subscriptionId also returns ok (the response echoes
 /// subscriptionId, which the CLI uses to update its local subscription set).
 fn unsubscribe_tool(bus: &Arc<EventBus>, input: &Value) -> String {
-    let id = input.get("subscriptionId").and_then(|s| s.as_str()).unwrap_or("");
+    let id = input
+        .get("subscriptionId")
+        .and_then(|s| s.as_str())
+        .unwrap_or("");
     if id.is_empty() {
         return err_json("subscriptionId is required");
     }
@@ -226,13 +236,27 @@ fn say(handle: &tauri::AppHandle, bus: &Arc<EventBus>, input: &Value) -> String 
 /// aggregated by the settings page Notification Center. severity ∈ info|warn|error, default info.
 fn notify(handle: &tauri::AppHandle, bus: &Arc<EventBus>, agent_id: &str, input: &Value) -> String {
     use tauri_plugin_notification::NotificationExt;
-    let title = input.get("title").and_then(|t| t.as_str()).unwrap_or("OpenCapX");
+    let title = input
+        .get("title")
+        .and_then(|t| t.as_str())
+        .unwrap_or("OpenCapX");
     let body = input.get("body").and_then(|t| t.as_str()).unwrap_or("");
-    let severity = input.get("severity").and_then(|s| s.as_str()).unwrap_or("info");
+    let severity = input
+        .get("severity")
+        .and_then(|s| s.as_str())
+        .unwrap_or("info");
     if !matches!(severity, "info" | "warn" | "error") {
-        return err_json(&format!("invalid severity: {} (allowed: info, warn, error)", severity));
+        return err_json(&format!(
+            "invalid severity: {} (allowed: info, warn, error)",
+            severity
+        ));
     }
-    let _ = handle.notification().builder().title(title).body(body).show();
+    let _ = handle
+        .notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show();
     bus.publish(&event::OpencapxEvent::new(
         "notification.posted",
         "mcp",
@@ -249,7 +273,11 @@ fn notify(handle: &tauri::AppHandle, bus: &Arc<EventBus>, agent_id: &str, input:
 fn set_state(handle: &tauri::AppHandle, bus: &Arc<EventBus>, input: &Value) -> String {
     let state = input.get("state").and_then(|s| s.as_str()).unwrap_or("");
     if !PET_STATES.contains(&state) {
-        return err_json(&format!("invalid state: {} (allowed: {})", state, PET_STATES.join(", ")));
+        return err_json(&format!(
+            "invalid state: {} (allowed: {})",
+            state,
+            PET_STATES.join(", ")
+        ));
     }
     let message = input.get("message").and_then(|m| m.as_str()).unwrap_or("");
     bus.publish(&event::OpencapxEvent::new(
@@ -257,7 +285,10 @@ fn set_state(handle: &tauri::AppHandle, bus: &Arc<EventBus>, input: &Value) -> S
         "mcp",
         json!({ "from": null, "to": state, "message": message }),
     ));
-    let _ = handle.emit("opencapx-set-state", json!({ "state": state, "message": message }));
+    let _ = handle.emit(
+        "opencapx-set-state",
+        json!({ "state": state, "message": message }),
+    );
     serde_json::to_string(&json!({ "ok": true })).unwrap()
 }
 
@@ -296,14 +327,21 @@ fn validate_ask_input(input: &Value) -> Result<AskSpec, String> {
     if has_options == has_fields {
         return Err("exactly one of options | fields is required".into());
     }
-    let multi = input.get("multi").and_then(|m| m.as_bool()).unwrap_or(false);
+    let multi = input
+        .get("multi")
+        .and_then(|m| m.as_bool())
+        .unwrap_or(false);
     if multi && !has_options {
         return Err("multi requires options".into());
     }
     let options: Vec<String> = input
         .get("options")
         .and_then(|o| o.as_array())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
     if has_options && options.is_empty() {
         return Err("options must be a non-empty string array".into());
@@ -316,11 +354,24 @@ fn validate_ask_input(input: &Value) -> Result<AskSpec, String> {
     if has_fields {
         validate_ask_fields(&fields)?;
     }
-    let timeout_secs = input.get("timeout").and_then(|t| t.as_u64()).unwrap_or(300).min(900);
-    let on_timeout = match input.get("onTimeout").and_then(|s| s.as_str()).unwrap_or("error") {
+    let timeout_secs = input
+        .get("timeout")
+        .and_then(|t| t.as_u64())
+        .unwrap_or(300)
+        .min(900);
+    let on_timeout = match input
+        .get("onTimeout")
+        .and_then(|s| s.as_str())
+        .unwrap_or("error")
+    {
         "error" => OnTimeout::Error,
         "default" => OnTimeout::Default,
-        other => return Err(format!("invalid onTimeout: {} (allowed: error, default)", other)),
+        other => {
+            return Err(format!(
+                "invalid onTimeout: {} (allowed: error, default)",
+                other
+            ))
+        }
     };
     let default_answer = input.get("defaultAnswer").cloned();
     if on_timeout == OnTimeout::Default {
@@ -351,7 +402,12 @@ fn validate_ask_fields(fields: &[Value]) -> Result<(), String> {
         names.push(name);
         let ftype = f.get("type").and_then(|t| t.as_str()).unwrap_or("text");
         if !ASK_FIELD_TYPES.contains(&ftype) {
-            return Err(format!("field {} invalid type: {} (allowed: {})", name, ftype, ASK_FIELD_TYPES.join(", ")));
+            return Err(format!(
+                "field {} invalid type: {} (allowed: {})",
+                name,
+                ftype,
+                ASK_FIELD_TYPES.join(", ")
+            ));
         }
         if ftype == "select" {
             let empty = f
@@ -360,7 +416,10 @@ fn validate_ask_fields(fields: &[Value]) -> Result<(), String> {
                 .map(|a| a.is_empty() || a.iter().any(|x| !x.is_string()))
                 .unwrap_or(true);
             if empty {
-                return Err(format!("field {} (select) requires non-empty string options", name));
+                return Err(format!(
+                    "field {} (select) requires non-empty string options",
+                    name
+                ));
             }
         }
     }
@@ -379,7 +438,9 @@ fn validate_ask_default(
         return Err("defaultAnswer is required when onTimeout=default".into());
     };
     if !fields.is_empty() {
-        let obj = d.as_object().ok_or("defaultAnswer must be an object for form asks")?;
+        let obj = d
+            .as_object()
+            .ok_or("defaultAnswer must be an object for form asks")?;
         for f in fields {
             let required = f.get("required").and_then(|r| r.as_bool()).unwrap_or(false);
             if required {
@@ -392,19 +453,25 @@ fn validate_ask_default(
         return Ok(());
     }
     if multi {
-        let arr = d.as_array().ok_or("defaultAnswer must be a string array for multi asks")?;
+        let arr = d
+            .as_array()
+            .ok_or("defaultAnswer must be a string array for multi asks")?;
         if arr.is_empty() {
             return Err("defaultAnswer must be non-empty for multi asks".into());
         }
         for v in arr {
-            let s = v.as_str().ok_or("defaultAnswer must be a string array for multi asks")?;
+            let s = v
+                .as_str()
+                .ok_or("defaultAnswer must be a string array for multi asks")?;
             if !options.contains(&s.to_string()) {
                 return Err(format!("defaultAnswer contains unknown option: {}", s));
             }
         }
         return Ok(());
     }
-    let s = d.as_str().ok_or("defaultAnswer must be a string for single-choice asks")?;
+    let s = d
+        .as_str()
+        .ok_or("defaultAnswer must be a string for single-choice asks")?;
     if !options.contains(&s.to_string()) {
         return Err(format!("defaultAnswer is not in options: {}", s));
     }
@@ -501,7 +568,10 @@ fn ask(handle: &tauri::AppHandle, input: &Value, request_id: &str) -> String {
             super::req_trace::event("ask.timeout", json!({ "id": id }));
             if spec.on_timeout == OnTimeout::Default {
                 if let Some(d) = spec.default_answer {
-                    return serde_json::to_string(&json!({ "ok": true, "answer": d, "timedOut": true })).unwrap();
+                    return serde_json::to_string(
+                        &json!({ "ok": true, "answer": d, "timedOut": true }),
+                    )
+                    .unwrap();
                 }
             }
             err_json("timeout")
@@ -535,7 +605,10 @@ fn capability_error_body(e: &str) -> String {
 }
 
 fn execute(input: &Value, agent_id: &str) -> String {
-    let capability = input.get("capability").and_then(|c| c.as_str()).unwrap_or("");
+    let capability = input
+        .get("capability")
+        .and_then(|c| c.as_str())
+        .unwrap_or("");
     if capability.is_empty() {
         return err_json("capability is required");
     }
@@ -548,11 +621,19 @@ fn execute(input: &Value, agent_id: &str) -> String {
     let started = std::time::Instant::now();
     let out = match super::capability::execute(capability, &input_obj, Some(agent_id)) {
         Ok(out) => {
-            sp.end(true, None, json!({ "elapsedMs": started.elapsed().as_millis() as u64 }));
+            sp.end(
+                true,
+                None,
+                json!({ "elapsedMs": started.elapsed().as_millis() as u64 }),
+            );
             serde_json::to_string(&json!({ "ok": true, "result": out })).unwrap()
         }
         Err(e) => {
-            sp.end(false, Some(&e), json!({ "elapsedMs": started.elapsed().as_millis() as u64 }));
+            sp.end(
+                false,
+                Some(&e),
+                json!({ "elapsedMs": started.elapsed().as_millis() as u64 }),
+            );
             capability_error_body(&e)
         }
     };
@@ -602,15 +683,31 @@ mod tests {
             "options": ["a"],
             "fields": [{ "name": "f", "type": "text" }]
         });
-        assert_eq!(validate_ask_input(&both).unwrap_err(), "exactly one of options | fields is required");
+        assert_eq!(
+            validate_ask_input(&both).unwrap_err(),
+            "exactly one of options | fields is required"
+        );
         let neither = json!({ "question": "q" });
-        assert_eq!(validate_ask_input(&neither).unwrap_err(), "exactly one of options | fields is required");
-        let multi_no_opts = json!({ "question": "q", "multi": true, "fields": [{ "name": "f", "type": "text" }] });
-        assert_eq!(validate_ask_input(&multi_no_opts).unwrap_err(), "multi requires options");
+        assert_eq!(
+            validate_ask_input(&neither).unwrap_err(),
+            "exactly one of options | fields is required"
+        );
+        let multi_no_opts =
+            json!({ "question": "q", "multi": true, "fields": [{ "name": "f", "type": "text" }] });
+        assert_eq!(
+            validate_ask_input(&multi_no_opts).unwrap_err(),
+            "multi requires options"
+        );
         let no_question = json!({ "options": ["a"] });
-        assert_eq!(validate_ask_input(&no_question).unwrap_err(), "question is required");
+        assert_eq!(
+            validate_ask_input(&no_question).unwrap_err(),
+            "question is required"
+        );
         let empty_opts = json!({ "question": "q", "options": [] });
-        assert_eq!(validate_ask_input(&empty_opts).unwrap_err(), "options must be a non-empty string array");
+        assert_eq!(
+            validate_ask_input(&empty_opts).unwrap_err(),
+            "options must be a non-empty string array"
+        );
     }
 
     /// Form field shape: name unique, type restricted, select must carry options.
@@ -629,7 +726,10 @@ mod tests {
         assert_eq!(spec.fields.len(), 4);
         // Each failure shape
         let cases = [
-            (json!({"question":"q","fields":[{"type":"text"}]}), "field.name is required"),
+            (
+                json!({"question":"q","fields":[{"type":"text"}]}),
+                "field.name is required",
+            ),
             (
                 json!({"question":"q","fields":[
                     {"name":"f","type":"text"},{"name":"f","type":"number"}
@@ -646,7 +746,12 @@ mod tests {
             ),
         ];
         for (input, want) in cases {
-            assert_eq!(validate_ask_input(&input).unwrap_err(), want, "input: {}", input);
+            assert_eq!(
+                validate_ask_input(&input).unwrap_err(),
+                want,
+                "input: {}",
+                input
+            );
         }
     }
 
@@ -658,7 +763,10 @@ mod tests {
             "question": "q", "options": ["a", "b"],
             "onTimeout": "default", "defaultAnswer": "b"
         });
-        assert_eq!(validate_ask_input(&ok).unwrap().on_timeout, OnTimeout::Default);
+        assert_eq!(
+            validate_ask_input(&ok).unwrap().on_timeout,
+            OnTimeout::Default
+        );
         let missing = json!({ "question": "q", "options": ["a"], "onTimeout": "default" });
         assert_eq!(
             validate_ask_input(&missing).unwrap_err(),
@@ -732,7 +840,12 @@ mod tests {
     #[test]
     fn subscribe_tool_validates_and_unsubscribe_is_idempotent() {
         let bus = Arc::new(EventBus::new());
-        let call_type = subscribe_tool(&bus, "ag_rpc_st", "conn-st", &json!({ "capability": "file.read", "input": {} }));
+        let call_type = subscribe_tool(
+            &bus,
+            "ag_rpc_st",
+            "conn-st",
+            &json!({ "capability": "file.read", "input": {} }),
+        );
         assert!(call_type.contains("not subscribable"), "{}", call_type);
         let no_cap = subscribe_tool(&bus, "ag_rpc_st", "conn-st", &json!({}));
         assert!(no_cap.contains("capability is required"), "{}", no_cap);
@@ -759,20 +872,38 @@ mod tests {
         use std::sync::atomic::{AtomicBool, Ordering};
         assert!(!cancel("req_ghost"));
         let flag = Arc::new(AtomicBool::new(false));
-        cancels().lock().unwrap().insert("req_rpc_a".into(), flag.clone());
+        cancels()
+            .lock()
+            .unwrap()
+            .insert("req_rpc_a".into(), flag.clone());
         assert!(cancel("req_rpc_a"));
         assert!(flag.load(Ordering::Relaxed));
-        assert!(!cancel("req_rpc_a"), "setting the flag removes it from the table");
+        assert!(
+            !cancel("req_rpc_a"),
+            "setting the flag removes it from the table"
+        );
     }
 
     /// Tool → permission mapping aligned with docs/permissions.md: the Core native tool trio → pet.animation,
     /// notify → notification.post, execute → mapped by capability, list_capabilities/unknown → None.
     #[test]
     fn tool_permission_mapping_matches_docs() {
-        assert_eq!(PERM("opencapx.say", &json!({})), Some("pet.animation".to_string()));
-        assert_eq!(PERM("opencapx.set_state", &json!({})), Some("pet.animation".to_string()));
-        assert_eq!(PERM("opencapx.ask", &json!({})), Some("pet.animation".to_string()));
-        assert_eq!(PERM("opencapx.notify", &json!({})), Some("notification.post".to_string()));
+        assert_eq!(
+            PERM("opencapx.say", &json!({})),
+            Some("pet.animation".to_string())
+        );
+        assert_eq!(
+            PERM("opencapx.set_state", &json!({})),
+            Some("pet.animation".to_string())
+        );
+        assert_eq!(
+            PERM("opencapx.ask", &json!({})),
+            Some("pet.animation".to_string())
+        );
+        assert_eq!(
+            PERM("opencapx.notify", &json!({})),
+            Some("notification.post".to_string())
+        );
         assert_eq!(
             PERM("opencapx.execute", &json!({"capability": "image.analyze"})),
             Some("image.read".to_string())
@@ -786,7 +917,10 @@ mod tests {
         assert_eq!(PERM("opencapx.list_capabilities", &json!({})), None);
         // v1.2: system.permission_status is read-only metadata, exempt from the Agent gate (used for up-front routing)
         assert_eq!(
-            PERM("opencapx.execute", &json!({"capability": "system.permission_status"})),
+            PERM(
+                "opencapx.execute",
+                &json!({"capability": "system.permission_status"})
+            ),
             None
         );
         // v1.3: high/medium value batch mapping
@@ -807,7 +941,10 @@ mod tests {
             Some("audio.output".to_string())
         );
         assert_eq!(
-            PERM("opencapx.execute", &json!({"capability": "url.scheme.open"})),
+            PERM(
+                "opencapx.execute",
+                &json!({"capability": "url.scheme.open"})
+            ),
             Some("url.scheme.open".to_string())
         );
         assert_eq!(PERM("opencapx.nothing", &json!({})), None);
@@ -835,7 +972,6 @@ mod tests {
         assert!(b4.contains("\"error\":\"capability_failed\""), "{}", b4);
         assert!(!b4.contains("\"code\""), "{}", b4);
     }
-
 
     /// v1.0 frozen contract: the MCP v1 tool surface is pinned to these 8 names, consistent with docs/mcp.md.
     /// Renaming/removing is a breaking change (only allowed within the apiVersion "2" window); this test going red = the freeze is broken.
@@ -878,11 +1014,19 @@ mod tests {
         let d = gate_agent(&store, &aid, "notification.post", "mcp");
         assert_eq!(d, Decision::Denied, "ask default + no UI → fast rejection");
         // Overridden to granted, it passes the gate
-        assert!(identity::set_agent_decision(&store, &aid, "notification.post", "granted"));
+        assert!(identity::set_agent_decision(
+            &store,
+            &aid,
+            "notification.post",
+            "granted"
+        ));
         let d2 = gate_agent(&store, &aid, "notification.post", "mcp");
         assert_eq!(d2, Decision::Granted);
         // pet.animation defaults to granted, passes directly
-        assert_eq!(gate_agent(&store, &aid, "pet.animation", "mcp"), Decision::Granted);
+        assert_eq!(
+            gate_agent(&store, &aid, "pet.animation", "mcp"),
+            Decision::Granted
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -915,8 +1059,14 @@ mod tests {
                 .join(format!("{}.ndjson", tid)),
         )
         .unwrap();
-        assert!(text.contains("\"name\":\"capability.no.such.cap\""), "has a start line: {text}");
-        assert!(text.contains("\"error\":\"unknown capability: no.such.cap\""), "end line carries the error: {text}");
+        assert!(
+            text.contains("\"name\":\"capability.no.such.cap\""),
+            "has a start line: {text}"
+        );
+        assert!(
+            text.contains("\"error\":\"unknown capability: no.such.cap\""),
+            "end line carries the error: {text}"
+        );
 
         std::env::remove_var("OPENCAPX_TRACES_DIR");
         let _ = std::fs::remove_dir_all(&base);

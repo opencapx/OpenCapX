@@ -47,7 +47,11 @@ pub struct PluginMarketEntry {
     #[serde(default = "default_channel")]
     pub channel: String,
     /// F4 — minimum semantic version (legacy index compatible: absent = no lower bound).
-    #[serde(rename = "minCoreVersion", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "minCoreVersion",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub min_core_version: Option<String>,
     /// F4 — multi-version list (the M3 signed index reuses this structure). Empty array = fall back to the legacy single-version fields.
     #[serde(default)]
@@ -58,7 +62,11 @@ pub struct PluginMarketEntry {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PluginMarketVersion {
     pub version: String,
-    #[serde(rename = "minCoreVersion", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "minCoreVersion",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub min_core_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel: Option<String>,
@@ -131,7 +139,9 @@ pub fn seed_path() -> PathBuf {
 }
 
 pub fn remote_url() -> Option<String> {
-    std::env::var("OPENCAPX_MARKETPLACE_URL").ok().filter(|s| !s.is_empty())
+    std::env::var("OPENCAPX_MARKETPLACE_URL")
+        .ok()
+        .filter(|s| !s.is_empty())
 }
 
 /// Read the seed (required — at least it must let users install local/already-downloaded plugins).
@@ -175,7 +185,9 @@ fn write_cache(idx: &PluginMarketIndex) {
 
 fn load_from_url() -> Option<PluginMarketIndex> {
     let url = remote_url()?;
-    fetch_url(&url).ok().and_then(|t| serde_json::from_str(&t).ok())
+    fetch_url(&url)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
 }
 
 /// N2 — production allows only https distribution by default; file:// and bare local paths pass only under an explicit test switch.
@@ -245,12 +257,22 @@ pub fn download_target(id: &str, target: &PluginMarketVersion) -> Result<PathBuf
 
 /// Legacy entry point: the whole entry's flat fields (pre-M1 format).
 pub fn download(entry: &PluginMarketEntry) -> Result<PathBuf, String> {
-    download_bytes(&entry.id, &entry.version, &entry.download_url, &entry.sha256)
+    download_bytes(
+        &entry.id,
+        &entry.version,
+        &entry.download_url,
+        &entry.sha256,
+    )
 }
 
 /// Download a .ocplugin to a temp directory and verify sha256, returning the download path.
 /// N2 — streaming hash (no longer loads the whole package into memory); https-only; huge-package cap 50 MiB (aligned with the auto gate's max_package_bytes).
-fn download_bytes(id: &str, version: &str, download_url: &str, sha256: &str) -> Result<PathBuf, String> {
+fn download_bytes(
+    id: &str,
+    version: &str,
+    download_url: &str,
+    sha256: &str,
+) -> Result<PathBuf, String> {
     let root = marketplace_root().join("downloads");
     std::fs::create_dir_all(&root).map_err(|e| format!("mkdir: {}", e))?;
     let out = root.join(format!("{}-{}.ocplugin", id, version));
@@ -314,8 +336,7 @@ fn download_bytes(id: &str, version: &str, download_url: &str, sha256: &str) -> 
 /// N2 — streaming sha256 (64 KiB chunks), huge packages never fully held in memory.
 fn sha256_file(path: &Path) -> Result<String, String> {
     use std::io::Read;
-    let mut f =
-        std::fs::File::open(path).map_err(|e| format!("open {}: {}", path.display(), e))?;
+    let mut f = std::fs::File::open(path).map_err(|e| format!("open {}: {}", path.display(), e))?;
     let mut h = Sha256::new();
     let mut buf = [0u8; 64 * 1024];
     loop {
@@ -409,7 +430,8 @@ pub fn check_updates(
         if channel_rank(&entry.channel) > channel_rank(min_channel) {
             continue;
         }
-        if let Some(selected) = select_market_version(entry, env!("CARGO_PKG_VERSION"), min_channel) {
+        if let Some(selected) = select_market_version(entry, env!("CARGO_PKG_VERSION"), min_channel)
+        {
             if version_is_newer(&selected.version, current) {
                 out.push(PluginUpdateInfo {
                     id: id.clone(),
@@ -441,7 +463,9 @@ pub fn parse_version_lenient(raw: &str) -> Option<semver::Version> {
         return Some(v);
     }
     let core = s.split(['-', '+']).next().unwrap_or("");
-    let pre = s.split_once('-').map(|(_, rest)| rest.split('+').next().unwrap_or(""));
+    let pre = s
+        .split_once('-')
+        .map(|(_, rest)| rest.split('+').next().unwrap_or(""));
     let mut nums: Vec<u64> = Vec::new();
     for seg in core.split('.') {
         nums.push(seg.parse::<u64>().ok()?);
@@ -632,7 +656,10 @@ mod tests {
     fn hmac_sha256_long_key_matches_rfc4231_case6() {
         let key = vec![0xaa_u8; 131];
         assert_eq!(
-            hmac_sha256_hex(&key, b"Test Using Larger Than Block-Size Key - Hash Key First"),
+            hmac_sha256_hex(
+                &key,
+                b"Test Using Larger Than Block-Size Key - Hash Key First"
+            ),
             "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"
         );
     }
@@ -861,7 +888,11 @@ mod tests {
             ("com.x.future".to_string(), "1.0.0".to_string()),
         ];
         let updates = check_updates(&installed, &[]);
-        assert_eq!(updates.len(), 0, "0.0.0 is not an update; future is skipped for core incompatibility");
+        assert_eq!(
+            updates.len(),
+            0,
+            "0.0.0 is not an update; future is skipped for core incompatibility"
+        );
         std::env::remove_var("OPENCAPX_MARKETPLACE_DIR");
         let _ = std::fs::remove_dir_all(&base);
     }
@@ -973,7 +1004,8 @@ mod tests {
     #[test]
     fn download_target_rejects_sha_mismatch() {
         let _g = lock_env();
-        let base = std::env::temp_dir().join(format!("opencapx-mkt-target-sha-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("opencapx-mkt-target-sha-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
         std::env::set_var("OPENCAPX_MARKETPLACE_DIR", &base);
@@ -1015,11 +1047,10 @@ mod tests {
         std::env::set_var("OPENCAPX_PLUGINS_DIR", base.join("plugins"));
 
         // install_ocplugin needs shared_store
-        let store: super::super::storage::SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
-            super::super::storage::StoreEnum::Db(
+        let store: super::super::storage::SharedStore =
+            std::sync::Arc::new(std::sync::Mutex::new(super::super::storage::StoreEnum::Db(
                 super::super::storage::Storage::open(&base.join("t.db")).unwrap(),
-            ),
-        ));
+            )));
         super::super::set_shared_store(store);
 
         // Prepare the .ocplugin package (reuse the in-repo echo-vision)
@@ -1035,9 +1066,11 @@ mod tests {
             let mut z = zip::ZipWriter::new(f);
             let manifest = std::fs::read_to_string(echo_dir.join("opencapx-plugin.json")).unwrap();
             let script = std::fs::read_to_string(echo_dir.join("bin/echo_vision.py")).unwrap();
-            z.start_file("opencapx-plugin.json", SimpleFileOptions::default()).unwrap();
+            z.start_file("opencapx-plugin.json", SimpleFileOptions::default())
+                .unwrap();
             z.write_all(manifest.as_bytes()).unwrap();
-            z.start_file("bin/echo_vision.py", SimpleFileOptions::default()).unwrap();
+            z.start_file("bin/echo_vision.py", SimpleFileOptions::default())
+                .unwrap();
             z.write_all(script.as_bytes()).unwrap();
             z.finish().unwrap();
         }
@@ -1069,7 +1102,10 @@ mod tests {
         let mgr = super::super::plugin::PluginManager::shared();
         let id = mgr.install_ocplugin(&pkg).expect("install_ocplugin");
         assert_eq!(id, "com.opencapx.echo-vision");
-        assert!(mgr.list().iter().any(|p| p.id == id && p.status == "running"));
+        assert!(mgr
+            .list()
+            .iter()
+            .any(|p| p.id == id && p.status == "running"));
         mgr.stop(&id);
         std::env::remove_var("OPENCAPX_MARKETPLACE_DIR");
         std::env::remove_var("OPENCAPX_PLUGINS_DIR");

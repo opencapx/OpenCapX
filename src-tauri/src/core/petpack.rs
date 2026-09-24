@@ -111,7 +111,12 @@ fn sole_file_with(dir: &Path, exts: &[&str]) -> Option<String> {
 }
 
 /// Resolve an asset path: an inline data URL is returned as-is, otherwise it must exist inside the directory.
-fn resolve_asset(dir: &Path, rel: &str, inline_prefix: &str, inline_limit: usize) -> Option<String> {
+fn resolve_asset(
+    dir: &Path,
+    rel: &str,
+    inline_prefix: &str,
+    inline_limit: usize,
+) -> Option<String> {
     if rel.starts_with(inline_prefix) {
         // Inline assets must not be path-joined — `dir.join("data:…")` yields a nonexistent path,
         // and the whole pack gets dropped (this is exactly why inline sheets did not show up before).
@@ -421,7 +426,10 @@ pub fn install_from_url(url: &str, name: Option<&str>) -> Result<String, String>
         .trim()
         .to_ascii_lowercase();
     if !ctype.starts_with("image/") {
-        return Err(format!("notImage:{}", if ctype.is_empty() { "?" } else { &ctype }));
+        return Err(format!(
+            "notImage:{}",
+            if ctype.is_empty() { "?" } else { &ctype }
+        ));
     }
     let bytes = resp.bytes().map_err(|_| "network".to_string())?;
     if bytes.len() as u64 > MAX_FETCH_BYTES {
@@ -439,7 +447,9 @@ pub fn install_from_url(url: &str, name: Option<&str>) -> Result<String, String>
     let with_ext = tmp.with_extension(ext_for_content_type(&ctype));
     std::fs::write(&with_ext, &bytes).map_err(|e| e.to_string())?;
     // With no name given, derive one from the URL's last segment so the pet does not show up as a temp filename in the list
-    let display = name.map(|s| s.to_string()).unwrap_or_else(|| name_from_url(url));
+    let display = name
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| name_from_url(url));
     let out = install_from_image(&with_ext, Some(&display));
     let _ = std::fs::remove_file(&with_ext);
     out
@@ -467,7 +477,6 @@ pub fn name_from_url(url: &str) -> String {
         cut
     }
 }
-
 
 /// Download size cap: enough for pet sheets, preventing a URL from dragging in hundreds of MB.
 const MAX_FETCH_BYTES: u64 = 32 * 1024 * 1024;
@@ -506,10 +515,7 @@ pub fn sheet_data_url(id: &str) -> Result<String, String> {
     } else {
         "image/png"
     };
-    Ok(format!(
-        "data:{mime};base64,{}",
-        base64_encode(&bytes)
-    ))
+    Ok(format!("data:{mime};base64,{}", base64_encode(&bytes)))
 }
 
 fn base64_encode(bytes: &[u8]) -> String {
@@ -540,7 +546,8 @@ mod tests {
     fn with_home<T>(tag: &str, f: impl FnOnce() -> T) -> T {
         static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
         let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let dir = std::env::temp_dir().join(format!("opencapx-pets-{}-{}", std::process::id(), tag));
+        let dir =
+            std::env::temp_dir().join(format!("opencapx-pets-{}-{}", std::process::id(), tag));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         // OPENCAPX_HOME is the override core::home_dir() honors on every platform; HOME alone
@@ -666,7 +673,10 @@ mod tests {
                 r#"{"kind":"3d","modelPath":"missing.glb"}"#,
             )
             .unwrap();
-            assert!(list().is_empty(), "a 3D pack with a missing model should be dropped");
+            assert!(
+                list().is_empty(),
+                "a 3D pack with a missing model should be dropped"
+            );
         });
     }
 
@@ -679,7 +689,10 @@ mod tests {
             std::fs::write(dir.join("pet.glb"), b"glTF").unwrap();
             let packs = list();
             assert_eq!(packs.len(), 1);
-            assert_eq!(packs[0].kind, "3d", "with only a glb, it should be inferred as a 3D pack");
+            assert_eq!(
+                packs[0].kind, "3d",
+                "with only a glb, it should be inferred as a 3D pack"
+            );
             assert_eq!(packs[0].display_name, "Solo Model");
         });
     }
@@ -687,7 +700,8 @@ mod tests {
     #[test]
     fn install_from_dir_without_manifest_generates_one_for_a_model() {
         with_home("installdir3d", || {
-            let src = std::env::temp_dir().join(format!("opencapx-modelsrc-{}", std::process::id()));
+            let src =
+                std::env::temp_dir().join(format!("opencapx-modelsrc-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&src);
             std::fs::create_dir_all(&src).unwrap();
             std::fs::write(src.join("My Fox.glb"), b"glTF").unwrap();
@@ -730,7 +744,11 @@ mod tests {
             )
             .unwrap();
             let packs = list();
-            assert_eq!(packs.len(), 1, "a pack with an inline sheet must be listable");
+            assert_eq!(
+                packs.len(),
+                1,
+                "a pack with an inline sheet must be listable"
+            );
             assert_eq!(packs[0].sheet_path, "data:image/png;base64,AAAA");
             // On read it is passed through as-is, without touching disk
             assert_eq!(
@@ -751,7 +769,10 @@ mod tests {
                 "A".repeat(MAX_INLINE_SHEET_BYTES + 8)
             );
             std::fs::write(dir.join(MANIFEST), huge).unwrap();
-            assert!(list().is_empty(), "an oversized inline sheet should be judged an invalid manifest");
+            assert!(
+                list().is_empty(),
+                "an oversized inline sheet should be judged an invalid manifest"
+            );
         });
     }
 
@@ -802,7 +823,10 @@ mod tests {
     #[test]
     fn name_from_url_takes_last_segment_without_extension() {
         assert_eq!(name_from_url("https://x.dev/pets/boba.png"), "boba");
-        assert_eq!(name_from_url("https://ordinals.com/content/ab12cd34i0"), "ab12cd34i0");
+        assert_eq!(
+            name_from_url("https://ordinals.com/content/ab12cd34i0"),
+            "ab12cd34i0"
+        );
         assert_eq!(name_from_url("https://x.dev/a/b/c.webp?raw=1#f"), "c");
         assert_eq!(name_from_url("https://x.dev/"), "x.dev");
         // Truncate over-long segments so the list does not blow up

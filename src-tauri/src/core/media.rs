@@ -36,7 +36,10 @@ fn validate(input: &Value) -> Result<(&'static str, &'static str), String> {
         "music" => "music",
         "spotify" => "spotify",
         other => {
-            return Err(format!("invalid input: app must be music|spotify, got {}", other))
+            return Err(format!(
+                "invalid input: app must be music|spotify, got {}",
+                other
+            ))
         }
     };
     Ok((action, app))
@@ -82,7 +85,11 @@ pub fn playback(input: &Value) -> Result<Value, String> {
 
     #[cfg(target_os = "macos")]
     {
-        let bundle = if app == "spotify" { "com.spotify.client" } else { "com.apple.Music" };
+        let bundle = if app == "spotify" {
+            "com.spotify.client"
+        } else {
+            "com.apple.Music"
+        };
         let src = format!(
             r#"tell application id "{b}"
 	{verb}
@@ -116,7 +123,10 @@ end tell"#,
             return Err(format!(
                 "playerctl exited {:?}: {} (install playerctl / is a player actually playing?)",
                 out.status.code(),
-                String::from_utf8_lossy(&out.stderr).chars().take(200).collect::<String>()
+                String::from_utf8_lossy(&out.stderr)
+                    .chars()
+                    .take(200)
+                    .collect::<String>()
             ));
         }
         // Track read-back: not getting one is not an error (no player online)
@@ -157,14 +167,21 @@ mod tests {
 
     #[test]
     fn validates_action_and_app() {
-        assert_eq!(validate(&json!({ "action": "next" })).unwrap(), ("next", "music"));
+        assert_eq!(
+            validate(&json!({ "action": "next" })).unwrap(),
+            ("next", "music")
+        );
         assert_eq!(
             validate(&json!({ "action": "toggle", "app": "spotify" })).unwrap(),
             ("toggle", "spotify")
         );
         assert!(validate(&json!({})).unwrap_err().contains("action"));
-        assert!(validate(&json!({ "action": "shuffle" })).unwrap_err().contains("play|pause|toggle|next|previous"));
-        assert!(validate(&json!({ "action": "play", "app": "vlc" })).unwrap_err().contains("music|spotify"));
+        assert!(validate(&json!({ "action": "shuffle" }))
+            .unwrap_err()
+            .contains("play|pause|toggle|next|previous"));
+        assert!(validate(&json!({ "action": "play", "app": "vlc" }))
+            .unwrap_err()
+            .contains("music|spotify"));
     }
 
     #[test]

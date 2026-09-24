@@ -35,32 +35,136 @@ pub(crate) struct KeySpec {
 
 pub(crate) fn key_spec(name: &str) -> Option<KeySpec> {
     let s = match name {
-        "return" => KeySpec { mac: 36, linux: "Return", win: 0x0D },
-        "tab" => KeySpec { mac: 48, linux: "Tab", win: 0x09 },
-        "esc" => KeySpec { mac: 53, linux: "Escape", win: 0x1B },
-        "delete" => KeySpec { mac: 51, linux: "BackSpace", win: 0x08 },
-        "forward_delete" => KeySpec { mac: 117, linux: "Delete", win: 0x2E },
-        "space" => KeySpec { mac: 49, linux: "space", win: 0x20 },
-        "left" => KeySpec { mac: 123, linux: "Left", win: 0x25 },
-        "right" => KeySpec { mac: 124, linux: "Right", win: 0x27 },
-        "up" => KeySpec { mac: 126, linux: "Up", win: 0x26 },
-        "down" => KeySpec { mac: 125, linux: "Down", win: 0x28 },
-        "home" => KeySpec { mac: 115, linux: "Home", win: 0x24 },
-        "end" => KeySpec { mac: 119, linux: "End", win: 0x23 },
-        "pageup" => KeySpec { mac: 116, linux: "Prior", win: 0x21 },
-        "pagedown" => KeySpec { mac: 121, linux: "Next", win: 0x22 },
-        "f1" => KeySpec { mac: 122, linux: "F1", win: 0x70 },
-        "f2" => KeySpec { mac: 120, linux: "F2", win: 0x71 },
-        "f3" => KeySpec { mac: 99, linux: "F3", win: 0x72 },
-        "f4" => KeySpec { mac: 118, linux: "F4", win: 0x73 },
-        "f5" => KeySpec { mac: 96, linux: "F5", win: 0x74 },
-        "f6" => KeySpec { mac: 97, linux: "F6", win: 0x75 },
-        "f7" => KeySpec { mac: 98, linux: "F7", win: 0x76 },
-        "f8" => KeySpec { mac: 100, linux: "F8", win: 0x77 },
-        "f9" => KeySpec { mac: 101, linux: "F9", win: 0x78 },
-        "f10" => KeySpec { mac: 109, linux: "F10", win: 0x79 },
-        "f11" => KeySpec { mac: 103, linux: "F11", win: 0x7A },
-        "f12" => KeySpec { mac: 111, linux: "F12", win: 0x7B },
+        "return" => KeySpec {
+            mac: 36,
+            linux: "Return",
+            win: 0x0D,
+        },
+        "tab" => KeySpec {
+            mac: 48,
+            linux: "Tab",
+            win: 0x09,
+        },
+        "esc" => KeySpec {
+            mac: 53,
+            linux: "Escape",
+            win: 0x1B,
+        },
+        "delete" => KeySpec {
+            mac: 51,
+            linux: "BackSpace",
+            win: 0x08,
+        },
+        "forward_delete" => KeySpec {
+            mac: 117,
+            linux: "Delete",
+            win: 0x2E,
+        },
+        "space" => KeySpec {
+            mac: 49,
+            linux: "space",
+            win: 0x20,
+        },
+        "left" => KeySpec {
+            mac: 123,
+            linux: "Left",
+            win: 0x25,
+        },
+        "right" => KeySpec {
+            mac: 124,
+            linux: "Right",
+            win: 0x27,
+        },
+        "up" => KeySpec {
+            mac: 126,
+            linux: "Up",
+            win: 0x26,
+        },
+        "down" => KeySpec {
+            mac: 125,
+            linux: "Down",
+            win: 0x28,
+        },
+        "home" => KeySpec {
+            mac: 115,
+            linux: "Home",
+            win: 0x24,
+        },
+        "end" => KeySpec {
+            mac: 119,
+            linux: "End",
+            win: 0x23,
+        },
+        "pageup" => KeySpec {
+            mac: 116,
+            linux: "Prior",
+            win: 0x21,
+        },
+        "pagedown" => KeySpec {
+            mac: 121,
+            linux: "Next",
+            win: 0x22,
+        },
+        "f1" => KeySpec {
+            mac: 122,
+            linux: "F1",
+            win: 0x70,
+        },
+        "f2" => KeySpec {
+            mac: 120,
+            linux: "F2",
+            win: 0x71,
+        },
+        "f3" => KeySpec {
+            mac: 99,
+            linux: "F3",
+            win: 0x72,
+        },
+        "f4" => KeySpec {
+            mac: 118,
+            linux: "F4",
+            win: 0x73,
+        },
+        "f5" => KeySpec {
+            mac: 96,
+            linux: "F5",
+            win: 0x74,
+        },
+        "f6" => KeySpec {
+            mac: 97,
+            linux: "F6",
+            win: 0x75,
+        },
+        "f7" => KeySpec {
+            mac: 98,
+            linux: "F7",
+            win: 0x76,
+        },
+        "f8" => KeySpec {
+            mac: 100,
+            linux: "F8",
+            win: 0x77,
+        },
+        "f9" => KeySpec {
+            mac: 101,
+            linux: "F9",
+            win: 0x78,
+        },
+        "f10" => KeySpec {
+            mac: 109,
+            linux: "F10",
+            win: 0x79,
+        },
+        "f11" => KeySpec {
+            mac: 103,
+            linux: "F11",
+            win: 0x7A,
+        },
+        "f12" => KeySpec {
+            mac: 111,
+            linux: "F12",
+            win: 0x7B,
+        },
         _ => return None,
     };
     Some(s)
@@ -77,14 +181,24 @@ enum MouseButton {
 enum Op {
     Key(String),
     Text(String),
-    MouseMove { x: i64, y: i64 },
-    Click { button: MouseButton, x: Option<i64>, y: Option<i64>, double: bool },
+    MouseMove {
+        x: i64,
+        y: i64,
+    },
+    Click {
+        button: MouseButton,
+        x: Option<i64>,
+        y: Option<i64>,
+        double: bool,
+    },
 }
 
 /// Input validation (pure function). type is required, one of four; key names are table-looked-up; coordinates must be non-negative.
 fn validate(input: &Value) -> Result<Op, String> {
     let Some(t) = input.get("type").and_then(|t| t.as_str()) else {
-        return Err("invalid input: type (string) required, one of key|text|mouse_move|mouse_click".into());
+        return Err(
+            "invalid input: type (string) required, one of key|text|mouse_move|mouse_click".into(),
+        );
     };
     match t {
         "key" => {
@@ -116,7 +230,9 @@ fn validate(input: &Value) -> Result<Op, String> {
                 input.get("x").and_then(|v| v.as_i64()),
                 input.get("y").and_then(|v| v.as_i64()),
             ) else {
-                return Err("invalid input: x and y (integers) required for type=mouse_move".into());
+                return Err(
+                    "invalid input: x and y (integers) required for type=mouse_move".into(),
+                );
             };
             if x < 0 || y < 0 {
                 return Err("invalid input: x and y must be ≥0".into());
@@ -124,12 +240,19 @@ fn validate(input: &Value) -> Result<Op, String> {
             Ok(Op::MouseMove { x, y })
         }
         "mouse_click" => {
-            let button = match input.get("button").and_then(|b| b.as_str()).unwrap_or("left") {
+            let button = match input
+                .get("button")
+                .and_then(|b| b.as_str())
+                .unwrap_or("left")
+            {
                 "left" => MouseButton::Left,
                 "middle" => MouseButton::Middle,
                 "right" => MouseButton::Right,
                 other => {
-                    return Err(format!("invalid input: button must be left|middle|right, got {}", other))
+                    return Err(format!(
+                        "invalid input: button must be left|middle|right, got {}",
+                        other
+                    ))
                 }
             };
             let x = input.get("x").and_then(|v| v.as_i64());
@@ -143,8 +266,16 @@ fn validate(input: &Value) -> Result<Op, String> {
                 }
                 _ => {}
             }
-            let double = input.get("double").and_then(|d| d.as_bool()).unwrap_or(false);
-            Ok(Op::Click { button, x, y, double })
+            let double = input
+                .get("double")
+                .and_then(|d| d.as_bool())
+                .unwrap_or(false);
+            Ok(Op::Click {
+                button,
+                x,
+                y,
+                double,
+            })
         }
         other => Err(format!(
             "invalid input: type must be key|text|mouse_move|mouse_click, got {}",
@@ -178,7 +309,11 @@ mod cg {
         ) -> *mut c_void;
         pub fn CGEventCreate(source: *const c_void) -> *mut c_void;
         pub fn CGEventGetLocation(event: *mut c_void) -> CGPoint;
-        pub fn CGEventKeyboardSetUnicodeString(event: *mut c_void, length: usize, string: *const u16);
+        pub fn CGEventKeyboardSetUnicodeString(
+            event: *mut c_void,
+            length: usize,
+            string: *const u16,
+        );
         pub fn CGEventPost(tap: c_int, event: *mut c_void);
         pub fn CFRelease(cf: *mut c_void);
     }
@@ -265,7 +400,12 @@ fn dispatch_mac(op: &Op) -> Result<Value, String> {
             Op::MouseMove { x, y } => {
                 cg::post_mouse(cg::MOUSE_MOVED, *x as f64, *y as f64);
             }
-            Op::Click { button, x, y, double } => {
+            Op::Click {
+                button,
+                x,
+                y,
+                double,
+            } => {
                 let (cx, cy) = match (x, y) {
                     (Some(x), Some(y)) => (*x as f64, *y as f64),
                     _ => cg::current_pos(),
@@ -298,7 +438,10 @@ fn dispatch_linux(op: &Op) -> Result<Value, String> {
             return Err(format!(
                 "xdotool exited {:?}: {}",
                 out.status.code(),
-                String::from_utf8_lossy(&out.stderr).chars().take(200).collect::<String>()
+                String::from_utf8_lossy(&out.stderr)
+                    .chars()
+                    .take(200)
+                    .collect::<String>()
             ));
         }
         Ok(())
@@ -322,7 +465,12 @@ fn dispatch_linux(op: &Op) -> Result<Value, String> {
             c
         })
         .map_err(|e| format!("{} (install xdotool)", e))?,
-        Op::Click { button, x, y, double } => {
+        Op::Click {
+            button,
+            x,
+            y,
+            double,
+        } => {
             if let (Some(x), Some(y)) = (x, y) {
                 let mut c = std::process::Command::new("xdotool");
                 c.args(["mousemove", &x.to_string(), &y.to_string()]);
@@ -427,21 +575,48 @@ mod win {
             })
         }
         pub fn key_down(vk: u16) -> Input {
-            Input::key(KEYBDINPUT { vk, scan: 0, flags: 0, time: 0, extra: 0 })
+            Input::key(KEYBDINPUT {
+                vk,
+                scan: 0,
+                flags: 0,
+                time: 0,
+                extra: 0,
+            })
         }
         pub fn key_up(vk: u16) -> Input {
-            Input::key(KEYBDINPUT { vk, scan: 0, flags: KF_KEYUP, time: 0, extra: 0 })
+            Input::key(KEYBDINPUT {
+                vk,
+                scan: 0,
+                flags: KF_KEYUP,
+                time: 0,
+                extra: 0,
+            })
         }
         pub fn unicode_down(cp: u16) -> Input {
-            Input::key(KEYBDINPUT { vk: 0, scan: cp, flags: KF_UNICODE, time: 0, extra: 0 })
+            Input::key(KEYBDINPUT {
+                vk: 0,
+                scan: cp,
+                flags: KF_UNICODE,
+                time: 0,
+                extra: 0,
+            })
         }
         pub fn unicode_up(cp: u16) -> Input {
-            Input::key(KEYBDINPUT { vk: 0, scan: cp, flags: KF_UNICODE | KF_KEYUP, time: 0, extra: 0 })
+            Input::key(KEYBDINPUT {
+                vk: 0,
+                scan: cp,
+                flags: KF_UNICODE | KF_KEYUP,
+                time: 0,
+                extra: 0,
+            })
         }
         /// Normalize absolute coordinates to 0..=65535 (SendInput's full-screen absolute coordinate system).
         pub fn absolute_move(x: i64, y: i64) -> Input {
             let (w, h) = screen_size();
-            let (x, y) = (x.min(w.saturating_sub(1)).max(0), y.min(h.saturating_sub(1)).max(0));
+            let (x, y) = (
+                x.min(w.saturating_sub(1)).max(0),
+                y.min(h.saturating_sub(1)).max(0),
+            );
             let nx = if w > 1 { (x * 65535) / (w - 1) } else { 0 };
             let ny = if h > 1 { (y * 65535) / (h - 1) } else { 0 };
             Input::mouse(MOUSEINPUT {
@@ -454,7 +629,14 @@ mod win {
             })
         }
         pub fn mouse_btn(flags: u32) -> Input {
-            Input::mouse(MOUSEINPUT { dx: 0, dy: 0, mouse_data: 0, flags, time: 0, extra: 0 })
+            Input::mouse(MOUSEINPUT {
+                dx: 0,
+                dy: 0,
+                mouse_data: 0,
+                flags,
+                time: 0,
+                extra: 0,
+            })
         }
     }
 
@@ -465,8 +647,11 @@ mod win {
     /// Send a batch of events; SendInput returns the number actually injected, fewer than requested means rejected (UIPI etc.).
     pub fn send(inputs: &[Input]) -> bool {
         unsafe {
-            SendInput(inputs.len() as u32, inputs.as_ptr(), std::mem::size_of::<Input>() as i32)
-                == inputs.len() as u32
+            SendInput(
+                inputs.len() as u32,
+                inputs.as_ptr(),
+                std::mem::size_of::<Input>() as i32,
+            ) == inputs.len() as u32
         }
     }
 }
@@ -495,7 +680,12 @@ fn dispatch_win(op: &Op) -> Result<Value, String> {
                 return Err("SendInput rejected".into());
             }
         }
-        Op::Click { button, x, y, double } => {
+        Op::Click {
+            button,
+            x,
+            y,
+            double,
+        } => {
             if let (Some(x), Some(y)) = (x, y) {
                 if !send(&[Input::absolute_move(*x, *y)]) {
                     return Err("SendInput rejected".into());
@@ -546,9 +736,32 @@ mod tests {
     use super::*;
 
     const ALL_KEYS: &[&str] = &[
-        "return", "tab", "esc", "delete", "forward_delete", "space", "left", "right", "up",
-        "down", "home", "end", "pageup", "pagedown", "f1", "f2", "f3", "f4", "f5", "f6", "f7",
-        "f8", "f9", "f10", "f11", "f12",
+        "return",
+        "tab",
+        "esc",
+        "delete",
+        "forward_delete",
+        "space",
+        "left",
+        "right",
+        "up",
+        "down",
+        "home",
+        "end",
+        "pageup",
+        "pagedown",
+        "f1",
+        "f2",
+        "f3",
+        "f4",
+        "f5",
+        "f6",
+        "f7",
+        "f8",
+        "f9",
+        "f10",
+        "f11",
+        "f12",
     ];
 
     #[test]
@@ -572,22 +785,46 @@ mod tests {
         assert!(validate(&json!({ "type": "key", "key": "return" })).is_ok());
         assert!(validate(&json!({ "type": "text", "text": "hi" })).is_ok());
         assert!(validate(&json!({ "type": "mouse_move", "x": 1, "y": 2 })).is_ok());
-        assert!(validate(&json!({ "type": "mouse_click", "button": "right", "double": true })).is_ok());
+        assert!(
+            validate(&json!({ "type": "mouse_click", "button": "right", "double": true })).is_ok()
+        );
         // type missing / unknown
         assert!(validate(&json!({})).unwrap_err().contains("type"));
-        assert!(validate(&json!({ "type": "scroll" })).unwrap_err().contains("key|text|mouse_move|mouse_click"));
+        assert!(validate(&json!({ "type": "scroll" }))
+            .unwrap_err()
+            .contains("key|text|mouse_move|mouse_click"));
         // key missing / unknown
-        assert!(validate(&json!({ "type": "key" })).unwrap_err().contains("key"));
-        assert!(validate(&json!({ "type": "key", "key": "meta" })).unwrap_err().contains("unknown key"));
+        assert!(validate(&json!({ "type": "key" }))
+            .unwrap_err()
+            .contains("key"));
+        assert!(validate(&json!({ "type": "key", "key": "meta" }))
+            .unwrap_err()
+            .contains("unknown key"));
         // text empty / over-long
-        assert!(validate(&json!({ "type": "text", "text": "" })).unwrap_err().contains("non-empty"));
-        assert!(validate(&json!({ "type": "text", "text": "x".repeat(501) })).unwrap_err().contains("500"));
+        assert!(validate(&json!({ "type": "text", "text": "" }))
+            .unwrap_err()
+            .contains("non-empty"));
+        assert!(
+            validate(&json!({ "type": "text", "text": "x".repeat(501) }))
+                .unwrap_err()
+                .contains("500")
+        );
         // Coordinates missing / negative / only one of the pair
-        assert!(validate(&json!({ "type": "mouse_move", "x": 1 })).unwrap_err().contains("x and y"));
-        assert!(validate(&json!({ "type": "mouse_move", "x": -1, "y": 1 })).unwrap_err().contains("≥0"));
-        assert!(validate(&json!({ "type": "mouse_click", "x": 1 })).unwrap_err().contains("together"));
+        assert!(validate(&json!({ "type": "mouse_move", "x": 1 }))
+            .unwrap_err()
+            .contains("x and y"));
+        assert!(validate(&json!({ "type": "mouse_move", "x": -1, "y": 1 }))
+            .unwrap_err()
+            .contains("≥0"));
+        assert!(validate(&json!({ "type": "mouse_click", "x": 1 }))
+            .unwrap_err()
+            .contains("together"));
         // button unknown
-        assert!(validate(&json!({ "type": "mouse_click", "button": "side" })).unwrap_err().contains("left|middle|right"));
+        assert!(
+            validate(&json!({ "type": "mouse_click", "button": "side" }))
+                .unwrap_err()
+                .contains("left|middle|right")
+        );
     }
 
     #[cfg(target_os = "macos")]

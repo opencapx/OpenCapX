@@ -209,18 +209,10 @@ pub fn map_state(agent: &str, raw: &str) -> AgentState {
     {
         return AgentState::Waiting;
     }
-    if r.contains("done")
-        || r.contains("stop")
-        || r.contains("exit")
-        || r.contains("finish")
-    {
+    if r.contains("done") || r.contains("stop") || r.contains("exit") || r.contains("finish") {
         return AgentState::Done;
     }
-    if r.contains("work")
-        || r.contains("run")
-        || r.contains("start")
-        || r.contains("tool")
-    {
+    if r.contains("work") || r.contains("run") || r.contains("start") || r.contains("tool") {
         return AgentState::Working;
     }
     let _ = agent;
@@ -275,16 +267,18 @@ fn event_mapping(agent: &str, event: &str) -> EventMapping {
     let lower = e.to_ascii_lowercase();
     match agent {
         // Claude family (Claude Code / Droid / Copilot / Kiro / Grok / Codex / Gemini)
-        "claude" | "droid" | "copilot" | "kiro" | "grok" | "codex" | "gemini" => match lower.as_str() {
-            "sessionstart" | "session_start" | "agentspawn" => EventMapping::State(Idle),
-            "userpromptsubmit" | "beforeagent" | "pretooluse" | "beforetool" | "posttooluse"
-            | "aftertool" => EventMapping::State(Working),
-            "notification" | "permissionrequest" => EventMapping::State(Waiting),
-            "stop" | "afteragent" => EventMapping::State(Done),
-            "subagentstop" => EventMapping::Ignore,
-            "sessionend" | "session_end" => EventMapping::State(Idle),
-            _ => EventMapping::Unknown,
-        },
+        "claude" | "droid" | "copilot" | "kiro" | "grok" | "codex" | "gemini" => {
+            match lower.as_str() {
+                "sessionstart" | "session_start" | "agentspawn" => EventMapping::State(Idle),
+                "userpromptsubmit" | "beforeagent" | "pretooluse" | "beforetool"
+                | "posttooluse" | "aftertool" => EventMapping::State(Working),
+                "notification" | "permissionrequest" => EventMapping::State(Waiting),
+                "stop" | "afteragent" => EventMapping::State(Done),
+                "subagentstop" => EventMapping::Ignore,
+                "sessionend" | "session_end" => EventMapping::State(Idle),
+                _ => EventMapping::Unknown,
+            }
+        }
         "cursor" => match lower.as_str() {
             "sessionstart" => EventMapping::State(Idle),
             "beforesubmitprompt" | "pretooluse" => EventMapping::State(Working),
@@ -667,10 +661,7 @@ fn parse_choices(v: &serde_json::Value) -> Option<Vec<Choice>> {
         .iter()
         .filter_map(|c| {
             let id = c.get("id").and_then(|x| x.as_str())?;
-            let label = c
-                .get("label")
-                .and_then(|x| x.as_str())
-                .unwrap_or(id);
+            let label = c.get("label").and_then(|x| x.as_str()).unwrap_or(id);
             Some(Choice {
                 id: id.to_string(),
                 label: label.to_string(),
@@ -959,8 +950,12 @@ mod tests {
 
     #[test]
     fn stamp_payload_annotated_injects_rule_id() {
-        let stamped =
-            stamp_payload_annotated(r#"{"hook_event_name":"PreToolUse"}"#, "claude", 7, Some("sandbox-curl"));
+        let stamped = stamp_payload_annotated(
+            r#"{"hook_event_name":"PreToolUse"}"#,
+            "claude",
+            7,
+            Some("sandbox-curl"),
+        );
         let v: serde_json::Value = serde_json::from_str(&stamped).unwrap();
         assert_eq!(v["__rule"], "sandbox-curl");
         assert_eq!(v["__sent_at"], 7);
@@ -980,7 +975,10 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&stamped).unwrap();
         assert_eq!(v["text"], "plain text");
         assert_eq!(v["__sent_at"], 5);
-        assert!(v.get("agent").is_none(), "auto should not be hardcoded as an agent name");
+        assert!(
+            v.get("agent").is_none(),
+            "auto should not be hardcoded as an agent name"
+        );
     }
 
     #[test]
@@ -1048,7 +1046,10 @@ mod tests {
 
     #[test]
     fn process_body_builds_dto() {
-        let d = process_body(r#"{"agent":"claude","text":"Should I proceed?","project":"/x/demo"}"#, "unknown");
+        let d = process_body(
+            r#"{"agent":"claude","text":"Should I proceed?","project":"/x/demo"}"#,
+            "unknown",
+        );
         assert_eq!(d.agent, "claude");
         assert_eq!(d.state, "waiting");
         assert_eq!(d.project, "demo");
@@ -1057,7 +1058,10 @@ mod tests {
 
     #[test]
     fn process_body_event_name_drives_waiting() {
-        let d = process_body(r#"{"agent":"codex","event":"PermissionRequest","text":"rm -rf /"}"#, "unknown");
+        let d = process_body(
+            r#"{"agent":"codex","event":"PermissionRequest","text":"rm -rf /"}"#,
+            "unknown",
+        );
         assert_eq!(d.state, "waiting");
     }
 
@@ -1111,10 +1115,7 @@ mod tests {
 
     #[test]
     fn process_body_no_choices_is_none() {
-        let dto = process_body(
-            r#"{"agent":"codex","text":"running tool"}"#,
-            "unknown",
-        );
+        let dto = process_body(r#"{"agent":"codex","text":"running tool"}"#, "unknown");
         assert!(dto.choices.is_none());
     }
 
@@ -1218,7 +1219,10 @@ mod tests {
         enrich_from_transcript(&mut dto, &body);
         assert_eq!(dto.state, "waiting");
         // Fill in an assistant summary when the message is empty
-        assert_eq!(dto.message, "Refactored the parser. Should I also add tests?");
+        assert_eq!(
+            dto.message,
+            "Refactored the parser. Should I also add tests?"
+        );
         std::fs::remove_file(path).ok();
     }
 
@@ -1296,7 +1300,10 @@ mod tests {
             r#"{"agent":"codex","hook_event_name":"Stop","transcript_path":"/nope.jsonl"}"#,
             "unknown",
         );
-        enrich_from_transcript(&mut other, r#"{"agent":"codex","hook_event_name":"Stop","transcript_path":"/nope.jsonl"}"#);
+        enrich_from_transcript(
+            &mut other,
+            r#"{"agent":"codex","hook_event_name":"Stop","transcript_path":"/nope.jsonl"}"#,
+        );
         assert_eq!(other.state, "done");
     }
 
@@ -1324,7 +1331,8 @@ mod tests {
             ("SessionEnd", "idle"),
         ];
         for (event, want) in cases {
-            let body = format!(r#"{{"agent":"claude","hook_event_name":"{event}","session_id":"s"}}"#);
+            let body =
+                format!(r#"{{"agent":"claude","hook_event_name":"{event}","session_id":"s"}}"#);
             assert_eq!(process_body(&body, "unknown").state, want, "event {event}");
         }
     }
@@ -1380,7 +1388,8 @@ mod tests {
         let d = process_body(working, "unknown");
         assert_eq!(d.state, "working");
         // With terminationReason → treat as done
-        let done = r#"{"agent":"antigravity","conversationId":"a-1","terminationReason":"completed"}"#;
+        let done =
+            r#"{"agent":"antigravity","conversationId":"a-1","terminationReason":"completed"}"#;
         assert_eq!(process_body(done, "unknown").state, "done");
     }
 
@@ -1396,7 +1405,11 @@ mod tests {
         }
         // Empty when there is no model field, do not guess
         assert_eq!(
-            process_body(r#"{"agent":"claude","hook_event_name":"Stop","session_id":"s"}"#, "u").model,
+            process_body(
+                r#"{"agent":"claude","hook_event_name":"Stop","session_id":"s"}"#,
+                "u"
+            )
+            .model,
             ""
         );
     }

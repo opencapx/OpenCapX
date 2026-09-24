@@ -101,10 +101,18 @@ mod tests {
             enqueue_capped(&dir, &format!(r#"{{"n":{}}}"#, i), 5).unwrap();
         }
         enqueue_capped(&dir, r#"{"n":5}"#, 5).unwrap(); // triggers dropping the oldest
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 5, "stays at the cap");
+        assert_eq!(
+            std::fs::read_dir(&dir).unwrap().count(),
+            5,
+            "stays at the cap"
+        );
         let out = drain(&dir).unwrap();
         assert_eq!(out.len(), 5);
-        assert!(out[0].contains("\"n\":1"), "oldest n=0 dropped: {:?}", out.first());
+        assert!(
+            out[0].contains("\"n\":1"),
+            "oldest n=0 dropped: {:?}",
+            out.first()
+        );
         // Sequence backstop: multiple same-nanosecond writes do not overwrite each other
         for i in 0..3 {
             enqueue_capped(&dir, &format!(r#"{{"seq":{}}}"#, i), 100).unwrap();

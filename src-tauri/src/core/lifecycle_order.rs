@@ -30,8 +30,7 @@ pub fn layers_from_edges(
 ) -> Vec<Vec<String>> {
     let mut adj: BTreeMap<String, BTreeSet<String>> =
         ids.iter().map(|id| (id.clone(), BTreeSet::new())).collect();
-    let mut in_degree: BTreeMap<String, usize> =
-        ids.iter().map(|id| (id.clone(), 0)).collect();
+    let mut in_degree: BTreeMap<String, usize> = ids.iter().map(|id| (id.clone(), 0)).collect();
     for (from, to) in directed_edges {
         if !ids.contains(from) || !ids.contains(to) || from == to {
             continue;
@@ -102,8 +101,11 @@ pub fn compute_lifecycle_plan(mgr: &PluginManager) -> LifecyclePlanDto {
     let graph = mgr.capability_dependency_graph();
     let ids: BTreeSet<String> = graph.nodes.iter().map(|n| n.id.clone()).collect();
 
-    let cap_pairs: Vec<(String, String)> =
-        graph.edges.iter().map(|e| (e.from.clone(), e.to.clone())).collect();
+    let cap_pairs: Vec<(String, String)> = graph
+        .edges
+        .iter()
+        .map(|e| (e.from.clone(), e.to.clone()))
+        .collect();
     // F5 — plugin dependency edges (dependent, dep); layers_for inverts them internally to dep → dependent.
     let dep_pairs = mgr.dependency_edges();
     let layers = layers_for(&ids, &cap_pairs, &dep_pairs);
@@ -205,11 +207,14 @@ mod tests {
             ("c".to_string(), "b".to_string()), // b depends on c → edge c→b
         ];
         let layers = layers_from_edges(&ids, &edges);
-        assert_eq!(layers, vec![
-            vec!["c".to_string()],
-            vec!["b".to_string()],
-            vec!["a".to_string()],
-        ]);
+        assert_eq!(
+            layers,
+            vec![
+                vec!["c".to_string()],
+                vec!["b".to_string()],
+                vec!["a".to_string()],
+            ]
+        );
     }
 
     /// No dependencies, no sharing → all nodes in the first layer (existing behavior unchanged).
@@ -243,10 +248,7 @@ mod tests {
         let cap_pairs: Vec<(String, String)> = vec![];
         let dep_pairs = vec![("a".to_string(), "b".to_string())];
         let layers = layers_for(&ids, &cap_pairs, &dep_pairs);
-        assert_eq!(layers, vec![
-            vec!["b".to_string()],
-            vec!["a".to_string()],
-        ]);
+        assert_eq!(layers, vec![vec!["b".to_string()], vec!["a".to_string()],]);
     }
 
     #[test]
@@ -266,7 +268,11 @@ mod tests {
         let ids = id_set(&["a", "b", "c"]);
         let layers = layers_from_edges(&ids, &cap_edges_directed(&[("a", "b"), ("b", "c")]));
         // All enter the "cycle fallback" layer
-        assert_eq!(layers.len(), 1, "no in_degree=0 node in the cycle, so they merge into one layer");
+        assert_eq!(
+            layers.len(),
+            1,
+            "no in_degree=0 node in the cycle, so they merge into one layer"
+        );
         assert_eq!(
             layers[0],
             vec!["a".to_string(), "b".to_string(), "c".to_string()]
@@ -291,7 +297,10 @@ mod tests {
                 stop.push(id.clone());
             }
         }
-        assert_eq!(stop, vec!["c".to_string(), "b".to_string(), "a".to_string()]);
+        assert_eq!(
+            stop,
+            vec!["c".to_string(), "b".to_string(), "a".to_string()]
+        );
     }
 
     #[test]

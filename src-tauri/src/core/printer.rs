@@ -33,7 +33,10 @@ fn validate(input: &Value) -> Result<(String, Option<String>, i64), String> {
         .filter(|p| !p.is_empty());
     if let Some(p) = printer {
         if p.len() > PRINTER_MAX {
-            return Err(format!("invalid input: printer must be ≤{} chars", PRINTER_MAX));
+            return Err(format!(
+                "invalid input: printer must be ≤{} chars",
+                PRINTER_MAX
+            ));
         }
     }
     let copies = input.get("copies").and_then(|c| c.as_i64()).unwrap_or(1);
@@ -62,7 +65,10 @@ pub fn print(input: &Value) -> Result<Value, String> {
             return Err(format!(
                 "lpr exited {:?}: {} (printer name from: lpstat -p)",
                 out.status.code(),
-                String::from_utf8_lossy(&out.stderr).chars().take(200).collect::<String>()
+                String::from_utf8_lossy(&out.stderr)
+                    .chars()
+                    .take(200)
+                    .collect::<String>()
             ));
         }
         Ok(json!({ "ok": true, "queued": true }))
@@ -90,23 +96,32 @@ mod tests {
         assert_eq!(p, f.to_str().unwrap());
         assert!(pr.is_none());
         assert_eq!(c, 1);
-        let (_, pr, c) =
-            validate(&json!({ "path": f.to_str().unwrap(), "printer": "HP-LaserJet", "copies": 3 }))
-                .unwrap();
+        let (_, pr, c) = validate(
+            &json!({ "path": f.to_str().unwrap(), "printer": "HP-LaserJet", "copies": 3 }),
+        )
+        .unwrap();
         assert_eq!(pr.as_deref(), Some("HP-LaserJet"));
         assert_eq!(c, 3);
         // path missing / nonexistent / directory / copies out of range / printer over-long
         assert!(validate(&json!({})).unwrap_err().contains("path"));
-        assert!(validate(&json!({ "path": dir.join("no.pdf").to_str().unwrap() }))
+        assert!(
+            validate(&json!({ "path": dir.join("no.pdf").to_str().unwrap() }))
+                .unwrap_err()
+                .contains("unavailable")
+        );
+        assert!(validate(&json!({ "path": dir.to_str().unwrap() }))
             .unwrap_err()
-            .contains("unavailable"));
-        assert!(validate(&json!({ "path": dir.to_str().unwrap() })).unwrap_err().contains("not a file"));
-        assert!(validate(&json!({ "path": f.to_str().unwrap(), "copies": 11 }))
-            .unwrap_err()
-            .contains("1..=10"));
-        assert!(validate(&json!({ "path": f.to_str().unwrap(), "printer": "x".repeat(201) }))
-            .unwrap_err()
-            .contains("200"));
+            .contains("not a file"));
+        assert!(
+            validate(&json!({ "path": f.to_str().unwrap(), "copies": 11 }))
+                .unwrap_err()
+                .contains("1..=10")
+        );
+        assert!(
+            validate(&json!({ "path": f.to_str().unwrap(), "printer": "x".repeat(201) }))
+                .unwrap_err()
+                .contains("200")
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

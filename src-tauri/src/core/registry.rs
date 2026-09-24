@@ -23,7 +23,9 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use super::marketplace::{channel_rank, parse_version_lenient, version_is_newer, PluginMarketVersion};
+use super::marketplace::{
+    channel_rank, parse_version_lenient, version_is_newer, PluginMarketVersion,
+};
 use super::plugin_sig::Signature;
 use super::signing;
 
@@ -32,7 +34,8 @@ pub const INDEX_DOMAIN: &str = "opencapx-index-v1\n";
 const SIG_DOMAIN: &str = "opencapx-v2\n";
 // Since v1.5 this points to the real hosting repo (opencapx/opencapx-registry, raw static files).
 // The old value opencapx/registry never existed — an earlier release shipped with a dead link; this is the fix.
-const DEFAULT_INDEX_URL: &str = "https://raw.githubusercontent.com/opencapx/opencapx-registry/main/index.json";
+const DEFAULT_INDEX_URL: &str =
+    "https://raw.githubusercontent.com/opencapx/opencapx-registry/main/index.json";
 const DEFAULT_TTL_SECS: u64 = 24 * 60 * 60;
 
 // ─────────────────────────── wire types ───────────────────────────
@@ -64,7 +67,11 @@ pub struct Publisher {
     pub verified: bool,
     #[serde(default)]
     pub since: String,
-    #[serde(rename = "displayName", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "displayName",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub display_name: Option<String>,
 }
 
@@ -109,7 +116,11 @@ pub struct AuthorRef {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RegistryVersion {
     pub version: String,
-    #[serde(rename = "minCoreVersion", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "minCoreVersion",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub min_core_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel: Option<String>,
@@ -120,7 +131,11 @@ pub struct RegistryVersion {
     /// The signature object from the package's manifest (same shape as M2's signature).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<Signature>,
-    #[serde(rename = "releasedAt", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "releasedAt",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub released_at: Option<u64>,
     #[serde(rename = "sizeBytes", default, skip_serializing_if = "Option::is_none")]
     pub size_bytes: Option<u64>,
@@ -308,14 +323,21 @@ pub fn publisher_pubkey(index: &RegistryIndex, key_id: &str) -> Option<[u8; 32]>
     if key_status(index, key_id) != KeyStatus::Registered {
         return None;
     }
-    let hex = &index.publishers.iter().find(|p| p.key_id == key_id)?.public_key;
+    let hex = &index
+        .publishers
+        .iter()
+        .find(|p| p.key_id == key_id)?
+        .public_key;
     hex_decode(hex).ok()?.try_into().ok()
 }
 
 fn core_ok(core_version: &str, min: Option<&str>) -> bool {
     match min {
         None => true,
-        Some(min) => match (parse_version_lenient(core_version), parse_version_lenient(min)) {
+        Some(min) => match (
+            parse_version_lenient(core_version),
+            parse_version_lenient(min),
+        ) {
             (Some(c), Some(m)) => c >= m,
             _ => true, // unparseable → allow (same criteria as plugin::check_core_compat)
         },
@@ -576,7 +598,10 @@ pub fn load() -> Result<Loaded, String> {
                 index,
                 source: RegistrySource::Seed,
             }),
-            None => Err(format!("no verified registry index available ({})", fetch_err)),
+            None => Err(format!(
+                "no verified registry index available ({})",
+                fetch_err
+            )),
         },
     }
 }
@@ -670,7 +695,10 @@ mod tests {
     /// so it is mutually exclusive with other modules' global-env tests (plugin_sig integration cases).
     static ENV_LOCK: StdMutex<()> = StdMutex::new(());
 
-    fn guard() -> (std::sync::MutexGuard<'static, ()>, std::sync::MutexGuard<'static, ()>) {
+    fn guard() -> (
+        std::sync::MutexGuard<'static, ()>,
+        std::sync::MutexGuard<'static, ()>,
+    ) {
         let store = crate::core::TEST_STORE_LOCK
             .lock()
             .unwrap_or_else(|e| e.into_inner());
@@ -766,7 +794,6 @@ mod tests {
         teardown_env();
     }
 
-
     /// key-ceremony §6 "add first, revoke later" rotation mechanism: while two official keys are both pinned,
     /// an index signed by either keyId is valid; a third unpinned key is still rejected. The behavioral contract during rotation.
     #[test]
@@ -790,12 +817,19 @@ mod tests {
         let unsigned = unsigned_index(200);
         // Signed by old key → valid
         let by_old = sign_index(unsigned.as_bytes(), &old_seed, "com.opencapx.old").unwrap();
-        assert!(verify_index(by_old.as_bytes()).is_ok(), "old key must verify during window");
+        assert!(
+            verify_index(by_old.as_bytes()).is_ok(),
+            "old key must verify during window"
+        );
         // Signed by new key → valid (the index shape of the later rotation phase)
         let by_new = sign_index(unsigned.as_bytes(), &new_seed, "com.opencapx.new").unwrap();
-        assert!(verify_index(by_new.as_bytes()).is_ok(), "new key must verify during window");
+        assert!(
+            verify_index(by_new.as_bytes()).is_ok(),
+            "new key must verify during window"
+        );
         // A third unpinned key → reject
-        let by_stranger = sign_index(unsigned.as_bytes(), &[11u8; 32], "com.opencapx.stranger").unwrap();
+        let by_stranger =
+            sign_index(unsigned.as_bytes(), &[11u8; 32], "com.opencapx.stranger").unwrap();
         let err = verify_index(by_stranger.as_bytes()).unwrap_err();
         assert!(err.contains("unpinned"), "{err}");
         teardown_env();
@@ -827,7 +861,12 @@ mod tests {
         let _g = guard();
         set_official(&format!("com.opencapx.test-official={}", test_pubkey_hex()));
         let unsigned = unsigned_index(100).replace("\"schemaVersion\": 2", "\"schemaVersion\": 3");
-        let signed = sign_index(unsigned.as_bytes(), &TEST_SEED, "com.opencapx.test-official").unwrap();
+        let signed = sign_index(
+            unsigned.as_bytes(),
+            &TEST_SEED,
+            "com.opencapx.test-official",
+        )
+        .unwrap();
         let err = verify_index(signed.as_bytes()).unwrap_err();
         assert!(err.contains("schemaVersion"), "{err}");
         teardown_env();
@@ -931,7 +970,10 @@ mod tests {
         setup_env(&dir);
         let newer = dir.join("new.json");
         std::fs::write(&newer, signed_index(300)).unwrap();
-        std::env::set_var("OPENCAPX_REGISTRY_URL", format!("file://{}", newer.display()));
+        std::env::set_var(
+            "OPENCAPX_REGISTRY_URL",
+            format!("file://{}", newer.display()),
+        );
         let loaded = refresh().expect("refresh ok");
         assert_eq!(loaded.source, RegistrySource::Fetch);
         assert_eq!(read_state(), 300);

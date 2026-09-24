@@ -95,23 +95,26 @@ pub fn declared_permission_set(store: &SharedStore) -> std::collections::HashSet
                 let mut stmt = c
                     .prepare("SELECT DISTINCT permission FROM capability_declarations")
                     .ok()?;
-                let it = stmt
-                    .query_map([], |r| r.get::<_, String>(0))
-                    .ok()?;
-                Some(it.filter_map(|x| x.ok()).collect::<std::collections::HashSet<String>>())
+                let it = stmt.query_map([], |r| r.get::<_, String>(0)).ok()?;
+                Some(
+                    it.filter_map(|x| x.ok())
+                        .collect::<std::collections::HashSet<String>>(),
+                )
             })
         })
         .flatten()
         .unwrap_or_default()
 }
 
-
 /// Declaration-derived default decision (§4.3 access point #2). Non-declared permissions return None.
 /// Multiple providers declare the same permission with inconsistent defaults → None (caller falls back to denied).
 pub fn declared_default(store: &SharedStore, perm: &str) -> Option<Decision> {
     let rows = rows_where(store, "permission", perm);
     let first = rows.first()?;
-    if rows.iter().any(|r| r.default_decision != first.default_decision) {
+    if rows
+        .iter()
+        .any(|r| r.default_decision != first.default_decision)
+    {
         return None;
     }
     Some(permission::parse_decision(&first.default_decision))
@@ -362,7 +365,9 @@ pub fn domains(store: &SharedStore) -> Vec<(String, Option<String>, String)> {
         .and_then(|s| {
             s.with_conn_ref(|c| {
                 let mut stmt = c
-                    .prepare("SELECT domain, plugin_id, source FROM domain_registry ORDER BY domain ASC")
+                    .prepare(
+                        "SELECT domain, plugin_id, source FROM domain_registry ORDER BY domain ASC",
+                    )
                     .ok()?;
                 let it = stmt
                     .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
@@ -381,7 +386,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     fn db_store(tag: &str) -> SharedStore {
-        let dir = std::env::temp_dir().join(format!("opencapx-decl-{}-{}", tag, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("opencapx-decl-{}-{}", tag, std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         Arc::new(Mutex::new(StoreEnum::Db(
             Storage::open(&dir.join("t.db")).unwrap(),
@@ -414,7 +420,11 @@ mod tests {
         // ③ no match
         assert!(resolve(&s, "weather.fetch").is_none());
         // ② declaration table
-        declare(&s, "com.x.weather", &[("weather.fetch", "weather.read", "ask")]);
+        declare(
+            &s,
+            "com.x.weather",
+            &[("weather.fetch", "weather.read", "ask")],
+        );
         let r = resolve(&s, "weather.fetch").expect("declared");
         assert_eq!(r.permission, "weather.read");
         assert_eq!(r.default, Decision::Ask);
@@ -452,23 +462,56 @@ mod tests {
     fn domain_claim_is_first_come_and_rejects_reserved() {
         let s = db_store("domain");
         declare(&s, "com.a", &[("weather.fetch", "weather.read", "ask")]);
-        assert_eq!(domains(&s, ), vec![("weather".to_string(), Some("com.a".to_string()), "local".to_string())]);
+        assert_eq!(
+            domains(&s,),
+            vec![(
+                "weather".to_string(),
+                Some("com.a".to_string()),
+                "local".to_string()
+            )]
+        );
         // Same domain, different plugin → rejected
         let mut x = s.lock().unwrap();
-        let r = x.try_with_conn(|c| {
-            let tx = c.unchecked_transaction().unwrap();
-            let r = write_in_tx(&tx, "com.b", &[("weather.alerts".into(), "weather.read".into(), "ask".into(), None)], 1);
-            drop(tx);
-            Ok(r)
-        }).unwrap().unwrap();
+        let r = x
+            .try_with_conn(|c| {
+                let tx = c.unchecked_transaction().unwrap();
+                let r = write_in_tx(
+                    &tx,
+                    "com.b",
+                    &[(
+                        "weather.alerts".into(),
+                        "weather.read".into(),
+                        "ask".into(),
+                        None,
+                    )],
+                    1,
+                );
+                drop(tx);
+                Ok(r)
+            })
+            .unwrap()
+            .unwrap();
         assert!(r.is_err(), "second claimant must be rejected: {:?}", r);
         // Reserved domain → rejected
-        let r2 = x.try_with_conn(|c| {
-            let tx = c.unchecked_transaction().unwrap();
-            let r = write_in_tx(&tx, "com.c", &[("things.list".into(), "things.read".into(), "ask".into(), None)], 1);
-            drop(tx);
-            Ok(r)
-        }).unwrap().unwrap();
+        let r2 = x
+            .try_with_conn(|c| {
+                let tx = c.unchecked_transaction().unwrap();
+                let r = write_in_tx(
+                    &tx,
+                    "com.c",
+                    &[(
+                        "things.list".into(),
+                        "things.read".into(),
+                        "ask".into(),
+                        None,
+                    )],
+                    1,
+                );
+                drop(tx);
+                Ok(r)
+            })
+            .unwrap()
+            .unwrap();
         assert!(r2.is_err());
     }
 

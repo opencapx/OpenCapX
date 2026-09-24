@@ -4,7 +4,7 @@
 //! Frontend overlay.ts subscribes to `pet.state` to render the status badge + default message;
 //! the Pet plugin can also plugin.subscribe("pet.state") to receive the same events and drive custom animations.
 
-use super::event::{OpencapxEvent, EventBus};
+use super::event::{EventBus, OpencapxEvent};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -42,11 +42,7 @@ pub fn spawn_state_mapper(bus: Arc<EventBus>) {
                         .cloned()
                         .unwrap_or(json!(null)),
                 });
-                bus.publish(&OpencapxEvent::new(
-                    "pet.state",
-                    "core",
-                    payload,
-                ));
+                bus.publish(&OpencapxEvent::new("pet.state", "core", payload));
             }
         }
     });

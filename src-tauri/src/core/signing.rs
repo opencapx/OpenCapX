@@ -20,8 +20,8 @@ use super::plugin_sig;
 /// serde_json's default `Map` = `BTreeMap` (lexicographic keys at every level), and `to_string` is compact with no whitespace
 /// and preserves non-ASCII as UTF-8 — exactly what the spec requires, no extra handling needed.
 pub fn canonical_manifest(manifest_json: &str) -> Result<String, String> {
-    let mut value: serde_json::Value =
-        serde_json::from_str(manifest_json).map_err(|e| format!("manifest is not valid JSON: {}", e))?;
+    let mut value: serde_json::Value = serde_json::from_str(manifest_json)
+        .map_err(|e| format!("manifest is not valid JSON: {}", e))?;
     let obj = value
         .as_object_mut()
         .ok_or_else(|| "manifest top level must be a JSON object".to_string())?;
@@ -142,7 +142,8 @@ fn walk_dir(root: &Path, cur: &Path, out: &mut Vec<(String, u64, Vec<u8>)>) -> R
         if rel_str == "opencapx-plugin.json" || rel_str.ends_with("/opencapx-plugin.json") {
             continue;
         }
-        let bytes = std::fs::read(&path).map_err(|e| format!("failed to read {}: {}", path.display(), e))?;
+        let bytes = std::fs::read(&path)
+            .map_err(|e| format!("failed to read {}: {}", path.display(), e))?;
         out.push((rel_str, bytes.len() as u64, bytes));
     }
     Ok(())
@@ -231,11 +232,18 @@ mod tests {
         std::fs::write(dir.join("bin/run.sh"), b"echo ok\n").unwrap();
         // WHY: the archive lives outside the walked directory, otherwise it would itself enter the directory-side digest as an entry.
         let zip_path = dir.with_extension("ocplugin");
-        std::fs::write(&zip_path, zip_with(&[
-            ("opencapx-plugin.json", b"{\"id\":\"com.x\"}"),
-            ("bin/run.sh", b"echo ok\n"),
-        ])).unwrap();
-        assert_eq!(digest_v2_for_dir(&dir).unwrap(), digest_v2(&zip_path).unwrap());
+        std::fs::write(
+            &zip_path,
+            zip_with(&[
+                ("opencapx-plugin.json", b"{\"id\":\"com.x\"}"),
+                ("bin/run.sh", b"echo ok\n"),
+            ]),
+        )
+        .unwrap();
+        assert_eq!(
+            digest_v2_for_dir(&dir).unwrap(),
+            digest_v2(&zip_path).unwrap()
+        );
         let _ = std::fs::remove_file(&zip_path);
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -48,7 +48,10 @@ impl Default for PluginHealthConfig {
 /// Bounds + validation. Returns Err to block the write.
 pub fn validate(cfg: &PluginHealthConfig) -> Result<(), String> {
     if cfg.heartbeat_sec > 3600 {
-        return Err(format!("heartbeat_sec out of range (0..=3600): {}", cfg.heartbeat_sec));
+        return Err(format!(
+            "heartbeat_sec out of range (0..=3600): {}",
+            cfg.heartbeat_sec
+        ));
     }
     if !(100..=60000).contains(&cfg.ping_timeout_ms) {
         return Err(format!(
@@ -57,7 +60,10 @@ pub fn validate(cfg: &PluginHealthConfig) -> Result<(), String> {
         ));
     }
     if cfg.max_retries > 100 {
-        return Err(format!("max_retries out of range (0..=100): {}", cfg.max_retries));
+        return Err(format!(
+            "max_retries out of range (0..=100): {}",
+            cfg.max_retries
+        ));
     }
     if cfg.backoff_initial_ms > 30_000 {
         return Err(format!(

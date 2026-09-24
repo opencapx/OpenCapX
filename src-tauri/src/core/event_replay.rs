@@ -11,7 +11,7 @@
 //!   (SSE emit + SQLite rewrite; the rewrite is side-effect-free because log_event uses a uuid id primary key)
 //! - `export(sid, dst_path)` copies the whole NDJSON to a target path (for frontend download via file URL)
 
-use super::event::{OpencapxEvent, EventBus};
+use super::event::{EventBus, OpencapxEvent};
 use serde::Serialize;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -169,7 +169,9 @@ pub fn replay_to_bus(session_id: &str, filter_kind: Option<&str>, bus: &EventBus
     let reader = BufReader::new(file);
     let mut count = 0usize;
     for line in reader.lines().map_while(Result::ok) {
-        let Ok(e) = serde_json::from_str::<OpencapxEvent>(&line) else { continue };
+        let Ok(e) = serde_json::from_str::<OpencapxEvent>(&line) else {
+            continue;
+        };
         if let Some(f) = filter_kind {
             if !f.is_empty() && !e.kind.starts_with(f) {
                 continue;

@@ -26,7 +26,10 @@ mod tests {
     fn notify_waiting_copy_mentions_input_and_product_name() {
         let s = notify_copy(&EN, "claude", "waiting", "Should I proceed?");
         assert!(s.contains("needs input"));
-        assert!(s.contains("Claude Code"), "should use the display name, not the id: {s}");
+        assert!(
+            s.contains("Claude Code"),
+            "should use the display name, not the id: {s}"
+        );
         assert!(s.contains("Should I proceed?"));
     }
 
@@ -57,7 +60,11 @@ mod tests {
     fn notify_waiting_body_is_truncated() {
         let long = "x".repeat(300);
         let s = notify_copy(&EN, "claude", "waiting", &long);
-        assert!(s.chars().count() < 120, "the notification body should not be a whole recap: {}", s.len());
+        assert!(
+            s.chars().count() < 120,
+            "the notification body should not be a whole recap: {}",
+            s.len()
+        );
         assert!(s.contains('…'));
     }
 }

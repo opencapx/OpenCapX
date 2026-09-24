@@ -182,7 +182,8 @@ pub fn sections(
     branch_of: &dyn Fn(&str) -> Option<String>,
 ) -> (Vec<TraySection>, Vec<String>) {
     let mut order: Vec<String> = Vec::new();
-    let mut groups: std::collections::HashMap<String, Vec<&Session>> = std::collections::HashMap::new();
+    let mut groups: std::collections::HashMap<String, Vec<&Session>> =
+        std::collections::HashMap::new();
     let mut ungrouped: Vec<String> = Vec::new();
     for session in sessions {
         let cwd = session.cwd.trim();
@@ -198,7 +199,8 @@ pub fn sections(
             list.push(session);
         }
     }
-    let count = |list: &[&Session], state: AgentState| list.iter().filter(|x| x.state == state).count();
+    let count =
+        |list: &[&Session], state: AgentState| list.iter().filter(|x| x.state == state).count();
     let sections = order
         .into_iter()
         .map(|cwd| {
@@ -214,7 +216,10 @@ pub fn sections(
                     count(&list, AgentState::Working),
                     count(&list, AgentState::Done),
                 ),
-                rows: list.iter().map(|x| session_label_in_project(s, x)).collect(),
+                rows: list
+                    .iter()
+                    .map(|x| session_label_in_project(s, x))
+                    .collect(),
             }
         })
         .collect();
@@ -267,8 +272,8 @@ pub fn compose_icon(base: &[u8], w: u32, h: u32, badge: TrayBadge) -> Vec<u8> {
     let mut out = base.to_vec();
     let (cr, cg, cb) = match badge {
         TrayBadge::None => return out,
-        TrayBadge::Working => (48u8, 209u8, 88u8),   // system green
-        TrayBadge::Waiting => (255u8, 159u8, 10u8),  // system orange
+        TrayBadge::Working => (48u8, 209u8, 88u8), // system green
+        TrayBadge::Waiting => (255u8, 159u8, 10u8), // system orange
     };
     if w == 0 || h == 0 {
         return out;
@@ -339,7 +344,14 @@ mod tests {
     }
 
     /// A session with a cwd (used for grouping).
-    fn sess_cwd(id: &str, agent: &str, project: &str, cwd: &str, state: AgentState, msg: &str) -> Session {
+    fn sess_cwd(
+        id: &str,
+        agent: &str,
+        project: &str,
+        cwd: &str,
+        state: AgentState,
+        msg: &str,
+    ) -> Session {
         let mut s = sess(id, agent, project, state, msg);
         s.cwd = cwd.into();
         s
@@ -354,28 +366,79 @@ mod tests {
         let en = &crate::core::i18n::EN;
         // Already ordered by sort_sessions: waiting first
         let sessions = vec![
-            sess_cwd("a1", "gemini", "Alpha", "/w/alpha", AgentState::Waiting, "needs permission"),
-            sess_cwd("a2", "claude", "Alpha", "/w/alpha", AgentState::Working, "Edit a.ts"),
-            sess_cwd("b1", "codex", "Beta", "/w/beta", AgentState::Working, "cargo test"),
+            sess_cwd(
+                "a1",
+                "gemini",
+                "Alpha",
+                "/w/alpha",
+                AgentState::Waiting,
+                "needs permission",
+            ),
+            sess_cwd(
+                "a2",
+                "claude",
+                "Alpha",
+                "/w/alpha",
+                AgentState::Working,
+                "Edit a.ts",
+            ),
+            sess_cwd(
+                "b1",
+                "codex",
+                "Beta",
+                "/w/beta",
+                AgentState::Working,
+                "cargo test",
+            ),
         ];
         let (sections, ungrouped) = sections(en, &sessions, &no_branch);
         assert!(ungrouped.is_empty());
         assert_eq!(sections.len(), 2);
         // Group order = the order in which each group's first session appears (so waiting-first holds automatically)
-        assert!(sections[0].header.starts_with("Alpha"), "{}", sections[0].header);
-        assert!(sections[1].header.starts_with("Beta"), "{}", sections[1].header);
+        assert!(
+            sections[0].header.starts_with("Alpha"),
+            "{}",
+            sections[0].header
+        );
+        assert!(
+            sections[1].header.starts_with("Beta"),
+            "{}",
+            sections[1].header
+        );
         assert_eq!(sections[0].rows.len(), 2);
         // Rows inside a group no longer repeat the project name
-        assert!(!sections[0].rows[0].contains("Alpha"), "{}", sections[0].rows[0]);
-        assert!(sections[0].rows[0].contains("Gemini CLI"), "{}", sections[0].rows[0]);
+        assert!(
+            !sections[0].rows[0].contains("Alpha"),
+            "{}",
+            sections[0].rows[0]
+        );
+        assert!(
+            sections[0].rows[0].contains("Gemini CLI"),
+            "{}",
+            sections[0].rows[0]
+        );
     }
 
     #[test]
     fn section_header_shows_branch_and_omits_zero_counts() {
         let en = &crate::core::i18n::EN;
         let sessions = vec![
-            sess_cwd("a1", "claude", "Alpha", "/w/alpha", AgentState::Waiting, "needs permission"),
-            sess_cwd("a2", "claude", "Alpha", "/w/alpha", AgentState::Done, "done"),
+            sess_cwd(
+                "a1",
+                "claude",
+                "Alpha",
+                "/w/alpha",
+                AgentState::Waiting,
+                "needs permission",
+            ),
+            sess_cwd(
+                "a2",
+                "claude",
+                "Alpha",
+                "/w/alpha",
+                AgentState::Done,
+                "done",
+            ),
         ];
         let branch = |_: &str| Some("main".to_string());
         let (sections, _) = sections(en, &sessions, &branch);
@@ -388,8 +451,22 @@ mod tests {
     fn section_header_falls_back_to_finished_when_nothing_runs() {
         let en = &crate::core::i18n::EN;
         let sessions = vec![
-            sess_cwd("a1", "claude", "Alpha", "/w/alpha", AgentState::Done, "done"),
-            sess_cwd("a2", "claude", "Alpha", "/w/alpha", AgentState::Done, "done"),
+            sess_cwd(
+                "a1",
+                "claude",
+                "Alpha",
+                "/w/alpha",
+                AgentState::Done,
+                "done",
+            ),
+            sess_cwd(
+                "a2",
+                "claude",
+                "Alpha",
+                "/w/alpha",
+                AgentState::Done,
+                "done",
+            ),
         ];
         let (sections, _) = sections(en, &sessions, &no_branch);
         // Otherwise the parent is only "Alpha", and you cannot tell what is inside without expanding
@@ -399,7 +476,14 @@ mod tests {
     #[test]
     fn single_session_project_still_becomes_a_section() {
         let en = &crate::core::i18n::EN;
-        let sessions = vec![sess_cwd("b1", "cursor", "Beta", "/w/beta", AgentState::Working, "pnpm build")];
+        let sessions = vec![sess_cwd(
+            "b1",
+            "cursor",
+            "Beta",
+            "/w/beta",
+            AgentState::Working,
+            "pnpm build",
+        )];
         let (sections, _) = sections(en, &sessions, &no_branch);
         assert_eq!(sections.len(), 1);
         assert_eq!(sections[0].rows.len(), 1);
@@ -411,8 +495,21 @@ mod tests {
         let en = &crate::core::i18n::EN;
         // One has a cwd (goes into a submenu), one does not (top level, keeping the original style including the project name)
         let sessions = vec![
-            sess_cwd("a1", "claude", "Alpha", "/w/alpha", AgentState::Working, "Edit a.ts"),
-            sess("x1", "claude", "Legacy", AgentState::Waiting, "needs permission"),
+            sess_cwd(
+                "a1",
+                "claude",
+                "Alpha",
+                "/w/alpha",
+                AgentState::Working,
+                "Edit a.ts",
+            ),
+            sess(
+                "x1",
+                "claude",
+                "Legacy",
+                AgentState::Waiting,
+                "needs permission",
+            ),
         ];
         let (sections, ungrouped) = sections(en, &sessions, &no_branch);
         assert_eq!(sections.len(), 1);
@@ -457,8 +554,17 @@ mod tests {
         let s = sess("1", "claude", "unknown", AgentState::Working, "");
         assert_eq!(session_label(en, &s), "● Claude Code · Working");
 
-        let s = sess("2", "codex", "OpenCapX", AgentState::Waiting, "needs permission");
-        assert_eq!(session_label(en, &s), "◐ Codex · OpenCapX · needs permission");
+        let s = sess(
+            "2",
+            "codex",
+            "OpenCapX",
+            AgentState::Waiting,
+            "needs permission",
+        );
+        assert_eq!(
+            session_label(en, &s),
+            "◐ Codex · OpenCapX · needs permission"
+        );
 
         // Under the Chinese locale the state word changes accordingly
         let zh = &crate::core::i18n::ZH_HANS;
@@ -497,13 +603,28 @@ mod tests {
     #[test]
     fn tooltip_names_the_agent_that_needs_you() {
         let sessions = vec![
-            sess("a", "claude", "OpenCapX", AgentState::Working, "Edit src/overlay.ts"),
-            sess("b", "gemini", "OpenCapX", AgentState::Waiting, "needs permission to use Bash"),
+            sess(
+                "a",
+                "claude",
+                "OpenCapX",
+                AgentState::Working,
+                "Edit src/overlay.ts",
+            ),
+            sess(
+                "b",
+                "gemini",
+                "OpenCapX",
+                AgentState::Waiting,
+                "needs permission to use Bash",
+            ),
         ];
         let en = &crate::core::i18n::EN;
         let tip = tooltip_text(en, &sessions);
         assert!(tip.starts_with("OpenCapX · 1 Waiting for You"), "{tip}");
-        assert!(tip.contains("Gemini CLI: needs permission to use Bash"), "{tip}");
+        assert!(
+            tip.contains("Gemini CLI: needs permission to use Bash"),
+            "{tip}"
+        );
         // No sessions: keep only the app name, don't write 0
         assert_eq!(tooltip_text(en, &[]), "OpenCapX");
     }
@@ -534,7 +655,10 @@ mod tests {
         // Badge center: orange, opaque
         let (r, g, b, a) = px(24, 8);
         assert!(a > 200, "badge should be opaque, got a={a}");
-        assert!(r > 200 && g > 100 && b < 80, "should be orange, got {r},{g},{b}");
+        assert!(
+            r > 200 && g > 100 && b < 80,
+            "should be orange, got {r},{g},{b}"
+        );
         // Lower-left far from the badge: stays transparent
         assert_eq!(px(1, 30).3, 0);
         // working uses green

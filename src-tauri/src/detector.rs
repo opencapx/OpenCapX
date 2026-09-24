@@ -102,10 +102,7 @@ mod tests {
 
     #[test]
     fn question_mark_counts_as_waiting() {
-        assert_eq!(
-            detect_claude_stop("Should I proceed?"),
-            AgentState::Waiting
-        );
+        assert_eq!(detect_claude_stop("Should I proceed?"), AgentState::Waiting);
     }
 
     #[test]

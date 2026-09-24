@@ -25,7 +25,10 @@ fn sane_process_name(p: &str) -> Result<(), String> {
         return Err("invalid input: process must be 1..=200 chars".into());
     }
     if p.chars().any(|c| c == '"' || c == '\\' || c.is_control()) {
-        return Err(format!("invalid input: process has unsafe characters: {:?}", p));
+        return Err(format!(
+            "invalid input: process has unsafe characters: {:?}",
+            p
+        ));
     }
     Ok(())
 }
@@ -34,7 +37,9 @@ fn sane_process_name(p: &str) -> Result<(), String> {
 pub fn list(_input: &Value) -> Result<Value, String> {
     #[cfg(not(target_os = "macos"))]
     {
-        return Err("window.list builtin is macOS-only (System Events); a plugin can override".into());
+        return Err(
+            "window.list builtin is macOS-only (System Events); a plugin can override".into(),
+        );
     }
     #[cfg(target_os = "macos")]
     {
@@ -83,8 +88,12 @@ pub fn list(_input: &Value) -> Result<Value, String> {
             if pos.len() != 2 || size.len() != 2 {
                 continue;
             }
-            let (Ok(x), Ok(y)) = (pos[0].parse::<i64>(), pos[1].parse::<i64>()) else { continue };
-            let (Ok(w), Ok(h)) = (size[0].parse::<i64>(), size[1].parse::<i64>()) else { continue };
+            let (Ok(x), Ok(y)) = (pos[0].parse::<i64>(), pos[1].parse::<i64>()) else {
+                continue;
+            };
+            let (Ok(w), Ok(h)) = (size[0].parse::<i64>(), size[1].parse::<i64>()) else {
+                continue;
+            };
             wins.push(json!({
                 "process": parts[0],
                 "front": parts[1] == "1",
@@ -101,7 +110,9 @@ pub fn focus(input: &Value) -> Result<Value, String> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = input;
-        return Err("window.focus builtin is macOS-only (System Events); a plugin can override".into());
+        return Err(
+            "window.focus builtin is macOS-only (System Events); a plugin can override".into(),
+        );
     }
     #[cfg(target_os = "macos")]
     {
@@ -164,16 +175,24 @@ mod tests {
     #[test]
     fn focus_validates_process_before_tcc() {
         // Validation precedes the TCC pre-check: bad input should not incur the permission prompt burden
-        assert!(focus(&json!({})).unwrap_err().contains("process (string) required"));
-        assert!(focus(&json!({ "process": "a\"b" })).unwrap_err().contains("unsafe"));
-        assert!(focus(&json!({ "process": "x", "title": "y\"z" })).unwrap_err().contains("unsafe"));
+        assert!(focus(&json!({}))
+            .unwrap_err()
+            .contains("process (string) required"));
+        assert!(focus(&json!({ "process": "a\"b" }))
+            .unwrap_err()
+            .contains("unsafe"));
+        assert!(focus(&json!({ "process": "x", "title": "y\"z" }))
+            .unwrap_err()
+            .contains("unsafe"));
     }
 
     #[cfg(not(target_os = "macos"))]
     #[test]
     fn windows_report_platform_limit() {
         assert!(list(&json!({})).unwrap_err().contains("macOS-only"));
-        assert!(focus(&json!({ "process": "x" })).unwrap_err().contains("macOS-only"));
+        assert!(focus(&json!({ "process": "x" }))
+            .unwrap_err()
+            .contains("macOS-only"));
     }
 
     #[cfg(target_os = "macos")]
@@ -181,7 +200,10 @@ mod tests {
     #[ignore = "needs Accessibility TCC + GUI session; run with --ignored manually"]
     fn list_real_manual() {
         let out = list(&json!({})).unwrap();
-        assert!(out["count"].as_i64().unwrap() >= 1, "at least Finder/its own window");
+        assert!(
+            out["count"].as_i64().unwrap() >= 1,
+            "at least Finder/its own window"
+        );
         for w in out["windows"].as_array().unwrap() {
             assert!(w["process"].as_str().is_some());
             assert!(w["w"].as_i64().unwrap() > 0);

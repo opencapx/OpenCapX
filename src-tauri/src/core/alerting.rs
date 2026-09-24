@@ -23,12 +23,12 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use super::event::{OpencapxEvent, EventBus};
+use super::event::{EventBus, OpencapxEvent};
+use super::marketplace::hmac_sha256_hex;
 use super::storage::{
     AckRuleRow, AggregationRuleRow, AlertingEndpointRow, CorrelationRuleRow, EscalationRuleRow,
     FailedDeliveryRow, RouteRuleRow, SilenceRuleRow, StoreEnum,
 };
-use super::marketplace::hmac_sha256_hex;
 
 const CONFIG_KEY: &str = "alerting_webhook_config";
 const RETRY_CONFIG_KEY: &str = "alerting_retry_config";
@@ -99,7 +99,11 @@ pub struct WebhookEndpoint {
     pub template: Option<String>,
     /// Phase 58: sample JSON entered by the user while editing the template in the settings UI, used as live preview input.
     /// `None` = use `{}` as envelope.payload when previewing. 16 KB cap, validated by the frontend before save.
-    #[serde(default, rename = "templateSample", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "templateSample",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub template_sample: Option<String>,
     /// Phase 72 — per-source severity override. Overwrites envelope_severity during fanout.
     /// `Vec<(source, severity)>` exact match (not glob). Precedence: endpoint override > user hint > manifest > default.
@@ -177,9 +181,15 @@ pub struct SilenceRule {
     pub end_hour: u8,
 }
 
-fn default_kind_pattern() -> String { "*".into() }
-fn default_weekdays() -> u8 { 127 }
-fn default_end_hour() -> u8 { 24 }
+fn default_kind_pattern() -> String {
+    "*".into()
+}
+fn default_weekdays() -> u8 {
+    127
+}
+fn default_end_hour() -> u8 {
+    24
+}
 
 /// Phase 50 — AckRule DTO used by the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -358,7 +368,8 @@ pub fn validate_endpoint(ep: &WebhookEndpoint) -> Result<(), String> {
         if Severity::parse(sev.as_str()).is_none() {
             return Err(format!(
                 "severity_overrides[{}]: invalid severity '{}' (expected info|warn|error|critical)",
-                i, sev.as_str()
+                i,
+                sev.as_str()
             ));
         }
     }
@@ -410,9 +421,7 @@ pub fn load_config() -> WebhookConfig {
 pub fn save_config(cfg: &WebhookConfig) -> Result<(), String> {
     validate(cfg)?;
     let store = super::shared_store().ok_or_else(|| "store not initialized".to_string())?;
-    let mut s = store
-        .lock()
-        .map_err(|_| "store poisoned".to_string())?;
+    let mut s = store.lock().map_err(|_| "store poisoned".to_string())?;
     let json = serde_json::to_string(cfg).map_err(|e| format!("serialize: {}", e))?;
     s.set_setting(CONFIG_KEY, &json);
     Ok(())
@@ -427,7 +436,9 @@ struct DispatcherInner {
 static SHARED: OnceLock<Arc<Mutex<DispatcherInner>>> = OnceLock::new();
 
 fn shared() -> Arc<Mutex<DispatcherInner>> {
-    SHARED.get_or_init(|| Arc::new(Mutex::new(DispatcherInner::default()))).clone()
+    SHARED
+        .get_or_init(|| Arc::new(Mutex::new(DispatcherInner::default())))
+        .clone()
 }
 
 /// Compute a stable dedup key for the payload (same source + payload sent only once within a short window).
@@ -456,8 +467,12 @@ fn endpoint_accepts_source(ep: &AlertingEndpointRow, source: &str) -> bool {
 
 /// Phase 49 — Fetch all enabled endpoints (an empty store returns empty, fanout skipped).
 fn load_enabled_endpoints() -> Vec<AlertingEndpointRow> {
-    let Some(store) = super::shared_store() else { return Vec::new() };
-    let Ok(s) = store.lock() else { return Vec::new() };
+    let Some(store) = super::shared_store() else {
+        return Vec::new();
+    };
+    let Ok(s) = store.lock() else {
+        return Vec::new();
+    };
     if let StoreEnum::Db(db) = &*s {
         db.list_enabled_alerting_endpoints()
     } else {
@@ -531,7 +546,11 @@ pub fn dispatch(source: &str, payload: serde_json::Value) {
     let mut envelope_severity = severity_resolved(source);
     let agg_decision = evaluate_aggregations(source, &payload, now_secs);
     let mut effective_payload = payload.clone();
-    if !apply_aggregation_decision(&agg_decision, &mut effective_payload, &mut envelope_severity) {
+    if !apply_aggregation_decision(
+        &agg_decision,
+        &mut effective_payload,
+        &mut envelope_severity,
+    ) {
         return;
     }
 
@@ -560,8 +579,10 @@ pub fn dispatch(source: &str, payload: serde_json::Value) {
                 let r = send_http_with_body(&url, &headers, &bs, "application/json");
                 (bs, r)
             } else {
-                let result = send_http(&url, &headers, &effective_payload_for_thread, &source_owned);
-                let bs = serde_json::to_string(&effective_payload_for_thread).unwrap_or_else(|_| "null".into());
+                let result =
+                    send_http(&url, &headers, &effective_payload_for_thread, &source_owned);
+                let bs = serde_json::to_string(&effective_payload_for_thread)
+                    .unwrap_or_else(|_| "null".into());
                 (bs, result)
             };
             if let Err(err_msg) = result {
@@ -587,7 +608,9 @@ pub fn dispatch(source: &str, payload: serde_json::Value) {
     // Phase 51: DSL routing has the highest priority — on a hit, send only to that route's target endpoint and skip fanout.
     // Phase 54: route matching uses the post-aggregation effective_payload (after payload merge).
     let matched_route = match_route(source, &effective_payload);
-    let route_targets = matched_route.as_ref().map(|r| r.target_endpoint_ids.clone());
+    let route_targets = matched_route
+        .as_ref()
+        .map(|r| r.target_endpoint_ids.clone());
     // Phase 49 fanout path
     let matched: Vec<AlertingEndpointRow> = match route_targets {
         Some(target_ids) => endpoints
@@ -643,8 +666,10 @@ pub fn dispatch(source: &str, payload: serde_json::Value) {
                     Ok((s, ct)) => (s, ct.as_content_type().to_string()),
                     Err(e) => {
                         eprintln!("[alerting] template render error on {}: {}", ep.name, e);
-                        (envelope_to_json_string(&env).unwrap_or_else(|_| "null".into()),
-                         "application/json".to_string())
+                        (
+                            envelope_to_json_string(&env).unwrap_or_else(|_| "null".into()),
+                            "application/json".to_string(),
+                        )
                     }
                 }
             } else if ep.schema_version >= 1 {
@@ -654,16 +679,20 @@ pub fn dispatch(source: &str, payload: serde_json::Value) {
                     vec![],
                     envelope_severity_clone,
                 );
-                (envelope_to_json_string(&env).unwrap_or_else(|_| "null".into()),
-                 "application/json".to_string())
+                (
+                    envelope_to_json_string(&env).unwrap_or_else(|_| "null".into()),
+                    "application/json".to_string(),
+                )
             } else {
                 let body = serde_json::json!({
                     "source": source_owned,
                     "timestamp": super::agent::now_secs(),
                     "data": payload_clone,
                 });
-                (serde_json::to_string(&body).unwrap_or_else(|_| "null".into()),
-                 "application/json".to_string())
+                (
+                    serde_json::to_string(&body).unwrap_or_else(|_| "null".into()),
+                    "application/json".to_string(),
+                )
             };
             let headers = build_request_headers(&ep, &body_str);
             let result = send_http_with_body(&ep.url, &headers, &body_str, &content_type);
@@ -764,7 +793,9 @@ pub fn test_send() -> Result<u16, String> {
         .connect_timeout(Duration::from_secs(3))
         .build()
         .map_err(|e| format!("client build: {}", e))?;
-    let mut req = client.post(&cfg.url).header("Content-Type", "application/json");
+    let mut req = client
+        .post(&cfg.url)
+        .header("Content-Type", "application/json");
     for (k, v) in &cfg.custom_headers {
         if !k.is_empty() {
             req = req.header(k, v);
@@ -830,8 +861,12 @@ fn gen_endpoint_id() -> String {
 
 /// List all endpoints (including disabled). Sorted by created_at ascending.
 pub fn list_endpoints() -> Vec<AlertingEndpointRow> {
-    let Some(store) = super::shared_store() else { return Vec::new() };
-    let Ok(s) = store.lock() else { return Vec::new() };
+    let Some(store) = super::shared_store() else {
+        return Vec::new();
+    };
+    let Ok(s) = store.lock() else {
+        return Vec::new();
+    };
     if let StoreEnum::Db(db) = &*s {
         db.list_alerting_endpoints()
     } else {
@@ -843,9 +878,15 @@ pub fn list_endpoints() -> Vec<AlertingEndpointRow> {
 /// Validation failure → Err; name unique constraint → Err.
 pub fn save_endpoint(ep: WebhookEndpoint) -> Result<AlertingEndpointRow, String> {
     validate_endpoint(&ep)?;
-    let Some(store) = super::shared_store() else { return Err("store not initialized".into()) };
-    let Ok(mut s) = store.lock() else { return Err("store poisoned".into()) };
-    let StoreEnum::Db(db) = &mut *s else { return Err("sqlite store required".into()) };
+    let Some(store) = super::shared_store() else {
+        return Err("store not initialized".into());
+    };
+    let Ok(mut s) = store.lock() else {
+        return Err("store poisoned".into());
+    };
+    let StoreEnum::Db(db) = &mut *s else {
+        return Err("sqlite store required".into());
+    };
 
     // same name but different id → reject (UNIQUE would reject too, but this gives a friendly error).
     for existing in db.list_alerting_endpoints() {
@@ -895,18 +936,30 @@ pub fn save_endpoint(ep: WebhookEndpoint) -> Result<AlertingEndpointRow, String>
 
 /// Delete an endpoint and cascade-clear its dead letters. Returns (deleted, deliveries_cleared).
 pub fn delete_endpoint(id: &str) -> Result<(bool, usize), String> {
-    let Some(store) = super::shared_store() else { return Err("store not initialized".into()) };
-    let Ok(mut s) = store.lock() else { return Err("store poisoned".into()) };
-    let StoreEnum::Db(db) = &mut *s else { return Err("sqlite store required".into()) };
+    let Some(store) = super::shared_store() else {
+        return Err("store not initialized".into());
+    };
+    let Ok(mut s) = store.lock() else {
+        return Err("store poisoned".into());
+    };
+    let StoreEnum::Db(db) = &mut *s else {
+        return Err("sqlite store required".into());
+    };
     Ok(db.delete_alerting_endpoint(id))
 }
 
 /// Fetch the endpoint config → immediately POST once with source="webhook.test" (bypassing dedup).
 /// Failure → Err; success → Ok(status_code). Used by the settings UI per-endpoint Test button.
 pub fn test_endpoint(id: &str) -> Result<u16, String> {
-    let Some(store) = super::shared_store() else { return Err("store not initialized".into()) };
-    let Ok(s) = store.lock() else { return Err("store poisoned".into()) };
-    let StoreEnum::Db(db) = &*s else { return Err("sqlite store required".into()) };
+    let Some(store) = super::shared_store() else {
+        return Err("store not initialized".into());
+    };
+    let Ok(s) = store.lock() else {
+        return Err("store poisoned".into());
+    };
+    let StoreEnum::Db(db) = &*s else {
+        return Err("sqlite store required".into());
+    };
     let ep = db
         .get_alerting_endpoint(id)
         .ok_or_else(|| format!("endpoint not found: {}", id))?;
@@ -944,11 +997,7 @@ pub fn gen_event_id() -> String {
 /// Build the canonical envelope from `(source, payload)` (schema_version=1).
 /// `tags` defaults to empty; Phase 51 routes may put extra tags there, but dispatch() does not read them yet.
 /// severity follows the Phase 53 chain (stored hint → hardcoded default → Info), ensuring the plugin manifest takes effect.
-pub fn make_envelope(
-    source: &str,
-    payload: serde_json::Value,
-    tags: Vec<String>,
-) -> AlertEnvelope {
+pub fn make_envelope(source: &str, payload: serde_json::Value, tags: Vec<String>) -> AlertEnvelope {
     AlertEnvelope {
         schema_version: ALERT_SCHEMA_VERSION,
         event_id: gen_event_id(),
@@ -1066,12 +1115,7 @@ fn render_into(
             // find }}
             let close = match template[i + 2..].find("}}") {
                 Some(c) => i + 2 + c,
-                None => {
-                    return Err(format!(
-                        "template: unclosed placeholder at offset {}",
-                        i
-                    ))
-                }
+                None => return Err(format!("template: unclosed placeholder at offset {}", i)),
             };
             let expr = template[i + 2..close].trim();
             if let Some(rest) = expr.strip_prefix("#if ") {
@@ -1087,13 +1131,8 @@ fn render_into(
                 if let Some(else_idx) = if_body_str.rfind("{{else}}") {
                     let else_body_start_in_main = body_start + else_idx + 8;
                     let mut else_scratch = String::new();
-                    let _ = render_into(
-                        template,
-                        env,
-                        &mut else_scratch,
-                        else_body_start_in_main,
-                        1,
-                    )?;
+                    let _ =
+                        render_into(template, env, &mut else_scratch, else_body_start_in_main, 1)?;
                     let cond = eval_condition(cond_expr, env)?;
                     if cond {
                         out.push_str(&if_body_str[..else_idx]);
@@ -1119,7 +1158,7 @@ fn render_into(
                 };
                 let body_raw = &template[body_start..body_start + end_rel];
                 let after_each = body_start + end_rel + 9; // skip past {{/each}}
-                // fetch the array
+                                                           // fetch the array
                 let arr = lookup_path_array(env, path).unwrap_or_default();
                 for item in arr {
                     // inside the block, resolve via `{{this}}` / `{{this.x}}`
@@ -1191,10 +1230,7 @@ fn render_each_body(
             let expr = body[i + 2..close].trim();
             // nested #if / #each inside an each block is forbidden (simplified implementation)
             if expr.starts_with('#') {
-                return Err(format!(
-                    "nested block not supported in each: {}",
-                    expr
-                ));
+                return Err(format!("nested block not supported in each: {}", expr));
             }
             let val = lookup_path_string(env, expr);
             out.push_str(&val);
@@ -1455,7 +1491,11 @@ pub fn lint_template(template: &str) -> Vec<TemplateDiagnostic> {
             continue;
         }
         // ordinary char (UTF-8 aware)
-        let ch_len = template[i..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+        let ch_len = template[i..]
+            .chars()
+            .next()
+            .map(|c| c.len_utf8())
+            .unwrap_or(1);
         i += ch_len;
     }
     // stack not empty → unclosed block
@@ -1562,7 +1602,9 @@ pub struct TemplatePreset {
     pub changelog: String,
 }
 
-fn default_template_preset_version() -> u32 { 1 }
+fn default_template_preset_version() -> u32 {
+    1
+}
 
 /// Phase 59 — YAML / JSON document schema. The `version` field is used for future schema migration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1572,7 +1614,9 @@ pub struct PresetYamlDoc {
     pub presets: Vec<TemplatePreset>,
 }
 
-fn default_preset_doc_version() -> u32 { 1 }
+fn default_preset_doc_version() -> u32 {
+    1
+}
 
 /// Phase 61 — Current YAML/JSON document schema version. Bump when new fields are added to `TemplatePreset`.
 pub const CURRENT_DOC_VERSION: u32 = 1;
@@ -1610,22 +1654,29 @@ fn migrate_v0_to_v1(mut doc: PresetYamlDoc) -> Result<PresetYamlDoc, String> {
 
 /// Phase 61 — Global migration table. Sorted by `from` ascending; `migrate_preset_yaml` finds the next step and runs it in turn.
 /// Currently only `0 → 1`. When Phase 62+ adds fields, bump CURRENT_DOC_VERSION and append an entry.
-pub const MIGRATORS: &[PresetMigration] = &[
-    PresetMigration { from: 0, to: 1, name: "v0_to_v1", migrate: migrate_v0_to_v1 },
-];
+pub const MIGRATORS: &[PresetMigration] = &[PresetMigration {
+    from: 0,
+    to: 1,
+    name: "v0_to_v1",
+    migrate: migrate_v0_to_v1,
+}];
 
 /// Phase 61 — Parse YAML / JSON and upgrade along the MIGRATORS chain to CURRENT_DOC_VERSION.
 /// Returns (migrated_doc, applied_migration_names) — the former for upsert, the latter for the frontend import notice.
 pub fn migrate_preset_yaml(yaml: &str) -> Result<(PresetYamlDoc, Vec<&'static str>), String> {
-    let mut doc: PresetYamlDoc = serde_yaml::from_str(yaml)
-        .map_err(|e| format!("yaml parse: {}", e))?;
+    let mut doc: PresetYamlDoc =
+        serde_yaml::from_str(yaml).map_err(|e| format!("yaml parse: {}", e))?;
     let mut applied: Vec<&'static str> = Vec::new();
     while doc.version < CURRENT_DOC_VERSION {
-        let next = MIGRATORS.iter().find(|m| m.from == doc.version)
-            .ok_or_else(|| format!(
-                "no migrator available for doc version {} (current = {})",
-                doc.version, CURRENT_DOC_VERSION
-            ))?;
+        let next = MIGRATORS
+            .iter()
+            .find(|m| m.from == doc.version)
+            .ok_or_else(|| {
+                format!(
+                    "no migrator available for doc version {} (current = {})",
+                    doc.version, CURRENT_DOC_VERSION
+                )
+            })?;
         let from = doc.version;
         doc = (next.migrate)(doc)?;
         // defensive: if the migrator did not update version correctly, fix it manually here
@@ -1643,7 +1694,9 @@ pub fn migrate_preset_yaml(yaml: &str) -> Result<(PresetYamlDoc, Vec<&'static st
         applied.push(next.name);
         // guard against infinite loops: even a buggy migrator must not run forever
         if applied.len() > 16 {
-            return Err("migration chain too long (>16 steps); aborting to prevent infinite loop".into());
+            return Err(
+                "migration chain too long (>16 steps); aborting to prevent infinite loop".into(),
+            );
         }
     }
     if doc.version > CURRENT_DOC_VERSION {
@@ -1742,7 +1795,9 @@ pub fn builtin_presets() -> &'static [TemplatePreset] {
 /// Phase 59 — builtin + user presets. If storage is uninitialized, only builtins are returned.
 pub fn list_template_presets() -> Vec<TemplatePreset> {
     let mut out: Vec<TemplatePreset> = builtin_presets().to_vec();
-    let Some(store) = super::shared_store() else { return out };
+    let Some(store) = super::shared_store() else {
+        return out;
+    };
     let Ok(s) = store.lock() else { return out };
     let StoreEnum::Db(db) = &*s else { return out };
     if let Ok(user_rows) = db.list_user_template_presets() {
@@ -1769,10 +1824,13 @@ pub fn get_template_preset(kind: &str) -> Option<TemplatePreset> {
     if let Some(b) = builtin_presets().iter().find(|p| p.kind == kind).cloned() {
         return Some(b);
     }
-    let Some(store) = super::shared_store() else { return None };
+    let Some(store) = super::shared_store() else {
+        return None;
+    };
     let Ok(s) = store.lock() else { return None };
     let StoreEnum::Db(db) = &*s else { return None };
-    db.list_user_template_presets().ok()?
+    db.list_user_template_presets()
+        .ok()?
         .into_iter()
         .find(|r| r.kind == kind)
         .map(|r| TemplatePreset {
@@ -1820,13 +1878,21 @@ pub fn save_user_template_preset(p: &TemplatePreset) -> Result<TemplatePreset, S
         out.kind.clone()
     };
     let now = super::agent::now_secs();
-    out.created_at = if out.created_at == 0 { now } else { out.created_at };
+    out.created_at = if out.created_at == 0 {
+        now
+    } else {
+        out.created_at
+    };
 
     // Phase 60: the same id already exists → read the old version + created_at, auto-bump version (and keep created_at).
     let store = super::shared_store().ok_or_else(|| "store unavailable".to_string())?;
     let s = store.lock().map_err(|_| "store poisoned".to_string())?;
-    let StoreEnum::Db(db) = &*s else { return Err("sqlite store required".into()); };
-    let existing = db.list_user_template_presets().ok()
+    let StoreEnum::Db(db) = &*s else {
+        return Err("sqlite store required".into());
+    };
+    let existing = db
+        .list_user_template_presets()
+        .ok()
         .and_then(|rows| rows.into_iter().find(|r| r.id == out.id));
     if let Some(old) = existing {
         out.version = old.version.saturating_add(1).max(out.version.max(1));
@@ -1835,33 +1901,49 @@ pub fn save_user_template_preset(p: &TemplatePreset) -> Result<TemplatePreset, S
         }
     } else {
         out.version = out.version.max(1);
-        out.created_at = if out.created_at == 0 { now } else { out.created_at };
+        out.created_at = if out.created_at == 0 {
+            now
+        } else {
+            out.created_at
+        };
     }
     drop(s); // release the lock before writing (mutable borrow below)
     let mut s2 = store.lock().map_err(|_| "store poisoned".to_string())?;
-    let StoreEnum::Db(db) = &mut *s2 else { return Err("sqlite store required".into()); };
+    let StoreEnum::Db(db) = &mut *s2 else {
+        return Err("sqlite store required".into());
+    };
     let row = crate::core::storage::TemplatePresetRow {
         id: out.id.clone(),
         name: out.name.clone(),
-        description: if out.description.is_empty() { None } else { Some(out.description.clone()) },
+        description: if out.description.is_empty() {
+            None
+        } else {
+            Some(out.description.clone())
+        },
         kind: out.kind.clone(),
         template: out.template.clone(),
-        sample: if out.sample.is_empty() { None } else { Some(out.sample.clone()) },
+        sample: if out.sample.is_empty() {
+            None
+        } else {
+            Some(out.sample.clone())
+        },
         builtin: false,
         version: out.version,
-        changelog: if out.changelog.is_empty() { None } else { Some(out.changelog.clone()) },
+        changelog: if out.changelog.is_empty() {
+            None
+        } else {
+            Some(out.changelog.clone())
+        },
         created_at: out.created_at,
     };
-    db.upsert_template_preset(&row).map_err(|e| format!("save preset: {}", e))?;
+    db.upsert_template_preset(&row)
+        .map_err(|e| format!("save preset: {}", e))?;
     Ok(out)
 }
 
 /// Phase 60 — Copy a builtin preset into a new user preset (assigns a new id + user:<uuid> kind,
 /// name passed by the caller, version=1, builtin=false). Lets the user freely edit the forked copy.
-pub fn fork_builtin_preset(
-    kind: &str,
-    name: &str,
-) -> Result<TemplatePreset, String> {
+pub fn fork_builtin_preset(kind: &str, name: &str) -> Result<TemplatePreset, String> {
     let name_trimmed = name.trim();
     if name_trimmed.is_empty() {
         return Err("name required".into());
@@ -1869,7 +1951,8 @@ pub fn fork_builtin_preset(
     if name_trimmed.len() > 64 {
         return Err("name too long (max 64)".into());
     }
-    let src = builtin_presets().iter()
+    let src = builtin_presets()
+        .iter()
         .find(|p| p.kind == kind)
         .cloned()
         .ok_or_else(|| format!("unknown builtin kind: {}", kind))?;
@@ -1889,33 +1972,57 @@ pub fn fork_builtin_preset(
     let row = crate::core::storage::TemplatePresetRow {
         id: out.id.clone(),
         name: out.name.clone(),
-        description: if out.description.is_empty() { None } else { Some(out.description.clone()) },
+        description: if out.description.is_empty() {
+            None
+        } else {
+            Some(out.description.clone())
+        },
         kind: out.kind.clone(),
         template: out.template.clone(),
-        sample: if out.sample.is_empty() { None } else { Some(out.sample.clone()) },
+        sample: if out.sample.is_empty() {
+            None
+        } else {
+            Some(out.sample.clone())
+        },
         builtin: false,
         version: out.version,
-        changelog: if out.changelog.is_empty() { None } else { Some(out.changelog.clone()) },
+        changelog: if out.changelog.is_empty() {
+            None
+        } else {
+            Some(out.changelog.clone())
+        },
         created_at: out.created_at,
     };
     let store = super::shared_store().ok_or_else(|| "store unavailable".to_string())?;
     let mut s = store.lock().map_err(|_| "store poisoned".to_string())?;
-    let StoreEnum::Db(db) = &mut *s else { return Err("sqlite store required".into()); };
-    db.upsert_template_preset(&row).map_err(|e| format!("fork preset: {}", e))?;
+    let StoreEnum::Db(db) = &mut *s else {
+        return Err("sqlite store required".into());
+    };
+    db.upsert_template_preset(&row)
+        .map_err(|e| format!("fork preset: {}", e))?;
     Ok(out)
 }
 
 /// Phase 59 — Delete only user presets (builtins untouched). Returns true when something was actually deleted.
 pub fn delete_user_template_preset(id: &str) -> bool {
-    let Some(store) = super::shared_store() else { return false };
-    let Ok(mut s) = store.lock() else { return false };
-    let StoreEnum::Db(db) = &mut *s else { return false };
+    let Some(store) = super::shared_store() else {
+        return false;
+    };
+    let Ok(mut s) = store.lock() else {
+        return false;
+    };
+    let StoreEnum::Db(db) = &mut *s else {
+        return false;
+    };
     db.delete_template_preset(id)
 }
 
 /// Phase 59 — Serialize the preset list to YAML (serde_yaml also accepts JSON input).
 pub fn export_presets_to_yaml(presets: &[TemplatePreset]) -> Result<String, String> {
-    let doc = PresetYamlDoc { version: 1, presets: presets.to_vec() };
+    let doc = PresetYamlDoc {
+        version: 1,
+        presets: presets.to_vec(),
+    };
     serde_yaml::to_string(&doc).map_err(|e| format!("yaml serialize: {}", e))
 }
 
@@ -1926,7 +2033,9 @@ pub fn import_presets_from_yaml(yaml: &str) -> Result<usize, String> {
     let (doc, _applied) = migrate_preset_yaml(yaml)?;
     let store = super::shared_store().ok_or_else(|| "store unavailable".to_string())?;
     let mut s = store.lock().map_err(|_| "store poisoned".to_string())?;
-    let StoreEnum::Db(db) = &mut *s else { return Err("sqlite store required".into()); };
+    let StoreEnum::Db(db) = &mut *s else {
+        return Err("sqlite store required".into());
+    };
     let mut count = 0;
     for mut p in doc.presets {
         p.builtin = false;
@@ -1939,13 +2048,29 @@ pub fn import_presets_from_yaml(yaml: &str) -> Result<usize, String> {
         let row = crate::core::storage::TemplatePresetRow {
             id: p.id.clone(),
             name: p.name.clone(),
-            description: if p.description.is_empty() { None } else { Some(p.description.clone()) },
-            kind: if p.kind.is_empty() { format!("user:{}", p.id) } else { p.kind.clone() },
+            description: if p.description.is_empty() {
+                None
+            } else {
+                Some(p.description.clone())
+            },
+            kind: if p.kind.is_empty() {
+                format!("user:{}", p.id)
+            } else {
+                p.kind.clone()
+            },
             template: p.template.clone(),
-            sample: if p.sample.is_empty() { None } else { Some(p.sample.clone()) },
+            sample: if p.sample.is_empty() {
+                None
+            } else {
+                Some(p.sample.clone())
+            },
             builtin: false,
             version: p.version.max(1),
-            changelog: if p.changelog.is_empty() { None } else { Some(p.changelog.clone()) },
+            changelog: if p.changelog.is_empty() {
+                None
+            } else {
+                Some(p.changelog.clone())
+            },
             created_at: p.created_at,
         };
         let _ = db.upsert_template_preset(&row);
@@ -2012,7 +2137,11 @@ fn ack_row_to_dto(row: &crate::core::storage::AckRuleRow) -> AckRule {
     // The AckRule DTO is (kind_pattern, window_secs); the row is (id, kind_pattern, ack_until, created_at).
     // Take the remaining seconds as window_secs; if already expired fall back to 1 (avoid a 0 in the bundle, which validation would reject on import).
     let now = super::agent::now_secs();
-    let remaining = if row.ack_until > now { row.ack_until - now } else { 1 };
+    let remaining = if row.ack_until > now {
+        row.ack_until - now
+    } else {
+        1
+    };
     AckRule {
         kind_pattern: row.kind_pattern.clone(),
         window_secs: remaining,
@@ -2031,9 +2160,10 @@ fn route_row_to_dto(row: &crate::core::storage::RouteRuleRow) -> RouteRule {
         target_endpoint_ids: row.target_endpoint_ids.clone(),
         recipients: row.recipients.clone(),
         tags: row.tags.clone(),
-        seen_in_last: row.seen_in_last_json.as_deref().and_then(|s| {
-            serde_json::from_str::<SeenInLastSpec>(s).ok()
-        }),
+        seen_in_last: row
+            .seen_in_last_json
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<SeenInLastSpec>(s).ok()),
     }
 }
 
@@ -2101,7 +2231,9 @@ fn default_true_for_recipient() -> bool {
     true
 }
 
-fn default_bundle_doc_version() -> u32 { 1 }
+fn default_bundle_doc_version() -> u32 {
+    1
+}
 
 /// Phase 62 — Current bundle schema version. When Phase 63+ adds fields, bump it + add a migrator.
 pub const CURRENT_BUNDLE_VERSION: u32 = 1;
@@ -2174,8 +2306,8 @@ pub fn import_alerting_bundle(
     let (body, _sig) = split_signature(&signed_yaml)?;
     // verify the signature (constant time) to prevent tampering
     verify_bundle(&signed_yaml)?;
-    let doc: AlertingBundleDoc = serde_yaml::from_str(body)
-        .map_err(|e| format!("bundle yaml parse: {}", e))?;
+    let doc: AlertingBundleDoc =
+        serde_yaml::from_str(body).map_err(|e| format!("bundle yaml parse: {}", e))?;
     if doc.version > CURRENT_BUNDLE_VERSION {
         return Err(format!(
             "bundle version {} is newer than current {}; refusing to import future schema",
@@ -2202,8 +2334,7 @@ pub fn import_alerting_bundle(
         if p.kind.is_empty() {
             p.kind = format!("user:{}", p.id);
         }
-        let _ = save_user_template_preset(&p)
-            .map_err(|e| format!("bundle preset: {}", e))?;
+        let _ = save_user_template_preset(&p).map_err(|e| format!("bundle preset: {}", e))?;
         summary.presets += 1;
     }
     // silence
@@ -2222,8 +2353,12 @@ pub fn import_alerting_bundle(
         save_recipient(rec).map_err(|e| format!("bundle recipient: {e}"))?;
         summary.recipients += 1;
     }
-    summary.total = summary.endpoints + summary.routes + summary.presets
-        + summary.silences + summary.acks + summary.recipients;
+    summary.total = summary.endpoints
+        + summary.routes
+        + summary.presets
+        + summary.silences
+        + summary.acks
+        + summary.recipients;
     Ok(summary)
 }
 
@@ -2252,7 +2387,9 @@ static SECRET_BUF: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 /// Ensure the current process secret is loaded (empty buffer → try keychain → on failure degrade to file).
 pub fn ensure_secret_loaded() -> Result<(), String> {
     {
-        let guard = SECRET_BUF.lock().map_err(|_| "secret mutex poisoned".to_string())?;
+        let guard = SECRET_BUF
+            .lock()
+            .map_err(|_| "secret mutex poisoned".to_string())?;
         if !guard.is_empty() {
             return Ok(());
         }
@@ -2260,7 +2397,9 @@ pub fn ensure_secret_loaded() -> Result<(), String> {
     // 1) prefer the keychain
     match load_from_keychain() {
         Ok(bytes) => {
-            let mut guard = SECRET_BUF.lock().map_err(|_| "secret mutex poisoned".to_string())?;
+            let mut guard = SECRET_BUF
+                .lock()
+                .map_err(|_| "secret mutex poisoned".to_string())?;
             *guard = bytes;
             return Ok(());
         }
@@ -2270,7 +2409,9 @@ pub fn ensure_secret_loaded() -> Result<(), String> {
     }
     // 2) degrade to file
     let bytes = load_or_create_file_secret()?;
-    let mut guard = SECRET_BUF.lock().map_err(|_| "secret mutex poisoned".to_string())?;
+    let mut guard = SECRET_BUF
+        .lock()
+        .map_err(|_| "secret mutex poisoned".to_string())?;
     *guard = bytes;
     Ok(())
 }
@@ -2278,7 +2419,9 @@ pub fn ensure_secret_loaded() -> Result<(), String> {
 /// Used by sign_bundle — returns an owned Vec<u8> (avoids calling Hmac while holding the lock).
 pub fn current_secret_bytes() -> Result<Vec<u8>, String> {
     ensure_secret_loaded()?;
-    let guard = SECRET_BUF.lock().map_err(|_| "secret mutex poisoned".to_string())?;
+    let guard = SECRET_BUF
+        .lock()
+        .map_err(|_| "secret mutex poisoned".to_string())?;
     Ok(guard.clone())
 }
 
@@ -2291,7 +2434,9 @@ pub fn rotate_bundle_secret() -> Result<(), String> {
         eprintln!("[opencapx] keychain rotate failed ({e}); falling back to file");
         write_fallback_secret(&bytes)?;
     }
-    let mut guard = SECRET_BUF.lock().map_err(|_| "secret mutex poisoned".to_string())?;
+    let mut guard = SECRET_BUF
+        .lock()
+        .map_err(|_| "secret mutex poisoned".to_string())?;
     *guard = bytes;
     Ok(())
 }
@@ -2340,7 +2485,8 @@ fn load_or_create_file_secret() -> Result<Vec<u8>, String> {
     if path.exists() {
         let mut f = std::fs::File::open(&path).map_err(|e| format!("open fallback: {e}"))?;
         let mut buf = Vec::new();
-        f.read_to_end(&mut buf).map_err(|e| format!("read fallback: {e}"))?;
+        f.read_to_end(&mut buf)
+            .map_err(|e| format!("read fallback: {e}"))?;
         if buf.len() != 32 {
             return Err(format!("fallback secret length {} != 32", buf.len()));
         }
@@ -2359,7 +2505,8 @@ fn write_fallback_secret(bytes: &[u8]) -> Result<(), String> {
         std::fs::create_dir_all(parent).map_err(|e| format!("mkdir fallback: {e}"))?;
     }
     let mut f = std::fs::File::create(&path).map_err(|e| format!("create fallback: {e}"))?;
-    f.write_all(bytes).map_err(|e| format!("write fallback: {e}"))?;
+    f.write_all(bytes)
+        .map_err(|e| format!("write fallback: {e}"))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -2383,8 +2530,7 @@ pub fn reset_secret_buffer_for_test() {
 /// Phase 65: the secret goes through a lazy accessor; sign_bundle no longer takes a `_secret` argument.
 pub fn sign_bundle(yaml_body: &str) -> Result<String, String> {
     let secret = current_secret_bytes()?;
-    let mut mac = HmacSha256::new_from_slice(&secret)
-        .map_err(|e| format!("hmac init: {}", e))?;
+    let mut mac = HmacSha256::new_from_slice(&secret).map_err(|e| format!("hmac init: {}", e))?;
     mac.update(yaml_body.as_bytes());
     let sig = mac.finalize().into_bytes();
     let sig_hex = sig.iter().map(|b| format!("{:02x}", b)).collect::<String>();
@@ -2398,8 +2544,7 @@ pub fn sign_bundle(yaml_body: &str) -> Result<String, String> {
 pub fn verify_bundle(signed_yaml: &str) -> Result<(), String> {
     let (body, sig_hex) = split_signature(signed_yaml)?;
     let secret = current_secret_bytes()?;
-    let mut mac = HmacSha256::new_from_slice(&secret)
-        .map_err(|e| format!("hmac init: {}", e))?;
+    let mut mac = HmacSha256::new_from_slice(&secret).map_err(|e| format!("hmac init: {}", e))?;
     mac.update(body.as_bytes());
     let expected = mac.finalize().into_bytes();
     let provided = decode_hex(&sig_hex)?;
@@ -2459,7 +2604,9 @@ fn split_signature(signed_yaml: &str) -> Result<(&str, String), String> {
     } else {
         rest
     };
-    let end = rest.find(|c: char| c == '"' || c == '\n' || c == ' ').unwrap_or(rest.len());
+    let end = rest
+        .find(|c: char| c == '"' || c == '\n' || c == ' ')
+        .unwrap_or(rest.len());
     let sig = rest[..end].to_string();
     Ok((body, sig))
 }
@@ -2472,9 +2619,9 @@ struct EncryptedEnvelope {
     algorithm: String,
     kdf: String,
     iterations: u32,
-    salt: String,         // base64
-    nonce: String,         // base64
-    ciphertext: String,    // base64
+    salt: String,       // base64
+    nonce: String,      // base64
+    ciphertext: String, // base64
 }
 
 /// Phase 64 — Encrypt the whole signed YAML with a passphrase (using AES-256-GCM + a PBKDF2-SHA256-derived key).
@@ -2497,8 +2644,7 @@ pub fn encrypt_bundle(signed_yaml: &str, passphrase: &str) -> Result<String, Str
     let iterations = 100_000u32;
     let mut key = [0u8; 32];
     pbkdf2_hmac::<Sha256>(passphrase.as_bytes(), &salt, iterations, &mut key);
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| format!("aes init: {}", e))?;
+    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("aes init: {}", e))?;
     let nonce = Nonce::from_slice(&nonce_bytes);
     let ciphertext = cipher
         .encrypt(nonce, signed_yaml.as_bytes())
@@ -2523,13 +2669,17 @@ pub fn decrypt_bundle(envelope_json: &str, passphrase: &str) -> Result<String, S
     use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
     use pbkdf2::pbkdf2_hmac;
 
-    let env: EncryptedEnvelope = serde_json::from_str(envelope_json)
-        .map_err(|e| format!("envelope parse: {}", e))?;
+    let env: EncryptedEnvelope =
+        serde_json::from_str(envelope_json).map_err(|e| format!("envelope parse: {}", e))?;
     if env.algorithm != "aes-256-gcm-pbkdf2-sha256" {
         return Err(format!("unsupported algorithm: {}", env.algorithm));
     }
-    let salt = B64.decode(&env.salt).map_err(|e| format!("salt decode: {}", e))?;
-    let nonce_bytes = B64.decode(&env.nonce).map_err(|e| format!("nonce decode: {}", e))?;
+    let salt = B64
+        .decode(&env.salt)
+        .map_err(|e| format!("salt decode: {}", e))?;
+    let nonce_bytes = B64
+        .decode(&env.nonce)
+        .map_err(|e| format!("nonce decode: {}", e))?;
     let ciphertext = B64
         .decode(&env.ciphertext)
         .map_err(|e| format!("ciphertext decode: {}", e))?;
@@ -2538,8 +2688,7 @@ pub fn decrypt_bundle(envelope_json: &str, passphrase: &str) -> Result<String, S
     }
     let mut key = [0u8; 32];
     pbkdf2_hmac::<Sha256>(passphrase.as_bytes(), &salt, env.iterations, &mut key);
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| format!("aes init: {}", e))?;
+    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| format!("aes init: {}", e))?;
     let nonce = Nonce::from_slice(&nonce_bytes);
     let plaintext = cipher
         .decrypt(nonce, ciphertext.as_ref())
@@ -2570,7 +2719,9 @@ fn decode_bundle_input(input: &str, passphrase: Option<&str>) -> Result<String, 
 fn lookup_path_value<'a>(env: &'a AlertEnvelope, path: &str) -> serde_json::Value {
     let path = path.trim();
     if let Some(rest) = path.strip_prefix("payload.") {
-        return lookup_json_path(&env.payload, rest).cloned().unwrap_or(serde_json::Value::Null);
+        return lookup_json_path(&env.payload, rest)
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
     }
     match path {
         "source" => serde_json::Value::String(env.source.clone()),
@@ -2579,7 +2730,10 @@ fn lookup_path_value<'a>(env: &'a AlertEnvelope, path: &str) -> serde_json::Valu
         "event_id" => serde_json::Value::String(env.event_id.clone()),
         "schema_version" => serde_json::Value::Number(env.schema_version.into()),
         "tags" => serde_json::Value::Array(
-            env.tags.iter().map(|s| serde_json::Value::String(s.clone())).collect(),
+            env.tags
+                .iter()
+                .map(|s| serde_json::Value::String(s.clone()))
+                .collect(),
         ),
         _ => serde_json::Value::Null,
     }
@@ -2686,10 +2840,9 @@ pub struct AlertingManifest {
 /// Each layer's `hit` marks whether it actually took effect for that source.
 pub fn severity_inheritance_chain(source: &str) -> Vec<SeverityLink> {
     let user_hit = severity_hint_lookup(source, "user").is_some();
-    let manifest_row = crate::core::storage::with_store(|s| {
-        s.get_alerting_severity_hint(source, "manifest")
-    })
-    .flatten();
+    let manifest_row =
+        crate::core::storage::with_store(|s| s.get_alerting_severity_hint(source, "manifest"))
+            .flatten();
     let manifest_hit = manifest_row.is_some() && !user_hit;
     let default_hit = manifest_row.is_none() && !user_hit;
     let mut chain = Vec::with_capacity(4);
@@ -2727,16 +2880,13 @@ pub fn severity_inheritance_chain(source: &str) -> Vec<SeverityLink> {
 /// Phase 69 — Produce the source's effective severity + which layer was hit.
 pub fn effective_severity_with_reason(source: &str) -> (Severity, SeverityLink) {
     let chain = severity_inheritance_chain(source);
-    let hit_link = chain
-        .into_iter()
-        .find(|l| l.hit)
-        .unwrap_or(SeverityLink {
-            policy: SeverityPolicy::PluginDefault,
-            severity: Some(Severity::Info),
-            source: source.to_string(),
-            plugin_id: None,
-            hit: false,
-        });
+    let hit_link = chain.into_iter().find(|l| l.hit).unwrap_or(SeverityLink {
+        policy: SeverityPolicy::PluginDefault,
+        severity: Some(Severity::Info),
+        source: source.to_string(),
+        plugin_id: None,
+        hit: false,
+    });
     (hit_link.severity.unwrap_or(Severity::Info), hit_link)
 }
 
@@ -2912,7 +3062,9 @@ pub fn preview_alerting_endpoint_severity(
     let targets: Vec<WebhookEndpoint> = {
         let store = super::shared_store().ok_or_else(|| "store not initialized".to_string())?;
         let s = store.lock().map_err(|_| "store poisoned".to_string())?;
-        let StoreEnum::Db(db) = &*s else { return Err("sqlite store required".into()) };
+        let StoreEnum::Db(db) = &*s else {
+            return Err("sqlite store required".into());
+        };
         let rows = db.list_alerting_endpoints();
         match endpoint_id {
             Some(id) if !id.is_empty() => rows
@@ -2920,7 +3072,11 @@ pub fn preview_alerting_endpoint_severity(
                 .find(|r| r.id == id)
                 .map(|r| vec![endpoint_row_to_dto(&r)])
                 .unwrap_or_default(),
-            _ => rows.iter().filter(|r| r.enabled).map(endpoint_row_to_dto).collect(),
+            _ => rows
+                .iter()
+                .filter(|r| r.enabled)
+                .map(endpoint_row_to_dto)
+                .collect(),
         }
         // the lock drops at the end of the block
     };
@@ -3180,27 +3336,26 @@ pub fn simulate_aggregations(
     };
 
     // peek bucket without mutation: clone events + last_fired
-    let (bucket_events_in_window, last_fired) =
-        match aggregation_state().lock() {
-            Ok(state) => {
-                let bucket = state.get(source);
-                let mut events = match bucket {
-                    Some(b) => b.events.clone(),
-                    None => std::collections::VecDeque::new(),
-                };
-                let last_fired = bucket.map(|b| b.last_fired).unwrap_or(0);
-                // prune expired events (consistent with evaluate_aggregations)
-                while let Some(&front) = events.front() {
-                    if now_secs.saturating_sub(front) > rule.window_secs {
-                        events.pop_front();
-                    } else {
-                        break;
-                    }
+    let (bucket_events_in_window, last_fired) = match aggregation_state().lock() {
+        Ok(state) => {
+            let bucket = state.get(source);
+            let mut events = match bucket {
+                Some(b) => b.events.clone(),
+                None => std::collections::VecDeque::new(),
+            };
+            let last_fired = bucket.map(|b| b.last_fired).unwrap_or(0);
+            // prune expired events (consistent with evaluate_aggregations)
+            while let Some(&front) = events.front() {
+                if now_secs.saturating_sub(front) > rule.window_secs {
+                    events.pop_front();
+                } else {
+                    break;
                 }
-                (events.len() as u64, last_fired)
             }
-            Err(_) => (0, 0),
-        };
+            (events.len() as u64, last_fired)
+        }
+        Err(_) => (0, 0),
+    };
 
     let simulated_count = bucket_events_in_window.saturating_add(1);
     let threshold_met = simulated_count >= rule.threshold_count as u64;
@@ -3237,15 +3392,13 @@ pub fn simulate_correlations(source: &str, now_secs: u64) -> CorrelationSimulati
             propagated_severity: None,
         };
     }
-    let mut last_a: std::collections::HashMap<String, u64> =
-        match correlation_state().lock() {
-            Ok(s) => s.last_a.clone(),
-            Err(_) => std::collections::HashMap::new(),
-        };
+    let mut last_a: std::collections::HashMap<String, u64> = match correlation_state().lock() {
+        Ok(s) => s.last_a.clone(),
+        Err(_) => std::collections::HashMap::new(),
+    };
     let mut matched_a: Vec<String> = Vec::new();
     let mut matched_b: Vec<String> = Vec::new();
-    let mut a_rule_ids: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut a_rule_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
     for r in &rules {
         if aggregation_kind_matches(&r.kind_pattern_a, source) {
             last_a.insert(r.id.clone(), now_secs);
@@ -3265,10 +3418,7 @@ pub fn simulate_correlations(source: &str, now_secs: u64) -> CorrelationSimulati
         }
         if let Some(&la) = last_a.get(&r.id) {
             if now_secs.saturating_sub(la) <= r.window_secs {
-                suppress = Some((
-                    r.id.clone(),
-                    correlation_decision_severity(source),
-                ));
+                suppress = Some((r.id.clone(), correlation_decision_severity(source)));
                 break;
             }
         }
@@ -3344,8 +3494,7 @@ pub fn simulate_alerting_dispatch(
     }
     let payload_v: serde_json::Value = match payload {
         None | Some("") => serde_json::json!({}),
-        Some(s) => serde_json::from_str(s)
-            .map_err(|e| format!("invalid payload json: {}", e))?,
+        Some(s) => serde_json::from_str(s).map_err(|e| format!("invalid payload json: {}", e))?,
     };
 
     let now_secs = super::agent::now_secs();
@@ -3353,11 +3502,8 @@ pub fn simulate_alerting_dispatch(
     // Phase 74 lesson: take the endpoints snapshot inside the block first, and let the lock drop at the end of the block
     // (the later preview_endpoint_severity / simulate_* calls do not need to hold the store lock)
     let endpoint_rows: Vec<WebhookEndpoint> = {
-        let store = super::shared_store()
-            .ok_or_else(|| "store not initialized".to_string())?;
-        let s = store
-            .lock()
-            .map_err(|_| "store poisoned".to_string())?;
+        let store = super::shared_store().ok_or_else(|| "store not initialized".to_string())?;
+        let s = store.lock().map_err(|_| "store poisoned".to_string())?;
         let StoreEnum::Db(db) = &*s else {
             return Err("sqlite store required".into());
         };
@@ -3420,8 +3566,12 @@ pub fn save_user_severity_hint(source: &str, severity: &str) -> Result<SeverityH
     if source.trim().is_empty() {
         return Err("source is required".into());
     }
-    let sev = Severity::parse(severity)
-        .ok_or_else(|| format!("invalid severity: {} (expected info|warn|error|critical)", severity))?;
+    let sev = Severity::parse(severity).ok_or_else(|| {
+        format!(
+            "invalid severity: {} (expected info|warn|error|critical)",
+            severity
+        )
+    })?;
     let now = super::agent::now_secs() as i64;
     crate::core::storage::with_store(|s| {
         s.upsert_alerting_severity_hint(source, sev.as_str(), "user", None, now)
@@ -3473,7 +3623,9 @@ pub fn clear_user_severity_hints() -> usize {
 /// Load the hints declared by a manifest (called on plugin install). Added in Phase 53.
 /// Missing / no hint / invalid severity → silently skipped, without affecting the install main flow.
 pub fn install_manifest_hints(plugin_id: &str, alerting: &Option<AlertingManifest>) {
-    let Some(a) = alerting else { return; };
+    let Some(a) = alerting else {
+        return;
+    };
     let now = super::agent::now_secs() as i64;
     for (source, severity_str) in &a.severity_hints {
         if let Some(sev) = Severity::parse(severity_str) {
@@ -3581,8 +3733,12 @@ fn gen_route_id() -> String {
 
 /// List all routes (including disabled).
 pub fn list_routes() -> Vec<RouteRuleRow> {
-    let Some(store) = super::shared_store() else { return Vec::new() };
-    let Ok(s) = store.lock() else { return Vec::new() };
+    let Some(store) = super::shared_store() else {
+        return Vec::new();
+    };
+    let Ok(s) = store.lock() else {
+        return Vec::new();
+    };
     if let StoreEnum::Db(db) = &*s {
         db.list_alerting_routes()
     } else {
@@ -3598,9 +3754,15 @@ pub fn list_enabled_routes() -> Vec<RouteRuleRow> {
 /// Upsert a route (empty id = create). Keeps the old created_at to avoid a UI jump.
 pub fn save_route(rule: RouteRule) -> Result<RouteRuleRow, String> {
     validate_route(&rule)?;
-    let Some(store) = super::shared_store() else { return Err("store not initialized".into()) };
-    let Ok(mut st) = store.lock() else { return Err("store poisoned".into()) };
-    let StoreEnum::Db(db) = &mut *st else { return Err("sqlite store required".into()) };
+    let Some(store) = super::shared_store() else {
+        return Err("store not initialized".into());
+    };
+    let Ok(mut st) = store.lock() else {
+        return Err("store poisoned".into());
+    };
+    let StoreEnum::Db(db) = &mut *st else {
+        return Err("sqlite store required".into());
+    };
     let id = if rule.id.is_empty() {
         gen_route_id()
     } else {
@@ -3632,8 +3794,12 @@ pub fn save_route(rule: RouteRule) -> Result<RouteRuleRow, String> {
 }
 
 pub fn delete_route(id: &str) -> bool {
-    let Some(store) = super::shared_store() else { return false };
-    let Ok(mut s) = store.lock() else { return false };
+    let Some(store) = super::shared_store() else {
+        return false;
+    };
+    let Ok(mut s) = store.lock() else {
+        return false;
+    };
     if let StoreEnum::Db(db) = &mut *s {
         db.delete_alerting_route(id)
     } else {
@@ -3772,7 +3938,9 @@ pub fn detect_route_cycles() -> Vec<CycleReport> {
             for r2 in &routes {
                 // do not dedupe self-edges (keep them → so self-loop detection can find them)
                 if kind_matches(&spec.pattern, &r2.kind_pattern) {
-                    adj.entry(r1.name.clone()).or_default().push(r2.name.clone());
+                    adj.entry(r1.name.clone())
+                        .or_default()
+                        .push(r2.name.clone());
                 }
             }
         }
@@ -3791,11 +3959,17 @@ pub fn detect_route_cycles() -> Vec<CycleReport> {
     }
     // include isolated nodes
     let mut nodes: HashSet<String> = HashSet::new();
-    for n in &r_names { nodes.insert(n.clone()); }
-    for n in &c_names { nodes.insert(n.clone()); }
+    for n in &r_names {
+        nodes.insert(n.clone());
+    }
+    for n in &c_names {
+        nodes.insert(n.clone());
+    }
     for (k, vs) in &adj {
         nodes.insert(k.clone());
-        for v in vs { nodes.insert(v.clone()); }
+        for v in vs {
+            nodes.insert(v.clone());
+        }
     }
 
     let mut color: HashMap<String, u8> = nodes.iter().map(|n| (n.clone(), 0u8)).collect();
@@ -3864,12 +4038,7 @@ pub fn detect_route_cycles() -> Vec<CycleReport> {
 
 /// Phase 67 — recipient kind whitelist. import bundle / save_recipient validate strictly,
 /// preventing malicious yaml from writing arbitrary kinds such as cmd:rce. Extensible in Phase 68+.
-pub const RECIPIENT_KIND_WHITELIST: &[&str] = &[
-    "webhook",
-    "log:stderr",
-    "log:file",
-    "email:smtp",
-];
+pub const RECIPIENT_KIND_WHITELIST: &[&str] = &["webhook", "log:stderr", "log:file", "email:smtp"];
 
 /// Validate kind ∈ whitelist; if absent → Err (with a hint listing available kinds).
 pub fn validate_recipient_kind(kind: &str) -> Result<(), String> {
@@ -3885,9 +4054,15 @@ pub fn validate_recipient_kind(kind: &str) -> Result<(), String> {
 
 /// Phase 67 — all recipients (by created_at ASC).
 pub fn list_recipients() -> Vec<RecipientDef> {
-    let Some(store) = super::shared_store() else { return Vec::new() };
-    let Ok(st) = store.lock() else { return Vec::new() };
-    let StoreEnum::Db(db) = &*st else { return Vec::new() };
+    let Some(store) = super::shared_store() else {
+        return Vec::new();
+    };
+    let Ok(st) = store.lock() else {
+        return Vec::new();
+    };
+    let StoreEnum::Db(db) = &*st else {
+        return Vec::new();
+    };
     db.list_alerting_recipients()
         .iter()
         .map(recipient_row_to_dto)
@@ -3906,9 +4081,15 @@ pub fn save_recipient(mut rec: RecipientDef) -> Result<RecipientDef, String> {
         return Err("recipient name too long (max 64)".into());
     }
     rec.name = name.to_string();
-    let Some(store) = super::shared_store() else { return Err("store not initialized".into()) };
-    let Ok(mut st) = store.lock() else { return Err("store poisoned".into()) };
-    let StoreEnum::Db(db) = &mut *st else { return Err("sqlite store required".into()) };
+    let Some(store) = super::shared_store() else {
+        return Err("store not initialized".into());
+    };
+    let Ok(mut st) = store.lock() else {
+        return Err("store poisoned".into());
+    };
+    let StoreEnum::Db(db) = &mut *st else {
+        return Err("sqlite store required".into());
+    };
     if rec.id.is_empty() {
         rec.id = gen_event_id();
     }
@@ -3931,9 +4112,15 @@ pub fn save_recipient(mut rec: RecipientDef) -> Result<RecipientDef, String> {
 /// Phase 67 — Delete a recipient + cascade-clear refs to this id in routes.recipients.
 /// Returns (deleted, routes_cleared).
 pub fn delete_recipient(id: &str) -> Result<(bool, usize), String> {
-    let Some(store) = super::shared_store() else { return Err("store not initialized".into()) };
-    let Ok(mut st) = store.lock() else { return Err("store poisoned".into()) };
-    let StoreEnum::Db(db) = &mut *st else { return Err("sqlite store required".into()) };
+    let Some(store) = super::shared_store() else {
+        return Err("store not initialized".into());
+    };
+    let Ok(mut st) = store.lock() else {
+        return Err("store poisoned".into());
+    };
+    let StoreEnum::Db(db) = &mut *st else {
+        return Err("sqlite store required".into());
+    };
     Ok(db.delete_alerting_recipient(id))
 }
 
@@ -3994,11 +4181,7 @@ pub fn test_recipient(id: &str) -> Result<String, String> {
                 .get("from")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let to = rec
-                .config
-                .get("to")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let to = rec.config.get("to").and_then(|v| v.as_str()).unwrap_or("");
             format!("email:smtp:{relay}:{port}:{from}:{to}")
         }
         other => return Err(format!("unknown recipient kind: {other}")),
@@ -4024,7 +4207,10 @@ fn recipient_row_to_dto(row: &crate::core::storage::RecipientRow) -> RecipientDe
 
 /// Take a `Value` reference from the payload using a simple JSON-pointer-style path (`a.b.c`).
 /// Array indices are written as `a.0.b`; not found → None.
-fn payload_path_get<'a>(payload: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+fn payload_path_get<'a>(
+    payload: &'a serde_json::Value,
+    path: &str,
+) -> Option<&'a serde_json::Value> {
     let mut cur = payload;
     for seg in path.split('.') {
         if seg.is_empty() {
@@ -4147,22 +4333,32 @@ pub fn match_route(kind: &str, payload: &serde_json::Value) -> Option<RouteRuleR
 
 /// YAML import: parse + validate + atomic replace. Returns the number inserted.
 pub fn import_routes_yaml(yaml: &str) -> Result<usize, String> {
-    let doc: RouteRuleYamlDoc = serde_yaml::from_str(yaml)
-        .map_err(|e| format!("yaml parse error: {}", e))?;
+    let doc: RouteRuleYamlDoc =
+        serde_yaml::from_str(yaml).map_err(|e| format!("yaml parse error: {}", e))?;
     if doc.rules.is_empty() {
         return Err("yaml contains no rules".into());
     }
     for r in &doc.rules {
         validate_route(r)?;
     }
-    let Some(store) = super::shared_store() else { return Err("store not initialized".into()) };
-    let Ok(mut s) = store.lock() else { return Err("store poisoned".into()) };
-    let StoreEnum::Db(db) = &mut *s else { return Err("sqlite store required".into()) };
+    let Some(store) = super::shared_store() else {
+        return Err("store not initialized".into());
+    };
+    let Ok(mut s) = store.lock() else {
+        return Err("store poisoned".into());
+    };
+    let StoreEnum::Db(db) = &mut *s else {
+        return Err("sqlite store required".into());
+    };
     db.clear_alerting_routes();
     let now_secs = super::agent::now_secs();
     for r in doc.rules {
         let row = RouteRuleRow {
-            id: if r.id.is_empty() { gen_route_id() } else { r.id },
+            id: if r.id.is_empty() {
+                gen_route_id()
+            } else {
+                r.id
+            },
             name: r.name,
             priority: r.priority,
             enabled: r.enabled,
@@ -4196,9 +4392,10 @@ pub fn export_routes_yaml() -> Result<String, String> {
             target_endpoint_ids: r.target_endpoint_ids,
             recipients: r.recipients,
             tags: r.tags,
-            seen_in_last: r.seen_in_last_json.as_deref().and_then(|s| {
-                serde_json::from_str::<SeenInLastSpec>(s).ok()
-            }),
+            seen_in_last: r
+                .seen_in_last_json
+                .as_deref()
+                .and_then(|s| serde_json::from_str::<SeenInLastSpec>(s).ok()),
         })
         .collect();
     let doc = RouteRuleYamlDoc { version: 1, rules };
@@ -4208,8 +4405,8 @@ pub fn export_routes_yaml() -> Result<String, String> {
 /// Dry-run: run a `(source, payload)` against the current route table to see which one hits.
 /// payload_json is a string (so the frontend can pass a JSON literal directly).
 pub fn dry_run_route(source: &str, payload_json: &str) -> Result<Option<RouteRuleRow>, String> {
-    let payload: serde_json::Value = serde_json::from_str(payload_json)
-        .map_err(|e| format!("payload not valid json: {}", e))?;
+    let payload: serde_json::Value =
+        serde_json::from_str(payload_json).map_err(|e| format!("payload not valid json: {}", e))?;
     Ok(match_route(source, &payload))
 }
 
@@ -4293,8 +4490,12 @@ fn gen_silence_id() -> String {
 
 /// List all silences.
 pub fn list_silences() -> Vec<SilenceRuleRow> {
-    let Some(store) = super::shared_store() else { return Vec::new() };
-    let Ok(s) = store.lock() else { return Vec::new() };
+    let Some(store) = super::shared_store() else {
+        return Vec::new();
+    };
+    let Ok(s) = store.lock() else {
+        return Vec::new();
+    };
     if let StoreEnum::Db(db) = &*s {
         db.list_alerting_silences()
     } else {
@@ -4305,9 +4506,15 @@ pub fn list_silences() -> Vec<SilenceRuleRow> {
 /// Upsert a silence (empty id = create). `created_at` keeps the old value (avoids a time jump in the UI).
 pub fn save_silence(s: SilenceRule) -> Result<SilenceRuleRow, String> {
     validate_silence(&s)?;
-    let Some(store) = super::shared_store() else { return Err("store not initialized".into()) };
-    let Ok(mut st) = store.lock() else { return Err("store poisoned".into()) };
-    let StoreEnum::Db(db) = &mut *st else { return Err("sqlite store required".into()) };
+    let Some(store) = super::shared_store() else {
+        return Err("store not initialized".into());
+    };
+    let Ok(mut st) = store.lock() else {
+        return Err("store poisoned".into());
+    };
+    let StoreEnum::Db(db) = &mut *st else {
+        return Err("sqlite store required".into());
+    };
     let id = if s.id.is_empty() {
         gen_silence_id()
     } else {
@@ -4336,8 +4543,12 @@ pub fn save_silence(s: SilenceRule) -> Result<SilenceRuleRow, String> {
 }
 
 pub fn delete_silence(id: &str) -> bool {
-    let Some(store) = super::shared_store() else { return false };
-    let Ok(mut s) = store.lock() else { return false };
+    let Some(store) = super::shared_store() else {
+        return false;
+    };
+    let Ok(mut s) = store.lock() else {
+        return false;
+    };
     if let StoreEnum::Db(db) = &mut *s {
         db.delete_alerting_silence(id)
     } else {
@@ -4348,7 +4559,9 @@ pub fn delete_silence(id: &str) -> bool {
 /// Determine whether `kind` hits any active silence at `now_ts`.
 /// Hit condition: now ∈ [starts_at, ends_at) + weekday bitmask hit + hour in [start_hour, end_hour).
 pub fn is_silenced(kind: &str, now_ts: u64) -> bool {
-    let Some(store) = super::shared_store() else { return false };
+    let Some(store) = super::shared_store() else {
+        return false;
+    };
     let Ok(s) = store.lock() else { return false };
     let StoreEnum::Db(db) = &*s else { return false };
     for r in db.list_active_silences(now_ts) {
@@ -4374,8 +4587,12 @@ pub fn is_silenced(kind: &str, now_ts: u64) -> bool {
 
 /// List all acks (including expired — the UI filters them itself).
 pub fn list_acks() -> Vec<AckRuleRow> {
-    let Some(store) = super::shared_store() else { return Vec::new() };
-    let Ok(s) = store.lock() else { return Vec::new() };
+    let Some(store) = super::shared_store() else {
+        return Vec::new();
+    };
+    let Ok(s) = store.lock() else {
+        return Vec::new();
+    };
     if let StoreEnum::Db(db) = &*s {
         db.list_alerting_acks()
     } else {
@@ -4391,9 +4608,15 @@ pub fn ack_kind(kind_pattern: String, window_secs: u64) -> Result<AckRuleRow, St
     if window_secs == 0 || window_secs > 7 * 86400 {
         return Err("window_secs must be 1..=604800".into());
     }
-    let Some(store) = super::shared_store() else { return Err("store not initialized".into()) };
-    let Ok(mut s) = store.lock() else { return Err("store poisoned".into()) };
-    let StoreEnum::Db(db) = &mut *s else { return Err("sqlite store required".into()) };
+    let Some(store) = super::shared_store() else {
+        return Err("store not initialized".into());
+    };
+    let Ok(mut s) = store.lock() else {
+        return Err("store poisoned".into());
+    };
+    let StoreEnum::Db(db) = &mut *s else {
+        return Err("sqlite store required".into());
+    };
     let id = {
         use std::sync::atomic::{AtomicU64, Ordering};
         static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -4416,8 +4639,12 @@ pub fn ack_kind(kind_pattern: String, window_secs: u64) -> Result<AckRuleRow, St
 }
 
 pub fn delete_ack(id: &str) -> bool {
-    let Some(store) = super::shared_store() else { return false };
-    let Ok(mut s) = store.lock() else { return false };
+    let Some(store) = super::shared_store() else {
+        return false;
+    };
+    let Ok(mut s) = store.lock() else {
+        return false;
+    };
     if let StoreEnum::Db(db) = &mut *s {
         db.delete_alerting_ack(id)
     } else {
@@ -4426,7 +4653,9 @@ pub fn delete_ack(id: &str) -> bool {
 }
 
 pub fn clear_expired_acks() -> usize {
-    let Some(store) = super::shared_store() else { return 0 };
+    let Some(store) = super::shared_store() else {
+        return 0;
+    };
     let Ok(mut s) = store.lock() else { return 0 };
     if let StoreEnum::Db(db) = &mut *s {
         db.clear_expired_acks(super::agent::now_secs())
@@ -4437,7 +4666,9 @@ pub fn clear_expired_acks() -> usize {
 
 /// Determine whether `kind` is inside some ack window.
 pub fn is_acked(kind: &str, now_ts: u64) -> bool {
-    let Some(store) = super::shared_store() else { return false };
+    let Some(store) = super::shared_store() else {
+        return false;
+    };
     let Ok(s) = store.lock() else { return false };
     let StoreEnum::Db(db) = &*s else { return false };
     db.list_active_acks(now_ts)
@@ -4505,9 +4736,7 @@ pub fn load_retry_config() -> RetryConfig {
 pub fn save_retry_config(cfg: &RetryConfig) -> Result<(), String> {
     validate_retry(cfg)?;
     let store = super::shared_store().ok_or_else(|| "store not initialized".to_string())?;
-    let mut s = store
-        .lock()
-        .map_err(|_| "store poisoned".to_string())?;
+    let mut s = store.lock().map_err(|_| "store poisoned".to_string())?;
     let json = serde_json::to_string(cfg).map_err(|e| format!("serialize: {}", e))?;
     s.set_setting(RETRY_CONFIG_KEY, &json);
     Ok(())
@@ -4549,7 +4778,9 @@ pub fn enqueue_failed_delivery(
     last_error: &str,
     endpoint_id: Option<&str>,
 ) {
-    let Some(store) = super::shared_store() else { return; };
+    let Some(store) = super::shared_store() else {
+        return;
+    };
     let Ok(mut s) = store.lock() else { return };
     let id = gen_delivery_id();
     if let StoreEnum::Db(db) = &mut *s {
@@ -4569,8 +4800,12 @@ pub fn enqueue_failed_delivery(
 
 /// List dead letters for a state (state=None lists all). limit defaults to 100, clamped to [1, 1000].
 pub fn list_failed_deliveries(state: Option<&str>, limit: usize) -> Vec<FailedDeliveryRow> {
-    let Some(store) = super::shared_store() else { return Vec::new() };
-    let Ok(s) = store.lock() else { return Vec::new() };
+    let Some(store) = super::shared_store() else {
+        return Vec::new();
+    };
+    let Ok(s) = store.lock() else {
+        return Vec::new();
+    };
     if let StoreEnum::Db(db) = &*s {
         db.list_failed_deliveries(state, limit.max(1).min(1000))
     } else {
@@ -4580,8 +4815,12 @@ pub fn list_failed_deliveries(state: Option<&str>, limit: usize) -> Vec<FailedDe
 
 /// Manually retry one — resets attempts=0 / state=pending / next_retry_ts=now.
 pub fn manual_retry_failed_delivery(id: &str) -> bool {
-    let Some(store) = super::shared_store() else { return false };
-    let Ok(mut s) = store.lock() else { return false };
+    let Some(store) = super::shared_store() else {
+        return false;
+    };
+    let Ok(mut s) = store.lock() else {
+        return false;
+    };
     if let StoreEnum::Db(db) = &mut *s {
         db.reset_failed_delivery_for_retry(id, super::agent::now_secs());
         true
@@ -4592,8 +4831,12 @@ pub fn manual_retry_failed_delivery(id: &str) -> bool {
 
 /// Delete a dead letter.
 pub fn delete_failed_delivery(id: &str) -> bool {
-    let Some(store) = super::shared_store() else { return false };
-    let Ok(mut s) = store.lock() else { return false };
+    let Some(store) = super::shared_store() else {
+        return false;
+    };
+    let Ok(mut s) = store.lock() else {
+        return false;
+    };
     if let StoreEnum::Db(db) = &mut *s {
         db.delete_failed_delivery(id)
     } else {
@@ -4603,7 +4846,9 @@ pub fn delete_failed_delivery(id: &str) -> bool {
 
 /// Clear all exhausted + resolved rows (for the user emptying the panel).
 pub fn clear_resolved_failed_deliveries() -> usize {
-    let Some(store) = super::shared_store() else { return 0 };
+    let Some(store) = super::shared_store() else {
+        return 0;
+    };
     let Ok(mut s) = store.lock() else { return 0 };
     if let StoreEnum::Db(db) = &mut *s {
         db.clear_resolved_failed_deliveries()
@@ -4616,7 +4861,9 @@ pub fn clear_resolved_failed_deliveries() -> usize {
 pub fn prune_old_failed_deliveries() {
     let cfg = load_retry_config();
     let now = super::agent::now_secs();
-    let Some(store) = super::shared_store() else { return };
+    let Some(store) = super::shared_store() else {
+        return;
+    };
     let Ok(mut s) = store.lock() else { return };
     if let StoreEnum::Db(db) = &mut *s {
         db.prune_old_failed_deliveries(now, cfg.retention_days);
@@ -4628,7 +4875,9 @@ pub fn prune_old_failed_deliveries() {
 /// Phase 49: if the dead letter carries an endpoint_id, try to fetch that endpoint's headers+secret; otherwise use empty headers.
 pub fn retry_due_deliveries(now_ts: u64) -> (usize, usize) {
     let due = {
-        let Some(store) = super::shared_store() else { return (0, 0) };
+        let Some(store) = super::shared_store() else {
+            return (0, 0);
+        };
         let Ok(s) = store.lock() else { return (0, 0) };
         match &*s {
             StoreEnum::Db(db) => db.fetch_due_failed_deliveries(now_ts, MAX_FETCH_PER_SCAN),
@@ -4706,14 +4955,24 @@ pub fn retry_due_deliveries(now_ts: u64) -> (usize, usize) {
                             )
                         }
                     }
-                    None => (Vec::new(), row.payload.clone(), "application/json".to_string()),
+                    None => (
+                        Vec::new(),
+                        row.payload.clone(),
+                        "application/json".to_string(),
+                    ),
                 },
-                _ => (Vec::new(), row.payload.clone(), "application/json".to_string()),
+                _ => (
+                    Vec::new(),
+                    row.payload.clone(),
+                    "application/json".to_string(),
+                ),
             }
         };
 
         let result = send_http_with_body(&row.url, &headers, &body_str, &content_type);
-        let Some(store) = super::shared_store() else { continue };
+        let Some(store) = super::shared_store() else {
+            continue;
+        };
         let Ok(mut s) = store.lock() else { continue };
         let StoreEnum::Db(db) = &mut *s else { continue };
         match result {
@@ -4798,13 +5057,15 @@ pub struct AggregationRule {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AggregationDecision {
     Pass,
-    Downgrade(Severity, Severity),                 // (target_severity, propagated_severity)
-    Suppress { propagated_severity: Severity },    // Phase 71
+    Downgrade(Severity, Severity), // (target_severity, propagated_severity)
+    Suppress {
+        propagated_severity: Severity,
+    }, // Phase 71
     Merge {
         count: u64,
         since: u64,
         last_payload: serde_json::Value,
-        propagated_severity: Severity,             // Phase 71
+        propagated_severity: Severity, // Phase 71
     },
 }
 
@@ -4821,8 +5082,7 @@ static AGGREGATION_STATE: std::sync::OnceLock<
 
 fn aggregation_state(
 ) -> &'static std::sync::Mutex<std::collections::HashMap<String, AggregationBucket>> {
-    AGGREGATION_STATE
-        .get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+    AGGREGATION_STATE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
 fn rule_from_row(r: AggregationRuleRow) -> AggregationRule {
@@ -4976,7 +5236,7 @@ pub fn evaluate_aggregations(
             count: bucket.events.len() as u64,
             since: *bucket.events.front().unwrap_or(&now_secs),
             last_payload: payload.clone(),
-            propagated_severity: aggregation_action_severity(source),  // Phase 71
+            propagated_severity: aggregation_action_severity(source), // Phase 71
         },
         _ => AggregationDecision::Pass,
     }
@@ -5581,7 +5841,10 @@ fn escalation_redispatch(source: &str, endpoint_ids: &[String], severity: Severi
             match render_template(tpl, &env) {
                 Ok((s, ct)) => (s, ct.as_content_type().to_string()),
                 Err(e) => {
-                    eprintln!("[alerting] escalation template render error on {}: {}", ep.name, e);
+                    eprintln!(
+                        "[alerting] escalation template render error on {}: {}",
+                        ep.name, e
+                    );
                     (
                         envelope_to_json_string(&env).unwrap_or_else(|_| "null".into()),
                         "application/json".to_string(),
@@ -5649,11 +5912,9 @@ mod tests {
             n
         ));
         let _ = std::fs::remove_dir_all(&dir);
-        std::sync::Arc::new(std::sync::Mutex::new(
-            crate::core::storage::StoreEnum::Db(
-                crate::core::storage::Storage::open(&dir.join("hints.db")).unwrap(),
-            ),
-        ))
+        std::sync::Arc::new(std::sync::Mutex::new(crate::core::storage::StoreEnum::Db(
+            crate::core::storage::Storage::open(&dir.join("hints.db")).unwrap(),
+        )))
     }
 
     #[test]
@@ -5739,10 +6000,7 @@ mod tests {
     fn dedup_key_changes_with_payload() {
         let a = dedup_key("plugin.metrics.exceeded", &serde_json::json!({"x":1}));
         let b = dedup_key("plugin.metrics.exceeded", &serde_json::json!({"x":2}));
-        let c = dedup_key(
-            "plugin.metrics.exceeded",
-            &serde_json::json!({"x":1}),
-        );
+        let c = dedup_key("plugin.metrics.exceeded", &serde_json::json!({"x":1}));
         assert_ne!(a, b);
         assert_eq!(a, c); // same payload, same key
     }
@@ -6024,8 +6282,14 @@ mod tests {
             name: "crash".into(),
             ..all.clone()
         };
-        assert!(endpoint_accepts_source(&only_crash, "plugin.lifecycle.crashed"));
-        assert!(!endpoint_accepts_source(&only_crash, "plugin.metrics.exceeded"));
+        assert!(endpoint_accepts_source(
+            &only_crash,
+            "plugin.lifecycle.crashed"
+        ));
+        assert!(!endpoint_accepts_source(
+            &only_crash,
+            "plugin.metrics.exceeded"
+        ));
     }
 
     #[test]
@@ -6080,9 +6344,18 @@ mod tests {
 
     #[test]
     fn kind_matches_exact() {
-        assert!(kind_matches("capability.sla.violated", "capability.sla.violated"));
-        assert!(!kind_matches("capability.sla.violated", "capability.sla.violated.extra"));
-        assert!(!kind_matches("capability.sla.violated", "plugin.metrics.exceeded"));
+        assert!(kind_matches(
+            "capability.sla.violated",
+            "capability.sla.violated"
+        ));
+        assert!(!kind_matches(
+            "capability.sla.violated",
+            "capability.sla.violated.extra"
+        ));
+        assert!(!kind_matches(
+            "capability.sla.violated",
+            "plugin.metrics.exceeded"
+        ));
     }
 
     #[test]
@@ -6377,7 +6650,11 @@ mod tests {
     fn route_matches_kind_only_pattern() {
         let r = route_with(100, true, "plugin.metrics.*", &["ep-1"]);
         assert!(route_matches(&r, "plugin.metrics.exceeded", &payload("{}")));
-        assert!(!route_matches(&r, "capability.sla.violated", &payload("{}")));
+        assert!(!route_matches(
+            &r,
+            "capability.sla.violated",
+            &payload("{}")
+        ));
         assert!(!route_matches(&r, "plugin", &payload("{}"))); // prefix.* requires a .
     }
 
@@ -6405,12 +6682,28 @@ mod tests {
         let mut r = route_with(100, true, "*", &["ep-1"]);
         r.payload_path = Some("error".into());
         r.payload_match = Some("prefix:OutOf".into());
-        assert!(route_matches(&r, "anything", &payload(r#"{"error":"OutOfMemory"}"#)));
-        assert!(!route_matches(&r, "anything", &payload(r#"{"error":"NullPointer"}"#)));
+        assert!(route_matches(
+            &r,
+            "anything",
+            &payload(r#"{"error":"OutOfMemory"}"#)
+        ));
+        assert!(!route_matches(
+            &r,
+            "anything",
+            &payload(r#"{"error":"NullPointer"}"#)
+        ));
 
         r.payload_match = Some("contains:timeout".into());
-        assert!(route_matches(&r, "anything", &payload(r#"{"error":"connection_timeout"}"#)));
-        assert!(!route_matches(&r, "anything", &payload(r#"{"error":"reset"}"#)));
+        assert!(route_matches(
+            &r,
+            "anything",
+            &payload(r#"{"error":"connection_timeout"}"#)
+        ));
+        assert!(!route_matches(
+            &r,
+            "anything",
+            &payload(r#"{"error":"reset"}"#)
+        ));
     }
 
     #[test]
@@ -6418,8 +6711,16 @@ mod tests {
         let mut r = route_with(100, true, "*", &["ep-1"]);
         r.payload_path = Some("status".into());
         r.payload_match = Some("=ok".into());
-        assert!(route_matches(&r, "anything", &payload(r#"{"status":"ok"}"#)));
-        assert!(!route_matches(&r, "anything", &payload(r#"{"status":"failed"}"#)));
+        assert!(route_matches(
+            &r,
+            "anything",
+            &payload(r#"{"status":"ok"}"#)
+        ));
+        assert!(!route_matches(
+            &r,
+            "anything",
+            &payload(r#"{"status":"failed"}"#)
+        ));
     }
 
     #[test]
@@ -6491,12 +6792,21 @@ rules:
     #[test]
     fn payload_path_get_nested() {
         let v = payload(r#"{"a":{"b":{"c":"hello"}}}"#);
-        assert_eq!(payload_path_get(&v, "a.b.c").and_then(|x| x.as_str()), Some("hello"));
+        assert_eq!(
+            payload_path_get(&v, "a.b.c").and_then(|x| x.as_str()),
+            Some("hello")
+        );
         assert!(payload_path_get(&v, "a.b").is_some()); // it is a Value now, not a str, so Some({}) directly
         assert!(payload_path_get(&v, "x.y.z").is_none());
         let arr = payload(r#"{"items":[{"name":"x"},{"name":"y"}]}"#);
-        assert_eq!(payload_path_get(&arr, "items.0.name").and_then(|x| x.as_str()), Some("x"));
-        assert_eq!(payload_path_get(&arr, "items.1.name").and_then(|x| x.as_str()), Some("y"));
+        assert_eq!(
+            payload_path_get(&arr, "items.0.name").and_then(|x| x.as_str()),
+            Some("x")
+        );
+        assert_eq!(
+            payload_path_get(&arr, "items.1.name").and_then(|x| x.as_str()),
+            Some("y")
+        );
     }
 
     #[test]
@@ -6516,10 +6826,22 @@ rules:
 
     #[test]
     fn severity_for_source_known() {
-        assert_eq!(severity_for_source("plugin.metrics.exceeded"), Severity::Warn);
-        assert_eq!(severity_for_source("capability.sla.violated"), Severity::Error);
-        assert_eq!(severity_for_source("plugin.kill_switch.enabled"), Severity::Critical);
-        assert_eq!(severity_for_source("plugin.lifecycle.crashed"), Severity::Critical);
+        assert_eq!(
+            severity_for_source("plugin.metrics.exceeded"),
+            Severity::Warn
+        );
+        assert_eq!(
+            severity_for_source("capability.sla.violated"),
+            Severity::Error
+        );
+        assert_eq!(
+            severity_for_source("plugin.kill_switch.enabled"),
+            Severity::Critical
+        );
+        assert_eq!(
+            severity_for_source("plugin.lifecycle.crashed"),
+            Severity::Critical
+        );
         assert_eq!(severity_for_source("webhook.test"), Severity::Info);
     }
 
@@ -6547,7 +6869,11 @@ rules:
 
     #[test]
     fn make_envelope_fills_schema_version_and_timestamp() {
-        let env = make_envelope("plugin.metrics.exceeded", serde_json::json!({"cpu": 95}), vec![]);
+        let env = make_envelope(
+            "plugin.metrics.exceeded",
+            serde_json::json!({"cpu": 95}),
+            vec![],
+        );
         assert_eq!(env.schema_version, ALERT_SCHEMA_VERSION);
         assert_eq!(env.schema_version, 1);
         assert_eq!(env.source, "plugin.metrics.exceeded");
@@ -6661,48 +6987,74 @@ rules:
 
     #[test]
     fn severity_resolved_falls_back_to_hardcode_when_no_hint() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("resolved-fallback"));
         // known source, no hint → use the hardcode table
         assert_eq!(severity_resolved("plugin.metrics.exceeded"), Severity::Warn);
-        assert_eq!(severity_resolved("plugin.kill_switch.enabled"), Severity::Critical);
-        assert_eq!(severity_resolved("capability.sla.violated"), Severity::Error);
+        assert_eq!(
+            severity_resolved("plugin.kill_switch.enabled"),
+            Severity::Critical
+        );
+        assert_eq!(
+            severity_resolved("capability.sla.violated"),
+            Severity::Error
+        );
     }
 
     #[test]
     fn severity_resolved_user_hint_overrides_hardcode() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("user-override-hardcode"));
         save_user_severity_hint("plugin.metrics.exceeded", "critical").unwrap();
         // the user hint overrides the hardcode Warn with Critical
-        assert_eq!(severity_resolved("plugin.metrics.exceeded"), Severity::Critical);
+        assert_eq!(
+            severity_resolved("plugin.metrics.exceeded"),
+            Severity::Critical
+        );
     }
 
     #[test]
     fn severity_resolved_manifest_hint_overrides_hardcode() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("manifest-override"));
         install_manifest_hints(
             "plug-a",
             &Some(AlertingManifest {
-                severity_hints: [("capability.sla.violated".to_string(), "critical".to_string())]
-                    .into_iter()
-                    .collect(),
+                severity_hints: [(
+                    "capability.sla.violated".to_string(),
+                    "critical".to_string(),
+                )]
+                .into_iter()
+                .collect(),
             }),
         );
-        assert_eq!(severity_resolved("capability.sla.violated"), Severity::Critical);
+        assert_eq!(
+            severity_resolved("capability.sla.violated"),
+            Severity::Critical
+        );
     }
 
     #[test]
     fn severity_resolved_user_hint_beats_manifest_hint() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("user-beats-manifest"));
         install_manifest_hints(
             "plug-a",
             &Some(AlertingManifest {
-                severity_hints: [("plugin.metrics.exceeded".to_string(), "critical".to_string())]
-                    .into_iter()
-                    .collect(),
+                severity_hints: [(
+                    "plugin.metrics.exceeded".to_string(),
+                    "critical".to_string(),
+                )]
+                .into_iter()
+                .collect(),
             }),
         );
         save_user_severity_hint("plugin.metrics.exceeded", "info").unwrap();
@@ -6712,7 +7064,9 @@ rules:
 
     #[test]
     fn severity_resolved_unknown_source_with_hint_returns_hint() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("unknown-with-hint"));
         save_user_severity_hint("my.custom.event", "warn").unwrap();
         assert_eq!(severity_resolved("my.custom.event"), Severity::Warn);
@@ -6720,15 +7074,22 @@ rules:
 
     #[test]
     fn severity_resolved_unknown_source_no_hint_returns_info() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("unknown-no-hint"));
-        assert_eq!(severity_resolved("definitely.unknown.source"), Severity::Info);
+        assert_eq!(
+            severity_resolved("definitely.unknown.source"),
+            Severity::Info
+        );
     }
 
     #[test]
     fn severity_resolved_no_store_returns_hardcode() {
         // explicitly clear the shared store → severity_resolved can still return hardcode
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         // the old store reference is unavailable — use a temporary empty shared store (None) instead
         // this only verifies the function does not panic; via the "unknown source + no store" path
         // it reaches hardcode → Info
@@ -6737,7 +7098,9 @@ rules:
 
     #[test]
     fn save_user_severity_hint_rejects_invalid_severity() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("invalid-severity"));
         let r = save_user_severity_hint("plugin.x", "fatal-but-wrong");
         assert!(r.is_err());
@@ -6745,7 +7108,9 @@ rules:
 
     #[test]
     fn save_user_severity_hint_rejects_empty_source() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("empty-source"));
         let r = save_user_severity_hint("", "warn");
         assert!(r.is_err());
@@ -6753,7 +7118,9 @@ rules:
 
     #[test]
     fn save_user_severity_hint_persists_and_reads_back() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("persists"));
         let saved = save_user_severity_hint("my.event", "error").unwrap();
         assert_eq!(saved.source, "my.event");
@@ -6768,7 +7135,9 @@ rules:
 
     #[test]
     fn delete_user_severity_hint_removes_only_user_origin() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("delete-user-only"));
         install_manifest_hints(
             "plug-a",
@@ -6787,14 +7156,18 @@ rules:
 
     #[test]
     fn delete_user_severity_hint_returns_false_when_absent() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("delete-absent"));
         assert!(!delete_user_severity_hint("never.saved"));
     }
 
     #[test]
     fn install_manifest_hints_then_uninstall_clears() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("install-uninstall"));
         install_manifest_hints(
             "plug-x",
@@ -6816,14 +7189,19 @@ rules:
 
     #[test]
     fn install_manifest_hints_ignores_invalid_severity_silently() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("manifest-invalid"));
         install_manifest_hints(
             "plug-bad",
             &Some(AlertingManifest {
                 severity_hints: [
                     ("plugin.good".to_string(), "warn".to_string()),
-                    ("plugin.bad".to_string(), "totally-not-a-severity".to_string()),
+                    (
+                        "plugin.bad".to_string(),
+                        "totally-not-a-severity".to_string(),
+                    ),
                 ]
                 .into_iter()
                 .collect(),
@@ -6836,7 +7214,9 @@ rules:
 
     #[test]
     fn clear_user_severity_hints_keeps_manifest_origin() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("clear-user-only"));
         install_manifest_hints(
             "plug-a",
@@ -6877,7 +7257,10 @@ rules:
     fn alerting_manifest_parses_camel_case_severity_hints() {
         let json = r#"{"severityHints":{"plugin.x":"warn","plugin.y":"critical"}}"#;
         let m: AlertingManifest = serde_json::from_str(json).unwrap();
-        assert_eq!(m.severity_hints.get("plugin.x").map(|s| s.as_str()), Some("warn"));
+        assert_eq!(
+            m.severity_hints.get("plugin.x").map(|s| s.as_str()),
+            Some("warn")
+        );
         assert_eq!(
             m.severity_hints.get("plugin.y").map(|s| s.as_str()),
             Some("critical")
@@ -6910,7 +7293,10 @@ rules:
             "plugin.metrics.*",
             "plugin.lifecycle.started"
         ));
-        assert!(aggregation_kind_matches("plugin.*", "plugin.metrics.exceeded"));
+        assert!(aggregation_kind_matches(
+            "plugin.*",
+            "plugin.metrics.exceeded"
+        ));
         assert!(aggregation_kind_matches(
             "plugin.metrics.exceeded",
             "plugin.metrics.exceeded"
@@ -6942,7 +7328,9 @@ rules:
 
     #[test]
     fn evaluate_aggregations_pass_without_rules() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("agg-no-rules"));
         _reset_aggregations_for_tests();
         let d = evaluate_aggregations(
@@ -6955,7 +7343,9 @@ rules:
 
     #[test]
     fn evaluate_aggregations_below_threshold_returns_pass() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("agg-below"));
         _reset_aggregations_for_tests();
         let saved = save_aggregation(agg_rule("r1", "suppress", None)).unwrap();
@@ -6969,7 +7359,9 @@ rules:
 
     #[test]
     fn evaluate_aggregations_suppress_fires_at_threshold() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("agg-suppress"));
         _reset_aggregations_for_tests();
         save_aggregation(agg_rule("r1", "suppress", None)).unwrap();
@@ -6978,7 +7370,9 @@ rules:
         evaluate_aggregations("plugin.metrics.exceeded", &serde_json::json!({}), now);
         let d = evaluate_aggregations("plugin.metrics.exceeded", &serde_json::json!({}), now);
         match d {
-            AggregationDecision::Suppress { propagated_severity } => {
+            AggregationDecision::Suppress {
+                propagated_severity,
+            } => {
                 assert_eq!(propagated_severity, Severity::Warn); // plugin.metrics.exceeded hardcode = Warn
             }
             other => panic!("expected Suppress, got {:?}", other),
@@ -6990,7 +7384,9 @@ rules:
 
     #[test]
     fn evaluate_aggregations_downgrade_returns_target_severity() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("agg-downgrade"));
         _reset_aggregations_for_tests();
         save_aggregation(agg_rule("r1", "downgrade", Some("critical"))).unwrap();
@@ -7006,7 +7402,9 @@ rules:
 
     #[test]
     fn evaluate_aggregations_merge_includes_count_and_last_payload() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("agg-merge"));
         _reset_aggregations_for_tests();
         save_aggregation(agg_rule("r1", "merge", None)).unwrap();
@@ -7043,7 +7441,9 @@ rules:
 
     #[test]
     fn evaluate_aggregations_pattern_mismatch_skips_rule() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("agg-mismatch"));
         _reset_aggregations_for_tests();
         save_aggregation(agg_rule("r1", "suppress", None)).unwrap();
@@ -7092,7 +7492,9 @@ rules:
 
         // Suppress — returns false (Phase 71: carries the propagated_severity field, semantics unchanged)
         assert!(!apply_aggregation_decision(
-            &AggregationDecision::Suppress { propagated_severity: Severity::Warn },
+            &AggregationDecision::Suppress {
+                propagated_severity: Severity::Warn
+            },
             &mut payload,
             &mut sev
         ));
@@ -7100,7 +7502,9 @@ rules:
 
     #[test]
     fn save_list_delete_clear_aggregations_round_trip() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("agg-crud"));
         _reset_aggregations_for_tests();
 
@@ -7160,7 +7564,12 @@ rules:
 
     #[test]
     fn validate_correlation_rejects_bad_inputs() {
-        let mut r = corr_rule("a", "plugin.lifecycle.started", "plugin.lifecycle.crashed", 30);
+        let mut r = corr_rule(
+            "a",
+            "plugin.lifecycle.started",
+            "plugin.lifecycle.crashed",
+            30,
+        );
         r.id = "".into();
         assert!(validate_correlation(&r).is_err());
         r.id = "a".into();
@@ -7181,7 +7590,9 @@ rules:
 
     #[test]
     fn evaluate_correlations_pass_without_rules() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("corr-no-rules"));
         _reset_correlations_for_tests();
         let d = evaluate_correlations("plugin.lifecycle.started", now_secs());
@@ -7190,11 +7601,18 @@ rules:
 
     #[test]
     fn evaluate_correlations_records_last_a_without_suppressing() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("corr-record-a"));
         _reset_correlations_for_tests();
-        save_correlation(corr_rule("r1", "plugin.lifecycle.started", "plugin.lifecycle.crashed", 60))
-            .unwrap();
+        save_correlation(corr_rule(
+            "r1",
+            "plugin.lifecycle.started",
+            "plugin.lifecycle.crashed",
+            60,
+        ))
+        .unwrap();
         // A hit → only update last_a, no suppress (self-referential rule is a no-op)
         let d = evaluate_correlations("plugin.lifecycle.started", now_secs());
         assert_eq!(d, CorrelationDecision::Pass);
@@ -7202,11 +7620,18 @@ rules:
 
     #[test]
     fn evaluate_correlations_suppress_B_within_window() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("corr-suppress"));
         _reset_correlations_for_tests();
-        save_correlation(corr_rule("r1", "plugin.lifecycle.started", "plugin.lifecycle.crashed", 60))
-            .unwrap();
+        save_correlation(corr_rule(
+            "r1",
+            "plugin.lifecycle.started",
+            "plugin.lifecycle.crashed",
+            60,
+        ))
+        .unwrap();
         let now = now_secs();
         assert_eq!(
             evaluate_correlations("plugin.lifecycle.started", now),
@@ -7214,7 +7639,9 @@ rules:
         );
         // B within the window → Suppress (Phase 71: carries propagated_severity)
         match evaluate_correlations("plugin.lifecycle.crashed", now + 10) {
-            CorrelationDecision::Suppress { propagated_severity } => {
+            CorrelationDecision::Suppress {
+                propagated_severity,
+            } => {
                 assert_eq!(propagated_severity, Severity::Critical); // plugin.lifecycle.crashed hardcode = Critical
             }
             other => panic!("expected Suppress, got {:?}", other),
@@ -7223,11 +7650,18 @@ rules:
 
     #[test]
     fn evaluate_correlations_pass_for_B_outside_window() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("corr-outside"));
         _reset_correlations_for_tests();
-        save_correlation(corr_rule("r1", "plugin.lifecycle.started", "plugin.lifecycle.crashed", 60))
-            .unwrap();
+        save_correlation(corr_rule(
+            "r1",
+            "plugin.lifecycle.started",
+            "plugin.lifecycle.crashed",
+            60,
+        ))
+        .unwrap();
         let now = now_secs();
         evaluate_correlations("plugin.lifecycle.started", now);
         // B later than A by > window_secs → Pass
@@ -7239,11 +7673,18 @@ rules:
 
     #[test]
     fn evaluate_correlations_pass_for_B_without_matching_A() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("corr-no-a"));
         _reset_correlations_for_tests();
-        save_correlation(corr_rule("r1", "plugin.lifecycle.started", "plugin.lifecycle.crashed", 60))
-            .unwrap();
+        save_correlation(corr_rule(
+            "r1",
+            "plugin.lifecycle.started",
+            "plugin.lifecycle.crashed",
+            60,
+        ))
+        .unwrap();
         // B directly, no A → Pass
         assert_eq!(
             evaluate_correlations("plugin.lifecycle.crashed", now_secs()),
@@ -7253,31 +7694,49 @@ rules:
 
     #[test]
     fn evaluate_correlations_re_suppress_after_subsequent_A() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("corr-resuppress"));
         _reset_correlations_for_tests();
-        save_correlation(corr_rule("r1", "plugin.lifecycle.started", "plugin.lifecycle.crashed", 60))
-            .unwrap();
+        save_correlation(corr_rule(
+            "r1",
+            "plugin.lifecycle.started",
+            "plugin.lifecycle.crashed",
+            60,
+        ))
+        .unwrap();
         let now = now_secs();
         evaluate_correlations("plugin.lifecycle.started", now);
         match evaluate_correlations("plugin.lifecycle.crashed", now + 10) {
-            CorrelationDecision::Suppress { propagated_severity: _ } => {}
+            CorrelationDecision::Suppress {
+                propagated_severity: _,
+            } => {}
             other => panic!("expected Suppress, got {:?}", other),
         }
         // a new round of A → last_a refreshes → B again is still Suppress
         evaluate_correlations("plugin.lifecycle.started", now + 30);
         match evaluate_correlations("plugin.lifecycle.crashed", now + 40) {
-            CorrelationDecision::Suppress { propagated_severity: _ } => {}
+            CorrelationDecision::Suppress {
+                propagated_severity: _,
+            } => {}
             other => panic!("expected Suppress, got {:?}", other),
         }
     }
 
     #[test]
     fn evaluate_correlations_disabled_rule_skipped() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("corr-disabled"));
         _reset_correlations_for_tests();
-        let mut r = corr_rule("r1", "plugin.lifecycle.started", "plugin.lifecycle.crashed", 60);
+        let mut r = corr_rule(
+            "r1",
+            "plugin.lifecycle.started",
+            "plugin.lifecycle.crashed",
+            60,
+        );
         r.enabled = false;
         save_correlation(r).unwrap();
         let now = now_secs();
@@ -7291,7 +7750,9 @@ rules:
 
     #[test]
     fn correlation_self_referential_rule_is_noop() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("corr-self"));
         _reset_correlations_for_tests();
         // A==B same pattern; a self-referential rule should be a silent no-op
@@ -7305,7 +7766,9 @@ rules:
 
     #[test]
     fn correlation_save_list_delete_clear_round_trip() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("corr-crud"));
         _reset_correlations_for_tests();
 
@@ -7402,8 +7865,12 @@ rules:
         assert_eq!(saved2.id, "e2");
         let all = list_escalations();
         assert_eq!(all.len(), 2);
-        assert!(all.iter().any(|d| d.id == "e1" && d.target_severity == "critical"));
-        assert!(all.iter().any(|d| d.id == "e2" && d.escalate_after_secs == 60));
+        assert!(all
+            .iter()
+            .any(|d| d.id == "e1" && d.target_severity == "critical"));
+        assert!(all
+            .iter()
+            .any(|d| d.id == "e2" && d.escalate_after_secs == 60));
         assert!(delete_escalation("e1"));
         assert_eq!(list_escalations().len(), 1);
         assert!(!delete_escalation("does-not-exist"));
@@ -7417,8 +7884,14 @@ rules:
         record_dispatch("plugin.lifecycle.crashed", 1000);
         record_dispatch("plugin.metrics.exceeded", 1001);
         let map = escalation_state().lock().unwrap();
-        assert_eq!(map.last_by_source.get("plugin.lifecycle.crashed"), Some(&1000));
-        assert_eq!(map.last_by_source.get("plugin.metrics.exceeded"), Some(&1001));
+        assert_eq!(
+            map.last_by_source.get("plugin.lifecycle.crashed"),
+            Some(&1000)
+        );
+        assert_eq!(
+            map.last_by_source.get("plugin.metrics.exceeded"),
+            Some(&1001)
+        );
     }
 
     #[test]
@@ -7548,12 +8021,8 @@ rules:
             Severity::Warn,
             serde_json::json!({"value": 42}),
         );
-        let (out, ct) =
-            render_template("{{source}} {{severity}} {{timestamp}}", &env).unwrap();
-        assert_eq!(
-            out,
-            "plugin.metrics.exceeded warn 1700000000"
-        );
+        let (out, ct) = render_template("{{source}} {{severity}} {{timestamp}}", &env).unwrap();
+        assert_eq!(out, "plugin.metrics.exceeded warn 1700000000");
         assert_eq!(ct, TemplateContentType::Text);
     }
 
@@ -7574,23 +8043,14 @@ rules:
 
     #[test]
     fn template_missing_payload_path_renders_empty() {
-        let env = tpl_env(
-            "x",
-            Severity::Info,
-            serde_json::json!({"foo": 1}),
-        );
-        let (out, _) =
-            render_template("value=[{{payload.missing.field}}]", &env).unwrap();
+        let env = tpl_env("x", Severity::Info, serde_json::json!({"foo": 1}));
+        let (out, _) = render_template("value=[{{payload.missing.field}}]", &env).unwrap();
         assert_eq!(out, "value=[]");
     }
 
     #[test]
     fn template_if_block_true_renders_body() {
-        let env = tpl_env(
-            "x",
-            Severity::Critical,
-            serde_json::json!({}),
-        );
+        let env = tpl_env("x", Severity::Critical, serde_json::json!({}));
         let tpl = "{{#if severity == \"critical\"}}ALERT{{/if}}";
         let (out, _) = render_template(tpl, &env).unwrap();
         assert_eq!(out, "ALERT");
@@ -7598,11 +8058,7 @@ rules:
 
     #[test]
     fn template_if_block_false_renders_nothing() {
-        let env = tpl_env(
-            "x",
-            Severity::Info,
-            serde_json::json!({}),
-        );
+        let env = tpl_env("x", Severity::Info, serde_json::json!({}));
         let tpl = "before {{#if severity == \"critical\"}}ALERT{{/if}} after";
         let (out, _) = render_template(tpl, &env).unwrap();
         assert_eq!(out, "before  after");
@@ -7693,8 +8149,7 @@ rules:
     #[test]
     fn template_json_content_type_detection() {
         let env = tpl_env("x", Severity::Info, serde_json::json!({}));
-        let (out, ct) =
-            render_template("{\"hello\": \"world\"}", &env).unwrap();
+        let (out, ct) = render_template("{\"hello\": \"world\"}", &env).unwrap();
         assert_eq!(ct, TemplateContentType::Json);
         assert!(out.contains("\"hello\""));
         let (_, ct2) = render_template("plain text body", &env).unwrap();
@@ -7752,7 +8207,8 @@ rules:
     #[test]
     fn template_each_empty_array_renders_empty() {
         let env = tpl_env("x", Severity::Info, serde_json::json!({"items": []}));
-        let (out, _) = render_template("X{{#each payload.items}}[{{this.id}}]{{/each}}Y", &env).unwrap();
+        let (out, _) =
+            render_template("X{{#each payload.items}}[{{this.id}}]{{/each}}Y", &env).unwrap();
         assert_eq!(out, "XY");
     }
 
@@ -7760,17 +8216,18 @@ rules:
     fn template_each_non_array_path_renders_empty_gracefully() {
         // payload.scalar is a string, not an array → should be empty (unwrap_or_default yields an empty vec)
         let env = tpl_env("x", Severity::Info, serde_json::json!({"scalar": "hello"}));
-        let (out, _) = render_template(
-            "{{#each payload.scalar}}[{{this}}]{{/each}}",
-            &env,
-        )
-        .unwrap();
+        let (out, _) =
+            render_template("{{#each payload.scalar}}[{{this}}]{{/each}}", &env).unwrap();
         assert_eq!(out, "");
     }
 
     #[test]
     fn template_multiple_sibling_if_blocks_render_independently() {
-        let env = tpl_env("x", Severity::Critical, serde_json::json!({"p1": true, "p2": false}));
+        let env = tpl_env(
+            "x",
+            Severity::Critical,
+            serde_json::json!({"p1": true, "p2": false}),
+        );
         let tpl = "{{#if severity == \"critical\"}}A{{/if}}|{{#if payload.p1}}B{{/if}}|{{#if payload.p2}}C{{/if}}";
         let (out, _) = render_template(tpl, &env).unwrap();
         assert_eq!(out, "A|B|");
@@ -7778,11 +8235,7 @@ rules:
 
     #[test]
     fn template_numeric_literal_comparison() {
-        let env = tpl_env(
-            "x",
-            Severity::Info,
-            serde_json::json!({"cpu": 95}),
-        );
+        let env = tpl_env("x", Severity::Info, serde_json::json!({"cpu": 95}));
         let tpl = "{{#if payload.cpu == 95}}HOT{{else}}OK{{/if}}";
         let (out, _) = render_template(tpl, &env).unwrap();
         assert_eq!(out, "HOT");
@@ -7897,7 +8350,11 @@ rules:
     #[test]
     fn lint_template_clean_returns_empty() {
         let diags = lint_template("hello {{source}} world");
-        assert!(diags.is_empty(), "expected no diagnostics, got: {:?}", diags);
+        assert!(
+            diags.is_empty(),
+            "expected no diagnostics, got: {:?}",
+            diags
+        );
     }
 
     #[test]
@@ -7948,8 +8405,14 @@ rules:
         // the slack output is JSON, so ct should be Json
         assert_eq!(ct, TemplateContentType::Json);
         // must contain source + severity
-        assert!(out.contains("plugin.metrics.exceeded"), "missing source: {out}");
-        assert!(out.to_lowercase().contains("critical"), "missing severity: {out}");
+        assert!(
+            out.contains("plugin.metrics.exceeded"),
+            "missing source: {out}"
+        );
+        assert!(
+            out.to_lowercase().contains("critical"),
+            "missing severity: {out}"
+        );
     }
 
     #[test]
@@ -8013,7 +8476,10 @@ rules:
         let r = render_template("hello {{source", &env);
         assert!(r.is_err(), "unclosed placeholder should fail");
         let msg = r.unwrap_err();
-        assert!(msg.contains("unclosed"), "error should mention unclosed: {msg}");
+        assert!(
+            msg.contains("unclosed"),
+            "error should mention unclosed: {msg}"
+        );
     }
 
     #[test]
@@ -8027,12 +8493,12 @@ rules:
     #[test]
     fn template_payload_numeric_value_renders_as_decimal() {
         // serde_json::Number.to_string() is "42" for integers and "3.5" for floats
-        let env = tpl_env("x", Severity::Info, serde_json::json!({"int_v": 42, "flt_v": 3.5}));
-        let (out, _) = render_template(
-            "i={{payload.int_v}} f={{payload.flt_v}}",
-            &env,
-        )
-        .unwrap();
+        let env = tpl_env(
+            "x",
+            Severity::Info,
+            serde_json::json!({"int_v": 42, "flt_v": 3.5}),
+        );
+        let (out, _) = render_template("i={{payload.int_v}} f={{payload.flt_v}}", &env).unwrap();
         assert_eq!(out, "i=42 f=3.5");
     }
 
@@ -8247,7 +8713,9 @@ rules:
 
     #[test]
     fn save_user_template_preset_rejects_empty_name() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("save-user-preset-1"));
         let mut p = make_user_preset("", "hi", "{}");
         p.id = String::new();
@@ -8258,7 +8726,9 @@ rules:
 
     #[test]
     fn save_user_template_preset_rejects_too_long_name() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("save-user-preset-2"));
         let long = "x".repeat(65);
         let p = make_user_preset(&long, "hi", "{}");
@@ -8269,7 +8739,9 @@ rules:
 
     #[test]
     fn save_user_template_preset_rejects_builtin_true() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("save-user-preset-3"));
         let mut p = make_user_preset("test", "hi", "{}");
         p.builtin = true;
@@ -8298,11 +8770,13 @@ rules:
 
     #[test]
     fn delete_user_template_preset_removes_only_user() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("delete-preset-1"));
         // save 1 user preset
-        let saved = save_user_template_preset(&make_user_preset("to-delete", "x", "{}"))
-            .expect("save");
+        let saved =
+            save_user_template_preset(&make_user_preset("to-delete", "x", "{}")).expect("save");
         let listed = list_template_presets();
         let user_count = listed.iter().filter(|p| !p.builtin).count();
         let builtin_count = listed.iter().filter(|p| p.builtin).count();
@@ -8321,7 +8795,9 @@ rules:
 
     #[test]
     fn delete_user_template_preset_does_not_remove_builtin() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("delete-preset-2"));
         // passing a builtin id straight to delete should return false and leave the builtin in place
         assert!(!delete_user_template_preset("builtin-slack"));
@@ -8330,10 +8806,11 @@ rules:
 
     #[test]
     fn list_template_presets_includes_builtins_and_user() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("list-presets-1"));
-        let saved = save_user_template_preset(&make_user_preset("user1", "u", "{}"))
-            .expect("save");
+        let saved = save_user_template_preset(&make_user_preset("user1", "u", "{}")).expect("save");
         let listed = list_template_presets();
         assert_eq!(
             listed.iter().filter(|p| p.builtin).count(),
@@ -8357,16 +8834,28 @@ rules:
 
     #[test]
     fn fork_builtin_preset_creates_user_copy_with_new_id_and_kind() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("fork-preset-1"));
-        let src = builtin_presets().iter().find(|p| p.kind == "builtin:slack")
+        let src = builtin_presets()
+            .iter()
+            .find(|p| p.kind == "builtin:slack")
             .expect("builtin slack exists");
         let orig_template = src.template.clone();
         let orig_description = src.description.clone();
         let forked = fork_builtin_preset("builtin:slack", "My Slack").expect("fork");
         assert_ne!(forked.id, "builtin-slack");
-        assert!(forked.id.starts_with("00000000") || forked.id.len() >= 8, "expected UUID-like id, got {}", forked.id);
-        assert!(forked.kind.starts_with("user:"), "expected user: kind, got {}", forked.kind);
+        assert!(
+            forked.id.starts_with("00000000") || forked.id.len() >= 8,
+            "expected UUID-like id, got {}",
+            forked.id
+        );
+        assert!(
+            forked.kind.starts_with("user:"),
+            "expected user: kind, got {}",
+            forked.kind
+        );
         assert_eq!(forked.kind, format!("user:{}", forked.id));
         assert_eq!(forked.name, "My Slack");
         assert_eq!(forked.description, orig_description);
@@ -8379,7 +8868,9 @@ rules:
 
     #[test]
     fn fork_builtin_preset_rejects_unknown_kind() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("fork-preset-2"));
         let res = fork_builtin_preset("builtin:nonexistent", "X");
         assert!(res.is_err());
@@ -8388,17 +8879,27 @@ rules:
 
     #[test]
     fn fork_builtin_preset_rejects_empty_or_too_long_name() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("fork-preset-3"));
-        assert!(fork_builtin_preset("builtin:slack", "").unwrap_err().contains("name required"));
-        assert!(fork_builtin_preset("builtin:slack", "   ").unwrap_err().contains("name required"));
+        assert!(fork_builtin_preset("builtin:slack", "")
+            .unwrap_err()
+            .contains("name required"));
+        assert!(fork_builtin_preset("builtin:slack", "   ")
+            .unwrap_err()
+            .contains("name required"));
         let long = "x".repeat(65);
-        assert!(fork_builtin_preset("builtin:slack", &long).unwrap_err().contains("too long"));
+        assert!(fork_builtin_preset("builtin:slack", &long)
+            .unwrap_err()
+            .contains("too long"));
     }
 
     #[test]
     fn fork_builtin_preset_persists_to_store() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("fork-preset-4"));
         let forked = fork_builtin_preset("builtin:discord", "My Discord").expect("fork");
         let listed = list_template_presets();
@@ -8411,7 +8912,9 @@ rules:
 
     #[test]
     fn save_user_template_preset_bumps_version_on_each_save() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("version-bump-1"));
         // first save → version = 1
         let s1 = save_user_template_preset(&make_user_preset("v-test", "a", "{}")).expect("save 1");
@@ -8423,7 +8926,10 @@ rules:
         let s2 = save_user_template_preset(&p2).expect("save 2");
         assert_eq!(s2.id, s1.id);
         assert_eq!(s2.version, 2, "second save should bump to version 2");
-        assert_eq!(s2.created_at, first_created, "created_at must be preserved across saves");
+        assert_eq!(
+            s2.created_at, first_created,
+            "created_at must be preserved across saves"
+        );
         // third save → version = 3
         let mut p3 = make_user_preset("v-test", "c", "{}");
         p3.id = s1.id.clone();
@@ -8434,7 +8940,9 @@ rules:
 
     #[test]
     fn template_presets_round_trip_preserves_version_and_changelog() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("round-trip-2"));
         let mut p = make_user_preset("round-trip-test", "tmpl", "{\"k\":\"v\"}");
         p.version = 2;
@@ -8467,7 +8975,11 @@ presets:
 "#;
         let (doc, applied) = migrate_preset_yaml(yaml).expect("migrate");
         assert_eq!(doc.version, 1);
-        assert!(applied.is_empty(), "v1 yaml should not need migration, got {:?}", applied);
+        assert!(
+            applied.is_empty(),
+            "v1 yaml should not need migration, got {:?}",
+            applied
+        );
         assert_eq!(doc.presets.len(), 1);
         assert_eq!(doc.presets[0].name, "test");
     }
@@ -8491,7 +9003,10 @@ presets:
         assert_eq!(applied, vec!["v0_to_v1"]);
         assert_eq!(doc.presets.len(), 1);
         assert_eq!(doc.presets[0].name, "legacy preset");
-        assert_eq!(doc.presets[0].version, 1, "v0 preset without version field gets bumped to 1");
+        assert_eq!(
+            doc.presets[0].version, 1,
+            "v0 preset without version field gets bumped to 1"
+        );
         assert_eq!(doc.presets[0].template, "{{source}}");
         assert_eq!(doc.presets[0].changelog, "");
     }
@@ -8508,8 +9023,11 @@ presets:
         let res = migrate_preset_yaml(yaml);
         assert!(res.is_err());
         let err = res.unwrap_err();
-        assert!(err.contains("newer than current") || err.contains("99"),
-                "unexpected err: {}", err);
+        assert!(
+            err.contains("newer than current") || err.contains("99"),
+            "unexpected err: {}",
+            err
+        );
     }
 
     #[test]
@@ -8522,13 +9040,21 @@ presets:
     template: "T"
 "#;
         let (doc, applied) = migrate_preset_yaml(yaml).expect("migrate");
-        assert_eq!(doc.version, 1, "no version field → serde default 1 → already current");
-        assert!(applied.is_empty(), "already v1 (via serde default), no migration needed");
+        assert_eq!(
+            doc.version, 1,
+            "no version field → serde default 1 → already current"
+        );
+        assert!(
+            applied.is_empty(),
+            "already v1 (via serde default), no migration needed"
+        );
     }
 
     #[test]
     fn import_presets_runs_migration_for_legacy_doc() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("import-migrate-1"));
         let yaml = r#"version: 0
 presets:
@@ -8606,7 +9132,9 @@ presets:
 
     #[test]
     fn export_alerting_bundle_emits_all_five_sections() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("bundle-export-all"));
         // prepare data
         let _ = save_endpoint(make_endpoint_row("ep-b-1", "endpoint A")).unwrap();
@@ -8617,7 +9145,10 @@ presets:
 
         let yaml = export_alerting_bundle(None).expect("export");
         // every section should appear at least once
-        assert!(yaml.contains("endpoints:"), "yaml missing endpoints:\n{yaml}");
+        assert!(
+            yaml.contains("endpoints:"),
+            "yaml missing endpoints:\n{yaml}"
+        );
         assert!(yaml.contains("routes:"), "yaml missing routes:\n{yaml}");
         assert!(yaml.contains("silences:"), "yaml missing silences:\n{yaml}");
         assert!(yaml.contains("acks:"), "yaml missing acks:\n{yaml}");
@@ -8628,7 +9159,9 @@ presets:
 
     #[test]
     fn export_alerting_bundle_excludes_builtin_presets() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("bundle-export-no-builtin"));
         // only builtins (no user presets); the bundle should not emit a presets section
         // (because builtins do not go into the bundle; only user presets do)
@@ -8642,14 +9175,17 @@ presets:
 
     #[test]
     fn export_then_import_alerting_bundle_round_trips_all_sections() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("bundle-round-trip"));
         // initial state
         let ep_saved = save_endpoint(make_endpoint_row("ep-rt-1", "ep-rt")).unwrap();
         let rt_saved = save_route(make_route_row("rt-1", "round-trip route")).unwrap();
         let sl_saved = save_silence(make_silence_row("sl-1", "rt silence")).unwrap();
         let ack_saved = ack_kind("plugin.metrics.exceeded".into(), 120).unwrap();
-        let p_saved = save_user_template_preset(&make_user_preset("rt-preset", "TRT", "{}")).unwrap();
+        let p_saved =
+            save_user_template_preset(&make_user_preset("rt-preset", "TRT", "{}")).unwrap();
 
         let yaml = export_alerting_bundle(None).expect("export");
         let summary = import_alerting_bundle(&yaml, None).expect("import");
@@ -8662,17 +9198,26 @@ presets:
 
         // verify the data is still there (after import, list_* can still find it)
         let endpoints = list_endpoints();
-        assert!(endpoints.iter().any(|e| e.id == ep_saved.id), "endpoint missing");
+        assert!(
+            endpoints.iter().any(|e| e.id == ep_saved.id),
+            "endpoint missing"
+        );
         let routes = list_routes();
         assert!(routes.iter().any(|r| r.id == rt_saved.id), "route missing");
         let silences = list_silences();
-        assert!(silences.iter().any(|s| s.id == sl_saved.id), "silence missing");
+        assert!(
+            silences.iter().any(|s| s.id == sl_saved.id),
+            "silence missing"
+        );
         let acks = list_acks();
         assert!(acks.iter().any(|a| a.id == ack_saved.id), "ack missing");
         let presets = list_template_presets();
         let imported_preset = presets.iter().find(|p| p.id == p_saved.id).expect("preset");
         assert_eq!(imported_preset.template, "TRT");
-        assert!(!imported_preset.builtin, "imported preset must be user-owned");
+        assert!(
+            !imported_preset.builtin,
+            "imported preset must be user-owned"
+        );
     }
 
     #[test]
@@ -8716,7 +9261,11 @@ tags:
         assert_eq!(rule.recipients[0], "log:stderr");
         assert_eq!(rule.recipients[1], "log:file:/tmp/opencapx-rt.log");
         assert!(rule.recipients[2].starts_with("email:smtp:smtp.example.com:587:"));
-        assert_eq!(rule.target_endpoint_ids.len(), 0, "target_endpoint_ids empty");
+        assert_eq!(
+            rule.target_endpoint_ids.len(),
+            0,
+            "target_endpoint_ids empty"
+        );
         assert_eq!(rule.tags, vec!["phase66".to_string()]);
 
         // reverse serialize → then deserialize to verify round-trip
@@ -8741,7 +9290,10 @@ tags: []
 "#;
         let rule: RouteRule = serde_yaml::from_str(yaml).expect("legacy yaml parse");
         assert_eq!(rule.name, "legacy-route");
-        assert!(rule.recipients.is_empty(), "missing recipients should default to empty");
+        assert!(
+            rule.recipients.is_empty(),
+            "missing recipients should default to empty"
+        );
         assert_eq!(rule.target_endpoint_ids, vec!["ep-old".to_string()]);
     }
 
@@ -8804,7 +9356,10 @@ silences: []
 acks: []
 "#;
         let doc: AlertingBundleDoc = serde_yaml::from_str(yaml).expect("legacy bundle parse");
-        assert!(doc.recipients.is_empty(), "missing section should default to empty");
+        assert!(
+            doc.recipients.is_empty(),
+            "missing section should default to empty"
+        );
     }
 
     #[test]
@@ -8858,7 +9413,9 @@ acks: []
         let config = match kind {
             "webhook" => serde_json::json!({"endpoint_id": "ep-bundle-1"}),
             "log:file" => serde_json::json!({"path": "/tmp/opencx-r-67.log"}),
-            "email:smtp" => serde_json::json!({"relay":"smtp.x.com","port":587,"from":"a@x.com","to":"b@x.com"}),
+            "email:smtp" => {
+                serde_json::json!({"relay":"smtp.x.com","port":587,"from":"a@x.com","to":"b@x.com"})
+            }
             _ => serde_json::json!({}),
         };
         RecipientDef {
@@ -8874,7 +9431,10 @@ acks: []
     #[test]
     fn recipient_kind_whitelist_accepts_known_kinds() {
         for kind in RECIPIENT_KIND_WHITELIST {
-            assert!(validate_recipient_kind(kind).is_ok(), "{kind} should be allowed");
+            assert!(
+                validate_recipient_kind(kind).is_ok(),
+                "{kind} should be allowed"
+            );
         }
     }
 
@@ -8883,12 +9443,17 @@ acks: []
         let res = validate_recipient_kind("cmd:rce");
         assert!(res.is_err(), "cmd:rce must be rejected");
         let msg = res.err().expect("error");
-        assert!(msg.contains("not in whitelist") || msg.contains("whitelist"), "got: {msg}");
+        assert!(
+            msg.contains("not in whitelist") || msg.contains("whitelist"),
+            "got: {msg}"
+        );
     }
 
     #[test]
     fn save_recipient_persists_to_storage_and_round_trips() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("r67-persist"));
         let rec = save_recipient(make_recipient("", "my-stderr", "log:stderr")).expect("save");
         assert!(!rec.id.is_empty(), "id should be auto-generated");
@@ -8907,21 +9472,29 @@ acks: []
 
     #[test]
     fn save_recipient_rejects_duplicate_name() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("r67-dup"));
         save_recipient(make_recipient("", "uniq", "log:stderr")).expect("save 1");
         let res = save_recipient(make_recipient("", "uniq", "log:file"));
         assert!(res.is_err(), "duplicate name must be rejected");
         let msg = res.err().expect("e");
-        assert!(msg.contains("already exists") || msg.contains("UNIQUE"), "got: {msg}");
+        assert!(
+            msg.contains("already exists") || msg.contains("UNIQUE"),
+            "got: {msg}"
+        );
     }
 
     #[test]
     fn delete_recipient_clears_dangling_route_refs() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("r67-cascade"));
         // create a recipient
-        let rec = save_recipient(make_recipient("", "to-del", "log:stderr")).expect("save recipient");
+        let rec =
+            save_recipient(make_recipient("", "to-del", "log:stderr")).expect("save recipient");
         // create a route whose recipients reference `webhook:{rec.id}` and `log:stderr`
         let route = RouteRule {
             id: "rt-cascade".into(),
@@ -8943,13 +9516,22 @@ acks: []
         assert_eq!(routes_cleared, 1, "should clear 1 route's dangling ref");
         // verify route.recipients now only has `log:stderr`
         let routes = list_routes();
-        let rt = routes.iter().find(|r| r.id == "rt-cascade").expect("route still exists");
-        assert_eq!(rt.recipients, vec!["log:stderr".to_string()], "dangling ref should be cleared");
+        let rt = routes
+            .iter()
+            .find(|r| r.id == "rt-cascade")
+            .expect("route still exists");
+        assert_eq!(
+            rt.recipients,
+            vec!["log:stderr".to_string()],
+            "dangling ref should be cleared"
+        );
     }
 
     #[test]
     fn delete_recipient_returns_zero_when_id_absent() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("r67-absent"));
         let (deleted, cleared) = delete_recipient("nonexistent-id").expect("delete");
         assert!(!deleted, "absent id should not be marked deleted");
@@ -8958,7 +9540,9 @@ acks: []
 
     #[test]
     fn bundle_yaml_round_trips_recipients_via_storage() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("r67-bundle-rt"));
         // save 2 recipients
         save_recipient(make_recipient("", "rec-A", "log:stderr")).expect("save A");
@@ -8976,7 +9560,9 @@ acks: []
 
     #[test]
     fn bundle_import_rejects_recipient_kind_outside_whitelist() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("r67-bundle-reject"));
         let yaml = r#"version: 1
 exportedAt: 1700000000
@@ -8997,22 +9583,32 @@ recipients:
         let res = import_alerting_bundle(&signed, None);
         assert!(res.is_err(), "malicious recipient must be rejected");
         let msg = res.err().expect("e");
-        assert!(msg.contains("whitelist") || msg.contains("cmd:rce"), "got: {msg}");
+        assert!(
+            msg.contains("whitelist") || msg.contains("cmd:rce"),
+            "got: {msg}"
+        );
     }
 
     #[test]
     fn test_recipient_log_stderr_works() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("r67-test-stderr"));
         let rec = save_recipient(make_recipient("", "test-stderr", "log:stderr")).expect("save");
         let result = test_recipient(&rec.id);
-        assert!(result.is_ok(), "test_recipient should succeed for log:stderr: {result:?}");
+        assert!(
+            result.is_ok(),
+            "test_recipient should succeed for log:stderr: {result:?}"
+        );
         assert!(result.expect("ok").contains("log:stderr"));
     }
 
     #[test]
     fn import_alerting_bundle_preserves_preset_id_and_forces_builtin_false() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("bundle-preset-bogus-builtin"));
         // malicious bundle: a preset marked builtin=true must be forced = false after import
         let yaml = r#"version: 1
@@ -9035,7 +9631,10 @@ acks: []
         let summary = import_alerting_bundle(&signed, None).expect("import");
         assert_eq!(summary.presets, 1);
         let presets = list_template_presets();
-        let p = presets.iter().find(|p| p.id == "preset-bogus").expect("found");
+        let p = presets
+            .iter()
+            .find(|p| p.id == "preset-bogus")
+            .expect("found");
         assert!(!p.builtin, "imported preset must be marked user");
         assert_eq!(p.template, "OVERRIDE!");
         assert_eq!(p.name, "Bogus Builtin");
@@ -9063,7 +9662,10 @@ acks: []
         let body = "version: 1\nendpoints: []\n";
         let signed = sign_bundle(body).expect("sign");
         // a signature: field should be at the end
-        assert!(signed.contains("signature:"), "missing signature line: {signed}");
+        assert!(
+            signed.contains("signature:"),
+            "missing signature line: {signed}"
+        );
         // verify should pass
         verify_bundle(&signed).expect("verify");
     }
@@ -9077,43 +9679,64 @@ acks: []
         let res = verify_bundle(&tampered);
         assert!(res.is_err(), "tampered should be rejected");
         let msg = res.unwrap_err();
-        assert!(msg.contains("tampered") || msg.contains("mismatch"),
-                "error should mention tamper: {msg}");
+        assert!(
+            msg.contains("tampered") || msg.contains("mismatch"),
+            "error should mention tamper: {msg}"
+        );
     }
 
     #[test]
     fn export_alerting_bundle_signed_contains_signature_field() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("signed-export"));
         let out = export_alerting_bundle(None).expect("export signed");
         // a signature: line should be at the end
-        assert!(out.contains("signature:"), "signed yaml missing signature: {out}");
+        assert!(
+            out.contains("signature:"),
+            "signed yaml missing signature: {out}"
+        );
     }
 
     #[test]
     fn export_alerting_bundle_encrypted_is_not_plain_yaml() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("encrypted-export"));
         let out = export_alerting_bundle(Some("secret-pp")).expect("export encrypted");
         // after encryption it is a JSON envelope, not YAML
-        assert!(out.trim_start().starts_with('{'),
-                "encrypted bundle should start with {{, got: {}",
-                &out[..out.len().min(80)]);
-        assert!(out.contains("aes-256-gcm-pbkdf2-sha256"),
-                "envelope should declare algorithm");
-        assert!(out.contains("ciphertext"), "envelope should contain ciphertext");
+        assert!(
+            out.trim_start().starts_with('{'),
+            "encrypted bundle should start with {{, got: {}",
+            &out[..out.len().min(80)]
+        );
+        assert!(
+            out.contains("aes-256-gcm-pbkdf2-sha256"),
+            "envelope should declare algorithm"
+        );
+        assert!(
+            out.contains("ciphertext"),
+            "envelope should contain ciphertext"
+        );
     }
 
     #[test]
     fn decrypt_with_correct_passphrase_recovers_signed_yaml() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("encrypt-decrypt-1"));
         let pp = "my-secret-passphrase";
         let signed = export_alerting_bundle(None).expect("export signed");
         let envelope = encrypt_bundle(&signed, pp).expect("encrypt");
         let recovered = decrypt_bundle(&envelope, pp).expect("decrypt");
         // recovered should = signed
-        assert_eq!(recovered, signed, "decrypt should recover original signed yaml");
+        assert_eq!(
+            recovered, signed,
+            "decrypt should recover original signed yaml"
+        );
     }
 
     #[test]
@@ -9123,20 +9746,27 @@ acks: []
         let res = decrypt_bundle(&envelope, "wrong-pp");
         assert!(res.is_err(), "wrong passphrase should fail");
         let msg = res.unwrap_err();
-        assert!(msg.contains("wrong") || msg.contains("failed") || msg.contains("tampered"),
-                "error should mention wrong passphrase: {msg}");
+        assert!(
+            msg.contains("wrong") || msg.contains("failed") || msg.contains("tampered"),
+            "error should mention wrong passphrase: {msg}"
+        );
     }
 
     #[test]
     fn decrypt_rejects_empty_passphrase() {
         let signed = "version: 1\nendpoints: []\n";
         let res = encrypt_bundle(signed, "");
-        assert!(res.is_err(), "empty passphrase should be rejected by encrypt");
+        assert!(
+            res.is_err(),
+            "empty passphrase should be rejected by encrypt"
+        );
     }
 
     #[test]
     fn import_encrypted_bundle_with_correct_passphrase_round_trips() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("import-encrypted-1"));
         // prepare data
         let _ = save_endpoint(make_endpoint_row("ep-enc-1", "encrypted endpoint")).unwrap();
@@ -9152,7 +9782,9 @@ acks: []
 
     #[test]
     fn import_encrypted_bundle_with_wrong_passphrase_returns_error() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("import-encrypted-2"));
         let envelope = export_alerting_bundle(Some("right-pp")).expect("export");
         let res = import_alerting_bundle(&envelope, Some("wrong-pp"));
@@ -9161,20 +9793,27 @@ acks: []
 
     #[test]
     fn import_encrypted_bundle_without_passphrase_returns_error() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("import-encrypted-3"));
         let envelope = export_alerting_bundle(Some("any-pp")).expect("export");
         // no passphrase passed → should be required
         let res = import_alerting_bundle(&envelope, None);
         assert!(res.is_err(), "missing passphrase should be rejected");
         let msg = res.unwrap_err();
-        assert!(msg.contains("passphrase"), "error should mention passphrase: {msg}");
+        assert!(
+            msg.contains("passphrase"),
+            "error should mention passphrase: {msg}"
+        );
     }
 
     #[test]
     fn import_signed_bundle_ignores_extra_passphrase() {
         // passing a passphrase for a plaintext signed bundle should be a no-op (takes the plain path)
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("plain-with-pp"));
         let signed = export_alerting_bundle(None).expect("export signed");
         // passing an unrelated passphrase, decode_bundle_input should take the plain path (no algorithm match)
@@ -9185,15 +9824,20 @@ acks: []
 
     #[test]
     fn import_tampered_encrypted_ciphertext_rejected() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("tamper-encrypted"));
         let pp = "tamper-test-pp";
         let envelope = export_alerting_bundle(Some(pp)).expect("export encrypted");
         // tamper ciphertext: replace the first base64 character of the ciphertext field value with 'X'
         // the format is `  "ciphertext": "<base64>"`, so the needle is `"ciphertext": "` (with quotes)
         let needle = "\"ciphertext\": \"";
-        assert!(envelope.contains(needle), "envelope format mismatch; got: {}",
-                &envelope[..envelope.len().min(200)]);
+        assert!(
+            envelope.contains(needle),
+            "envelope format mismatch; got: {}",
+            &envelope[..envelope.len().min(200)]
+        );
         let pos = envelope.find(needle).unwrap() + needle.len();
         let mut tampered = envelope.clone();
         // replace the first base64 character of ciphertext with 'X'
@@ -9203,18 +9847,30 @@ acks: []
         assert_ne!(envelope, tampered, "tamper should change string");
         let res = import_alerting_bundle(&tampered, Some(pp));
         // GCM tag verification fails → decrypt errors out
-        assert!(res.is_err(), "tampered ciphertext should be rejected, got: {res:?}");
+        assert!(
+            res.is_err(),
+            "tampered ciphertext should be rejected, got: {res:?}"
+        );
     }
 
     #[test]
     fn import_tampered_signed_yaml_body_rejected() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("tamper-signed"));
         let signed = export_alerting_bundle(None).expect("export signed");
         // change some endpoint field in the body
-        let tampered = signed.replacen("endpoints: []", "endpoints:\n  - id: \"x\"\n    name: \"injected\"\n", 1);
+        let tampered = signed.replacen(
+            "endpoints: []",
+            "endpoints:\n  - id: \"x\"\n    name: \"injected\"\n",
+            1,
+        );
         let res = import_alerting_bundle(&tampered, None);
-        assert!(res.is_err(), "tampered signed yaml should be rejected by verify");
+        assert!(
+            res.is_err(),
+            "tampered signed yaml should be rejected by verify"
+        );
     }
 
     #[test]
@@ -9243,8 +9899,16 @@ acks: []
         reset_secret_buffer_for_test();
         ensure_secret_loaded().expect("load secret");
         let bytes = current_secret_bytes().expect("current");
-        assert_eq!(bytes.len(), 32, "secret must be exactly 32 bytes, got {}", bytes.len());
-        assert!(!bytes.iter().all(|b| *b == 0), "secret must not be all zeros");
+        assert_eq!(
+            bytes.len(),
+            32,
+            "secret must be exactly 32 bytes, got {}",
+            bytes.len()
+        );
+        assert!(
+            !bytes.iter().all(|b| *b == 0),
+            "secret must not be all zeros"
+        );
     }
 
     #[test]
@@ -9255,7 +9919,10 @@ acks: []
         // the second call should return the same bytes (the secret is stable over the process lifetime)
         ensure_secret_loaded().expect("second load");
         let second = current_secret_bytes().expect("second bytes");
-        assert_eq!(first, second, "secret should be stable across loads in same process");
+        assert_eq!(
+            first, second,
+            "secret should be stable across loads in same process"
+        );
     }
 
     #[test]
@@ -9315,8 +9982,10 @@ acks: []
     fn fallback_secret_path_resolves_under_config_dir() {
         // fallback_secret_path should not panic, and the path should be under config_dir/opencapx/
         let p = fallback_secret_path().expect("path");
-        assert!(p.ends_with("opencapx/bundle-signing-v1.key"),
-                "fallback should live under config_dir/opencapx/, got: {p:?}");
+        assert!(
+            p.ends_with("opencapx/bundle-signing-v1.key"),
+            "fallback should live under config_dir/opencapx/, got: {p:?}"
+        );
     }
 
     #[test]
@@ -9357,7 +10026,10 @@ acks: []
         };
         let json = serde_json::to_string(&rule).unwrap();
         let back: RouteRule = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.seen_in_last.as_ref().unwrap().pattern, "plugin.metrics.*");
+        assert_eq!(
+            back.seen_in_last.as_ref().unwrap().pattern,
+            "plugin.metrics.*"
+        );
         assert_eq!(back.seen_in_last.as_ref().unwrap().window_secs, 60);
     }
 
@@ -9415,7 +10087,11 @@ acks: []
         let snap = recent_events_snapshot(RECENT_EVENTS_CAP + 10);
         assert_eq!(snap.len(), RECENT_EVENTS_CAP);
         // the first src.0 is evicted, so snap[0] (last in new→old) is src.50
-        assert!(snap.last().unwrap().source.starts_with("src.50"), "got: {:?}", snap.last().map(|e| &e.source));
+        assert!(
+            snap.last().unwrap().source.starts_with("src.50"),
+            "got: {:?}",
+            snap.last().map(|e| &e.source)
+        );
     }
 
     #[test]
@@ -9440,7 +10116,9 @@ acks: []
 
     #[test]
     fn detect_cycles_finds_self_loop() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase68-self"));
         _reset_recent_events_for_tests();
         // rule A: kind_pattern = plugin.x, seen_in_last.pattern = plugin.x → self-reference
@@ -9462,13 +10140,22 @@ acks: []
         };
         let _ = save_route(r_a);
         let reports = detect_route_cycles();
-        let self_loops: Vec<_> = reports.iter().filter(|r| r.kind == CycleKind::SelfLoop).collect();
-        assert!(!self_loops.is_empty(), "expected self-loop, got: {:?}", reports);
+        let self_loops: Vec<_> = reports
+            .iter()
+            .filter(|r| r.kind == CycleKind::SelfLoop)
+            .collect();
+        assert!(
+            !self_loops.is_empty(),
+            "expected self-loop, got: {:?}",
+            reports
+        );
     }
 
     #[test]
     fn detect_cycles_finds_three_node_loop() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase68-three"));
         _reset_recent_events_for_tests();
         // A → B → C → A via seen_in_last chain
@@ -9497,12 +10184,18 @@ acks: []
             .iter()
             .filter(|r| r.kind == CycleKind::RouteToRoute && r.cycle.len() >= 4)
             .collect();
-        assert!(!multi.is_empty(), "expected multi-node cycle, got: {:?}", reports);
+        assert!(
+            !multi.is_empty(),
+            "expected multi-node cycle, got: {:?}",
+            reports
+        );
     }
 
     #[test]
     fn detect_cycles_returns_empty_on_acyclic_graph() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase68-acyclic"));
         _reset_recent_events_for_tests();
         // 3 independent routes, no seen_in_last, no correlation
@@ -9531,7 +10224,13 @@ acks: []
         _reset_recent_events_for_tests();
         let now = 1_700_001_000;
         for i in 0..10 {
-            record_seen_event(&format!("s.{i}"), "{}", now + i, vec![format!("r{i}")], vec![]);
+            record_seen_event(
+                &format!("s.{i}"),
+                "{}",
+                now + i,
+                vec![format!("r{i}")],
+                vec![],
+            );
         }
         let snap = recent_events_snapshot(3);
         assert_eq!(snap.len(), 3);
@@ -9555,22 +10254,34 @@ acks: []
 
     #[test]
     fn severity_inheritance_chain_marks_user_override_hit_when_set() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase69-user"));
         save_user_severity_hint("plugin.metrics.exceeded", "critical").unwrap();
         let chain = severity_inheritance_chain("plugin.metrics.exceeded");
         assert!(chain[2].hit, "user_override should be hit");
         assert!(!chain[0].hit, "manifest should be overridden by user");
-        assert!(!chain[1].hit, "plugin_default should not be hit when user present");
+        assert!(
+            !chain[1].hit,
+            "plugin_default should not be hit when user present"
+        );
     }
 
     #[test]
     fn severity_inheritance_chain_marks_manifest_hit_when_user_absent() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase69-manifest"));
         let mut hints = std::collections::HashMap::new();
         hints.insert("plugin.x".to_string(), "critical".to_string());
-        install_manifest_hints("plug-a", &Some(AlertingManifest { severity_hints: hints }));
+        install_manifest_hints(
+            "plug-a",
+            &Some(AlertingManifest {
+                severity_hints: hints,
+            }),
+        );
         let chain = severity_inheritance_chain("plugin.x");
         assert!(chain[0].hit, "manifest should be hit");
         assert_eq!(chain[0].plugin_id.as_deref(), Some("plug-a"));
@@ -9580,7 +10291,9 @@ acks: []
 
     #[test]
     fn severity_inheritance_chain_marks_plugin_default_hit_when_no_hints() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase69-default"));
         let chain = severity_inheritance_chain("plugin.metrics.exceeded");
         assert!(!chain[0].hit);
@@ -9590,7 +10303,9 @@ acks: []
 
     #[test]
     fn effective_severity_with_reason_returns_user_override_when_set() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase69-effective"));
         save_user_severity_hint("plugin.metrics.exceeded", "critical").unwrap();
         let (sev, link) = effective_severity_with_reason("plugin.metrics.exceeded");
@@ -9601,7 +10316,9 @@ acks: []
 
     #[test]
     fn cascade_delete_severity_hint_returns_affected_routes() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase69-cascade-route"));
         // create a route referencing plugin.x
         let _ = save_route(RouteRule {
@@ -9627,7 +10344,9 @@ acks: []
 
     #[test]
     fn cascade_delete_severity_hint_returns_affected_correlations() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase69-cascade-corr"));
         // Phase 53 save_correlation signature: CorrelationRuleDto
         let mut rule = CorrelationRule {
@@ -9648,7 +10367,9 @@ acks: []
 
     #[test]
     fn cascade_delete_severity_hint_is_idempotent() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase69-cascade-idem"));
         save_user_severity_hint("plugin.x", "warn").unwrap();
         let r1 = cascade_delete_severity_hint("plugin.x");
@@ -9664,37 +10385,60 @@ acks: []
 
     #[test]
     fn route_dispatch_severity_returns_user_override_when_set() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase70-route-override"));
         save_user_severity_hint("plugin.metrics.exceeded", "warn").unwrap();
-        assert_eq!(route_dispatch_severity("plugin.metrics.exceeded"), Severity::Warn);
+        assert_eq!(
+            route_dispatch_severity("plugin.metrics.exceeded"),
+            Severity::Warn
+        );
     }
 
     #[test]
     fn aggregation_action_severity_propagates_after_hint_change() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase70-agg-change"));
         save_user_severity_hint("plugin.flapping", "info").unwrap();
-        assert_eq!(aggregation_action_severity("plugin.flapping"), Severity::Info);
+        assert_eq!(
+            aggregation_action_severity("plugin.flapping"),
+            Severity::Info
+        );
         // reflected immediately after the hint changes
         save_user_severity_hint("plugin.flapping", "error").unwrap();
-        assert_eq!(aggregation_action_severity("plugin.flapping"), Severity::Error);
+        assert_eq!(
+            aggregation_action_severity("plugin.flapping"),
+            Severity::Error
+        );
     }
 
     #[test]
     fn correlation_decision_severity_falls_back_to_default_when_no_hints() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase70-corr-fallback"));
         // a brand-new source with no hint → fall back to the hardcode default (Info)
-        assert_eq!(correlation_decision_severity("totally.unknown.kind"), Severity::Info);
+        assert_eq!(
+            correlation_decision_severity("totally.unknown.kind"),
+            Severity::Info
+        );
     }
 
     #[test]
     fn escalation_target_severity_matches_effective_severity() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase70-esc-match"));
         save_user_severity_hint("capability.sla.violated", "critical").unwrap();
-        assert_eq!(escalation_target_severity("capability.sla.violated"), Severity::Critical);
+        assert_eq!(
+            escalation_target_severity("capability.sla.violated"),
+            Severity::Critical
+        );
         assert_eq!(
             escalation_target_severity("capability.sla.violated"),
             severity_resolved("capability.sla.violated")
@@ -9703,7 +10447,9 @@ acks: []
 
     #[test]
     fn propagation_trace_returns_consistent_user_override_across_all_links() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase70-trace-override"));
         save_user_severity_hint("plugin.x", "warn").unwrap();
         let t = propagation_trace("plugin.x");
@@ -9720,7 +10466,9 @@ acks: []
 
     #[test]
     fn propagation_trace_returns_manifest_origin_when_no_user_hint() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase70-trace-manifest"));
         // no user hint + no plugin manifest hint for this source → fall back to the manifest origin
         // (Phase 53 hardcode manifest hardcode source: plugin.metrics.exceeded / plugin.kill_switch.enabled /
@@ -9734,14 +10482,19 @@ acks: []
         assert_eq!(t.route_origin, t.correlation_origin);
         assert_eq!(t.route_origin, t.aggregation_origin);
         assert_eq!(t.route_origin, t.escalation_origin);
-        assert_eq!(t.route_severity, severity_resolved("totally.unknown.source"));
+        assert_eq!(
+            t.route_severity,
+            severity_resolved("totally.unknown.source")
+        );
     }
 
     // ── Phase 71 — consistency after wiring the 4 helpers into the main paths ─
 
     #[test]
     fn correlation_decision_carries_propagated_severity() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase71-corr-prop"));
         _reset_correlations_for_tests();
         // create an A→B correlation rule — Phase 55 baseline style
@@ -9752,7 +10505,8 @@ acks: []
             kind_pattern_b: "plugin.lifecycle.crashed".into(),
             window_secs: 60,
             enabled: true,
-        }).unwrap();
+        })
+        .unwrap();
 
         // first save a user hint for source B = critical
         save_user_severity_hint("plugin.lifecycle.crashed", "critical").unwrap();
@@ -9761,16 +10515,23 @@ acks: []
         evaluate_correlations("plugin.lifecycle.started", 1000);
         // fire B (within the window → Suppress with propagated_severity)
         match evaluate_correlations("plugin.lifecycle.crashed", 1010) {
-            CorrelationDecision::Suppress { propagated_severity } => {
+            CorrelationDecision::Suppress {
+                propagated_severity,
+            } => {
                 assert_eq!(propagated_severity, Severity::Critical);
             }
-            other => panic!("expected Suppress with propagated Critical, got {:?}", other),
+            other => panic!(
+                "expected Suppress with propagated Critical, got {:?}",
+                other
+            ),
         }
     }
 
     #[test]
     fn aggregation_decision_carries_propagated_severity_on_suppress() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase71-agg-prop"));
         _reset_aggregations_for_tests();
         save_aggregation(agg_rule("rule-71-suppress", "suppress", None)).unwrap();
@@ -9783,7 +10544,9 @@ acks: []
         evaluate_aggregations("plugin.metrics.exceeded", &serde_json::json!({}), now);
         let d = evaluate_aggregations("plugin.metrics.exceeded", &serde_json::json!({}), now);
         match d {
-            AggregationDecision::Suppress { propagated_severity } => {
+            AggregationDecision::Suppress {
+                propagated_severity,
+            } => {
                 assert_eq!(propagated_severity, Severity::Error);
             }
             other => panic!("expected Suppress with propagated Error, got {:?}", other),
@@ -9792,7 +10555,9 @@ acks: []
 
     #[test]
     fn aggregation_decision_carries_propagated_severity_on_downgrade() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase71-agg-dg"));
         _reset_aggregations_for_tests();
         save_aggregation(agg_rule("rule-71-downgrade", "downgrade", Some("critical"))).unwrap();
@@ -9816,7 +10581,9 @@ acks: []
 
     #[test]
     fn aggregation_decision_carries_propagated_severity_on_merge() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase71-agg-mg"));
         _reset_aggregations_for_tests();
         save_aggregation(agg_rule("rule-71-merge", "merge", None)).unwrap();
@@ -9829,9 +10596,13 @@ acks: []
         evaluate_aggregations("plugin.metrics.exceeded", &serde_json::json!({"x": 2}), now);
         let d = evaluate_aggregations("plugin.metrics.exceeded", &serde_json::json!({"x": 3}), now);
         match d {
-            AggregationDecision::Merge { propagated_severity, count, .. } => {
+            AggregationDecision::Merge {
+                propagated_severity,
+                count,
+                ..
+            } => {
                 assert_eq!(propagated_severity, Severity::Critical);
-                assert_eq!(count, 3);  // 3 fires all within window
+                assert_eq!(count, 3); // 3 fires all within window
             }
             other => panic!("expected Merge with propagated Critical, got {:?}", other),
         }
@@ -9839,7 +10610,9 @@ acks: []
 
     #[test]
     fn end_to_end_severity_consistency_across_all_4_paths() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("phase71-e2e"));
         // one source is consistent across the whole chain
         let source = "plugin.metrics.exceeded";
@@ -9862,7 +10635,9 @@ acks: []
     #[test]
     fn endpoint_severity_override_applies_in_fanout() {
         // setup: the user hint raises plugin.metrics.exceeded to error, and the endpoint override overwrites it to critical
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("ep-override-applies"));
         save_user_severity_hint("plugin.metrics.exceeded", "error").unwrap();
         let mut ep = WebhookEndpoint {
@@ -9883,13 +10658,19 @@ acks: []
         // simulate envelope_severity in fanout starting at the propagation result
         let mut envelope_severity = severity_resolved("plugin.metrics.exceeded");
         assert_eq!(envelope_severity, Severity::Error, "baseline propagation");
-        apply_endpoint_severity_override(&mut envelope_severity, "plugin.metrics.exceeded", &ep.severity_overrides);
+        apply_endpoint_severity_override(
+            &mut envelope_severity,
+            "plugin.metrics.exceeded",
+            &ep.severity_overrides,
+        );
         assert_eq!(envelope_severity, Severity::Critical, "override wins");
     }
 
     #[test]
     fn endpoint_severity_override_does_not_apply_when_source_misses() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("ep-override-miss"));
         // the override is configured only for plugin.metrics.exceeded; dispatching another source must not be overwritten
         let ep = WebhookEndpoint {
@@ -9919,7 +10700,9 @@ acks: []
 
     #[test]
     fn endpoint_severity_override_takes_priority_over_user_hint() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("ep-override-beats-hint"));
         // user hint = warn, no manifest, endpoint override = critical
         save_user_severity_hint("plugin.metrics.exceeded", "warn").unwrap();
@@ -9930,7 +10713,11 @@ acks: []
             "plugin.metrics.exceeded",
             &[("plugin.metrics.exceeded".into(), Severity::Critical)],
         );
-        assert_eq!(envelope_severity, Severity::Critical, "endpoint override wins");
+        assert_eq!(
+            envelope_severity,
+            Severity::Critical,
+            "endpoint override wins"
+        );
     }
 
     #[test]
@@ -9983,7 +10770,9 @@ acks: []
 
     #[test]
     fn endpoint_row_round_trips_severity_overrides() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("ep-round-trip"));
         let ep = WebhookEndpoint {
             id: String::new(),
@@ -10005,13 +10794,19 @@ acks: []
         // read row → DTO directly and confirm the overrides field is fully restored
         let store = crate::core::shared_store().unwrap();
         let s = store.lock().unwrap();
-        let StoreEnum::Db(db) = &*s else { panic!("need db store") };
+        let StoreEnum::Db(db) = &*s else {
+            panic!("need db store")
+        };
         let rows = db.list_alerting_endpoints();
         let loaded = rows.iter().find(|r| r.id == row.id).unwrap();
         let dto = endpoint_row_to_dto(loaded);
         assert_eq!(dto.severity_overrides.len(), 2);
-        assert!(dto.severity_overrides.contains(&("plugin.metrics.exceeded".into(), Severity::Critical)));
-        assert!(dto.severity_overrides.contains(&("capability.sla.violated".into(), Severity::Warn)));
+        assert!(dto
+            .severity_overrides
+            .contains(&("plugin.metrics.exceeded".into(), Severity::Critical)));
+        assert!(dto
+            .severity_overrides
+            .contains(&("capability.sla.violated".into(), Severity::Warn)));
         // the row.severity_overrides_json column is non-null (because there are overrides)
         assert!(loaded.severity_overrides.is_some());
     }
@@ -10137,7 +10932,9 @@ acks: []
     #[test]
     fn preview_endpoint_severity_returns_no_override_when_miss() {
         // save a user hint so propagation != default for this source
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("preview-miss"));
         save_user_severity_hint("capability.sla.violated", "info").unwrap();
         let ep = WebhookEndpoint {
@@ -10163,7 +10960,9 @@ acks: []
 
     #[test]
     fn preview_alerting_endpoint_severity_filters_to_single_endpoint() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("preview-single"));
         // create 2 endpoints with different overrides
         let ep_a = WebhookEndpoint {
@@ -10195,11 +10994,8 @@ acks: []
         };
         let _row_b = save_endpoint(ep_b).unwrap();
         // filter to ep-a
-        let preview = preview_alerting_endpoint_severity(
-            "plugin.metrics.exceeded",
-            Some(&row_a.id),
-        )
-        .unwrap();
+        let preview =
+            preview_alerting_endpoint_severity("plugin.metrics.exceeded", Some(&row_a.id)).unwrap();
         assert_eq!(preview.source, "plugin.metrics.exceeded");
         assert_eq!(preview.endpoints.len(), 1, "should only include ep-a");
         assert_eq!(preview.endpoints[0].endpoint_name, "ep-a");
@@ -10208,7 +11004,9 @@ acks: []
 
     #[test]
     fn preview_alerting_endpoint_severity_rejects_empty_source() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("preview-empty-src"));
         let err = preview_alerting_endpoint_severity("", None).unwrap_err();
         assert!(err.contains("source is required"), "got: {err}");
@@ -10219,7 +11017,9 @@ acks: []
 
     #[test]
     fn preview_alerting_endpoint_severity_first_match_wins_in_preview() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("preview-first-match"));
         // ep override: glob first, exact after
         let ep = WebhookEndpoint {
@@ -10239,8 +11039,7 @@ acks: []
             ],
         };
         let _ = save_endpoint(ep).unwrap();
-        let preview =
-            preview_alerting_endpoint_severity("plugin.metrics.exceeded", None).unwrap();
+        let preview = preview_alerting_endpoint_severity("plugin.metrics.exceeded", None).unwrap();
         assert_eq!(preview.endpoints.len(), 1);
         let hit = preview.endpoints[0]
             .override_hit
@@ -10256,7 +11055,9 @@ acks: []
 
     #[test]
     fn simulate_aggregations_no_rules_returns_pass() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("sim75-agg-no-rules"));
         _reset_aggregations_for_tests();
         let s = simulate_aggregations(
@@ -10271,18 +11072,16 @@ acks: []
 
     #[test]
     fn simulate_aggregations_below_threshold_returns_no_fire() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("sim75-agg-below"));
         _reset_aggregations_for_tests();
         save_aggregation(agg_rule("r1", "suppress", None)).unwrap();
         let now = now_secs();
         // seed 1 event via real evaluate
         let _ = evaluate_aggregations("plugin.metrics.exceeded", &serde_json::json!({}), now);
-        let s = simulate_aggregations(
-            "plugin.metrics.exceeded",
-            &serde_json::json!({}),
-            now,
-        );
+        let s = simulate_aggregations("plugin.metrics.exceeded", &serde_json::json!({}), now);
         assert_eq!(s.matched_rule_id.as_deref(), Some("r1"));
         assert_eq!(s.bucket_events_in_window, 1);
         assert_eq!(s.threshold, 3);
@@ -10292,7 +11091,9 @@ acks: []
 
     #[test]
     fn simulate_aggregations_at_threshold_would_fire() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("sim75-agg-at"));
         _reset_aggregations_for_tests();
         save_aggregation(agg_rule("r1", "suppress", None)).unwrap();
@@ -10301,11 +11102,7 @@ acks: []
         let _ = evaluate_aggregations("plugin.metrics.exceeded", &serde_json::json!({}), now);
         let _ = evaluate_aggregations("plugin.metrics.exceeded", &serde_json::json!({}), now);
         // simulate 3rd: bucket=2, simulated_count=3, would_fire=true
-        let s = simulate_aggregations(
-            "plugin.metrics.exceeded",
-            &serde_json::json!({}),
-            now,
-        );
+        let s = simulate_aggregations("plugin.metrics.exceeded", &serde_json::json!({}), now);
         assert_eq!(s.bucket_events_in_window, 2);
         assert!(s.would_fire);
         assert_eq!(s.action.as_deref(), Some("suppress"));
@@ -10314,7 +11111,9 @@ acks: []
 
     #[test]
     fn simulate_aggregations_does_not_mutate_bucket() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("sim75-agg-nomut"));
         _reset_aggregations_for_tests();
         save_aggregation(agg_rule("r1", "suppress", None)).unwrap();
@@ -10324,26 +11123,20 @@ acks: []
         let _ = evaluate_aggregations("plugin.metrics.exceeded", &serde_json::json!({}), now);
         // simulate 3 times — should NOT push any events
         for _ in 0..3 {
-            let s = simulate_aggregations(
-                "plugin.metrics.exceeded",
-                &serde_json::json!({}),
-                now,
-            );
+            let s = simulate_aggregations("plugin.metrics.exceeded", &serde_json::json!({}), now);
             // bucket is still 2 (no mutation), simulated_count = 3 → would_fire=true
             assert_eq!(s.bucket_events_in_window, 2);
         }
         // Now real evaluate the 3rd event → suppress fires → state mutated by real call
-        let d = evaluate_aggregations(
-            "plugin.metrics.exceeded",
-            &serde_json::json!({}),
-            now,
-        );
+        let d = evaluate_aggregations("plugin.metrics.exceeded", &serde_json::json!({}), now);
         assert!(matches!(d, AggregationDecision::Suppress { .. }));
     }
 
     #[test]
     fn simulate_correlations_no_rules_returns_pass() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("sim75-corr-no-rules"));
         _reset_correlations_for_tests();
         let s = simulate_correlations("plugin.lifecycle.crashed", now_secs());
@@ -10354,7 +11147,9 @@ acks: []
 
     #[test]
     fn simulate_correlations_match_a_then_b_simulates_suppress() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("sim75-corr-ab"));
         _reset_correlations_for_tests();
         save_correlation(corr_rule(
@@ -10377,7 +11172,9 @@ acks: []
 
     #[test]
     fn simulate_correlations_does_not_mutate_last_a() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("sim75-corr-nomut"));
         _reset_correlations_for_tests();
         save_correlation(corr_rule(
@@ -10421,7 +11218,9 @@ acks: []
 
     #[test]
     fn simulate_silence_no_rules_returns_none() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("sim76-sil-no"));
         let s = simulate_silence("plugin.metrics.exceeded", now_secs());
         assert!(s.is_none());
@@ -10429,7 +11228,9 @@ acks: []
 
     #[test]
     fn simulate_silence_active_returns_hit() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("sim76-sil-hit"));
         let now = now_secs();
         let mut rule = silence_rule_active("plugin.*");
@@ -10445,7 +11246,9 @@ acks: []
 
     #[test]
     fn simulate_silence_pattern_mismatch_returns_none() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("sim76-sil-mismatch"));
         let now = now_secs();
         let mut rule = silence_rule_active("plugin.lifecycle.*");
@@ -10457,7 +11260,9 @@ acks: []
 
     #[test]
     fn simulate_ack_active_returns_hit() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("sim76-ack-active"));
         let now = now_secs();
         let _ = ack_kind("plugin.metrics.*".to_string(), 60).unwrap();
@@ -10470,7 +11275,9 @@ acks: []
 
     #[test]
     fn simulate_ack_expired_returns_none() {
-        let _g = crate::core::TEST_STORE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = crate::core::TEST_STORE_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         crate::core::set_shared_store(fresh_store("sim76-ack-expired"));
         let now = now_secs();
         // ack window 1s

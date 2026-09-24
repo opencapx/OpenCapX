@@ -59,14 +59,24 @@ fn url_host(url: &str) -> Option<String> {
         return None; // only http(s) is constrained; browser.read's URL validation only accepts http(s) anyway
     }
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
-    let host = authority.rsplit_once('@').map(|(_, h)| h).unwrap_or(authority);
+    let host = authority
+        .rsplit_once('@')
+        .map(|(_, h)| h)
+        .unwrap_or(authority);
     let host = if host.starts_with('[') {
-        format!("[{}]", host.split(']').next().unwrap_or("").trim_start_matches('[')) // [IPv6]:port → canonical bracketed form
+        format!(
+            "[{}]",
+            host.split(']').next().unwrap_or("").trim_start_matches('[')
+        ) // [IPv6]:port → canonical bracketed form
     } else {
         host.split(':').next().unwrap_or("").to_string()
     };
     let host = host.trim().to_ascii_lowercase();
-    if host.is_empty() { None } else { Some(host) }
+    if host.is_empty() {
+        None
+    } else {
+        Some(host)
+    }
 }
 
 /// Whether a domain entry covers host: `example.com` = this domain + subdomains;
@@ -102,8 +112,14 @@ pub fn decide_domain(scope_json: Option<&str>, host: &str) -> ScopeOutcome {
         return ScopeOutcome::Denied;
     };
     let empty: Vec<Value> = Vec::new();
-    let denied = obj.get("denied").and_then(|x| x.as_array()).unwrap_or(&empty);
-    let allowed = obj.get("allowed").and_then(|x| x.as_array()).unwrap_or(&empty);
+    let denied = obj
+        .get("denied")
+        .and_then(|x| x.as_array())
+        .unwrap_or(&empty);
+    let allowed = obj
+        .get("allowed")
+        .and_then(|x| x.as_array())
+        .unwrap_or(&empty);
     for d in denied {
         if let Some(e) = d.as_str() {
             if domain_covers(e, host) {
@@ -177,8 +193,14 @@ pub fn decide(scope_json: Option<&str>, path: &str) -> ScopeOutcome {
         return ScopeOutcome::Denied;
     };
     let empty: Vec<Value> = Vec::new();
-    let denied = obj.get("denied").and_then(|x| x.as_array()).unwrap_or(&empty);
-    let allowed = obj.get("allowed").and_then(|x| x.as_array()).unwrap_or(&empty);
+    let denied = obj
+        .get("denied")
+        .and_then(|x| x.as_array())
+        .unwrap_or(&empty);
+    let allowed = obj
+        .get("allowed")
+        .and_then(|x| x.as_array())
+        .unwrap_or(&empty);
     let p = normalize(path);
     for d in denied {
         if let Some(s) = d.as_str() {
@@ -307,10 +329,13 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     fn tmp_store(tag: &str) -> SharedStore {
-        let dir = std::env::temp_dir().join(format!("opencapx-scope-{}-{}", tag, std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("opencapx-scope-{}-{}", tag, std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        Arc::new(Mutex::new(StoreEnum::Db(Storage::open(&dir.join("t.db")).unwrap())))
+        Arc::new(Mutex::new(StoreEnum::Db(
+            Storage::open(&dir.join("t.db")).unwrap(),
+        )))
     }
 
     #[test]
@@ -379,7 +404,10 @@ mod tests {
         let input = serde_json::json!({ "root": "~/safe/sub" });
         assert_eq!(enforce(&store, "file.search", &input, "ag_x", None), Ok(()));
         let input_bad = serde_json::json!({ "root": "~/etc" });
-        assert_eq!(enforce(&store, "file.search", &input_bad, "ag_x", None), Err("agent"));
+        assert_eq!(
+            enforce(&store, "file.search", &input_bad, "ag_x", None),
+            Err("agent")
+        );
     }
 
     #[test]
@@ -405,43 +433,81 @@ mod tests {
         }
         // Falls within both layers' allowed → pass
         let input = serde_json::json!({ "path": "~/pub/inner/f.txt" });
-        assert_eq!(enforce(&store, "file.read", &input, "ag_x", Some("p1")), Ok(()));
+        assert_eq!(
+            enforce(&store, "file.read", &input, "ag_x", Some("p1")),
+            Ok(())
+        );
         // Inside the agent layer, outside the plugin layer → the plugin layer rejects
         let input = serde_json::json!({ "path": "~/pub/outer.txt" });
-        assert_eq!(enforce(&store, "file.read", &input, "ag_x", Some("p1")), Err("plugin"));
+        assert_eq!(
+            enforce(&store, "file.read", &input, "ag_x", Some("p1")),
+            Err("plugin")
+        );
         // Inside-agent/outside-plugin already verified; outside the agent layer (scope
         // closed by default) → the agent layer rejects, regardless of whether the plugin is
         // configured (the two layers are independent).
         let input = serde_json::json!({ "path": "~/anywhere" });
-        assert_eq!(enforce(&store, "file.read", &input, "ag_x", Some("p_other")), Err("agent"));
+        assert_eq!(
+            enforce(&store, "file.read", &input, "ag_x", Some("p_other")),
+            Err("agent")
+        );
         // Truly both unconfigured (neither agent nor plugin has a scope row) → unrestricted (legacy)
         let input = serde_json::json!({ "path": "~/anywhere" });
-        assert_eq!(enforce(&store, "file.read", &input, "ag_y", Some("p_other")), Ok(()));
+        assert_eq!(
+            enforce(&store, "file.read", &input, "ag_y", Some("p_other")),
+            Ok(())
+        );
     }
-
 
     #[test]
     fn domain_matching_semantics() {
         let scope = r#"{"allowed":["example.com","*.internal.io"],"denied":["evil.example.com"]}"#;
         // This domain + subdomains (dot boundary, excluding sibling domains)
-        assert_eq!(decide_domain(Some(scope), "example.com"), ScopeOutcome::Allowed);
-        assert_eq!(decide_domain(Some(scope), "api.example.com"), ScopeOutcome::Allowed);
-        assert_eq!(decide_domain(Some(scope), "notexample.com"), ScopeOutcome::Denied);
+        assert_eq!(
+            decide_domain(Some(scope), "example.com"),
+            ScopeOutcome::Allowed
+        );
+        assert_eq!(
+            decide_domain(Some(scope), "api.example.com"),
+            ScopeOutcome::Allowed
+        );
+        assert_eq!(
+            decide_domain(Some(scope), "notexample.com"),
+            ScopeOutcome::Denied
+        );
         // A malicious subdomain is not bypassed by a notexample-style prefix: evil.example.com hits denied
-        assert_eq!(decide_domain(Some(scope), "evil.example.com"), ScopeOutcome::Denied);
+        assert_eq!(
+            decide_domain(Some(scope), "evil.example.com"),
+            ScopeOutcome::Denied
+        );
         // *.internal.io = subdomains only; the bare domain does not hit → closed by default
-        assert_eq!(decide_domain(Some(scope), "a.internal.io"), ScopeOutcome::Allowed);
-        assert_eq!(decide_domain(Some(scope), "internal.io"), ScopeOutcome::Denied);
+        assert_eq!(
+            decide_domain(Some(scope), "a.internal.io"),
+            ScopeOutcome::Allowed
+        );
+        assert_eq!(
+            decide_domain(Some(scope), "internal.io"),
+            ScopeOutcome::Denied
+        );
         // Unconfigured domain → closed; null → unrestricted; bad JSON → reject
-        assert_eq!(decide_domain(Some(scope), "other.org"), ScopeOutcome::Denied);
+        assert_eq!(
+            decide_domain(Some(scope), "other.org"),
+            ScopeOutcome::Denied
+        );
         assert_eq!(decide_domain(None, "other.org"), ScopeOutcome::Unscoped);
         assert_eq!(decide_domain(Some("{"), "other.org"), ScopeOutcome::Denied);
     }
 
     #[test]
     fn domain_host_extraction_strips_port_userinfo_and_case() {
-        assert_eq!(url_host("https://Example.com:8443/path"), Some("example.com".to_string()));
-        assert_eq!(url_host("http://user:pw@api.example.com/x"), Some("api.example.com".to_string()));
+        assert_eq!(
+            url_host("https://Example.com:8443/path"),
+            Some("example.com".to_string())
+        );
+        assert_eq!(
+            url_host("http://user:pw@api.example.com/x"),
+            Some("api.example.com".to_string())
+        );
         assert_eq!(url_host("http://[::1]:9000/x"), Some("[::1]".to_string()));
         assert_eq!(url_host("not-a-url"), None);
         assert_eq!(url_host("ftp://x/"), None);
@@ -463,25 +529,49 @@ mod tests {
             assert_eq!((n1, n2), (Some(1), Some(1)));
         }
         let ok = serde_json::json!({ "url": "https://docs.rs/opencapx/latest" });
-        assert_eq!(enforce(&store, "browser.read", &ok, "ag_x", Some("p1")), Ok(()));
+        assert_eq!(
+            enforce(&store, "browser.read", &ok, "ag_x", Some("p1")),
+            Ok(())
+        );
         let outside_agent = serde_json::json!({ "url": "https://crates.io/crates/serde" });
-        assert_eq!(enforce(&store, "browser.read", &outside_agent, "ag_x", Some("p1")), Err("agent"));
+        assert_eq!(
+            enforce(&store, "browser.read", &outside_agent, "ag_x", Some("p1")),
+            Err("agent")
+        );
         let inside_agent_outside_plugin = serde_json::json!({ "url": "https://sub.docs.rs/x" });
-        assert_eq!(enforce(&store, "browser.read", &inside_agent_outside_plugin, "ag_x", Some("p_other")), Ok(()));
+        assert_eq!(
+            enforce(
+                &store,
+                "browser.read",
+                &inside_agent_outside_plugin,
+                "ag_x",
+                Some("p_other")
+            ),
+            Ok(())
+        );
         // A layer with no scope row → unrestricted (legacy)
         let any = serde_json::json!({ "url": "https://anywhere.example" });
         assert_eq!(enforce(&store, "browser.read", &any, "ag_y", None), Ok(()));
         // URL missing/malformed → don't claim the error, leave it to capability validation
-        assert_eq!(enforce(&store, "browser.read", &serde_json::json!({}), "ag_x", None), Ok(()));
+        assert_eq!(
+            enforce(&store, "browser.read", &serde_json::json!({}), "ag_x", None),
+            Ok(())
+        );
     }
 
     #[test]
     fn non_path_capability_is_noop() {
         let store = tmp_store("noop");
         let input = serde_json::json!({ "text": "hi" });
-        assert_eq!(enforce(&store, "opencapx.say", &input, "ag_x", Some("p1")), Ok(()));
+        assert_eq!(
+            enforce(&store, "opencapx.say", &input, "ag_x", Some("p1")),
+            Ok(())
+        );
         // Path-type capability but input lacks a path → leave it to the capability's own validation
         let input = serde_json::json!({});
-        assert_eq!(enforce(&store, "file.read", &input, "ag_x", Some("p1")), Ok(()));
+        assert_eq!(
+            enforce(&store, "file.read", &input, "ag_x", Some("p1")),
+            Ok(())
+        );
     }
 }

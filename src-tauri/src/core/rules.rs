@@ -244,8 +244,7 @@ fn read_layer(path: &Path) -> Result<Option<Vec<Rule>>, String> {
     if !path.exists() {
         return Ok(None);
     }
-    let text =
-        std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     RulesFile::parse(&text)
         .map(|f| Some(f.rules))
         .map_err(|e| format!("{}: {e}", path.display()))
@@ -282,9 +281,11 @@ fn load_trust_registry(path: &Path) -> Vec<String> {
         .ok()
         .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
         .and_then(|v| {
-            v.get("projects")?
-                .as_array()
-                .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+            v.get("projects")?.as_array().map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect()
+            })
         })
         .unwrap_or_default()
 }
@@ -300,8 +301,11 @@ fn set_trust_in(registry: &Path, dir: &Path, on: bool) -> Result<(), String> {
     if let Some(parent) = registry.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(registry, serde_json::to_string_pretty(&v).unwrap_or_default())
-        .map_err(|e| e.to_string())?;
+    std::fs::write(
+        registry,
+        serde_json::to_string_pretty(&v).unwrap_or_default(),
+    )
+    .map_err(|e| e.to_string())?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -347,7 +351,10 @@ pub fn rewrite_command(cmd: &str, stage: Stage, set: &RuleSet) -> RewriteOutcome
 /// `explain` is a **dry-run**: it only prints the match chain and the resulting command; it does not execute or output hook JSON.
 /// `opencapx rules` — clap owns the parsing and the generated help.
 #[derive(clap::Parser)]
-#[command(name = "opencapx rules", about = "Command rules: list, explain, trust and untrust rule files")]
+#[command(
+    name = "opencapx rules",
+    about = "Command rules: list, explain, trust and untrust rule files"
+)]
 struct RulesCli {
     #[command(subcommand)]
     cmd: RulesCmd,
@@ -420,7 +427,11 @@ fn set_trust(on: bool, path: Option<PathBuf>) -> i32 {
     };
     match if on { trust(&dir) } else { untrust(&dir) } {
         Ok(()) => {
-            println!("{} {}", if on { "trusted" } else { "untrusted" }, dir.display());
+            println!(
+                "{} {}",
+                if on { "trusted" } else { "untrusted" },
+                dir.display()
+            );
             0
         }
         Err(e) => {
@@ -558,8 +569,7 @@ pub fn add_rule_to_path(path: &Path, mut rule: serde_json::Value) -> Result<(), 
     if blank_id {
         obj.insert("id".to_string(), serde_json::json!(gen_rule_id()));
     }
-    let wrapped =
-        serde_json::json!({ "version": RULES_SCHEMA_VERSION, "rules": [rule.clone()] });
+    let wrapped = serde_json::json!({ "version": RULES_SCHEMA_VERSION, "rules": [rule.clone()] });
     RulesFile::parse(&wrapped.to_string())?;
     let id = rule
         .get("id")
@@ -568,8 +578,7 @@ pub fn add_rule_to_path(path: &Path, mut rule: serde_json::Value) -> Result<(), 
         .to_string();
 
     let mut root = if path.exists() {
-        let text =
-            std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
         serde_json::from_str::<serde_json::Value>(&text)
             .map_err(|e| format!("{}: {e}", path.display()))?
     } else {
@@ -589,8 +598,11 @@ pub fn add_rule_to_path(path: &Path, mut rule: serde_json::Value) -> Result<(), 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(path, serde_json::to_string_pretty(&root).unwrap_or_default())
-        .map_err(|e| format!("{}: {e}", path.display()))
+    std::fs::write(
+        path,
+        serde_json::to_string_pretty(&root).unwrap_or_default(),
+    )
+    .map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// Append a rule to the global rules file (the settings page "Add rule").
@@ -706,7 +718,10 @@ mod tests {
         let dir = tmp("proj-untrusted");
         write(&project_path(&dir), &rule_json("r1", "curl ", "sandbox"));
         let set = load_layers(&missing_global(), Some(&project_path(&dir)), false);
-        assert!(set.rules.is_empty(), "untrusted project rules must not load");
+        assert!(
+            set.rules.is_empty(),
+            "untrusted project rules must not load"
+        );
     }
 
     #[test]
@@ -726,7 +741,11 @@ mod tests {
         write(&g, "{ also bad");
         let set = load_layers(&g, Some(&project_path(&dir)), true);
         assert!(set.rules.is_empty());
-        assert_eq!(set.errors.len(), 2, "both bad layers recorded, neither fatal");
+        assert_eq!(
+            set.errors.len(),
+            2,
+            "both bad layers recorded, neither fatal"
+        );
     }
 
     #[test]
@@ -738,7 +757,13 @@ mod tests {
         let set = load_layers(&g, Some(&project_path(&dir)), true);
         assert_eq!(set.rules.len(), 1, "same id collapses");
         assert_eq!(
-            set.rules[0].when.command.as_ref().unwrap().prefix.as_deref(),
+            set.rules[0]
+                .when
+                .command
+                .as_ref()
+                .unwrap()
+                .prefix
+                .as_deref(),
             Some("wget "),
             "inner layer wins"
         );
@@ -758,7 +783,10 @@ mod tests {
     #[test]
     fn rewrite_command_applies_first_match() {
         let dir = tmp("rw-first");
-        write(&project_path(&dir), &rule_json("sandbox-curl", "curl ", "sandbox"));
+        write(
+            &project_path(&dir),
+            &rule_json("sandbox-curl", "curl ", "sandbox"),
+        );
         let set = load_layers(&missing_global(), Some(&project_path(&dir)), true);
         assert_eq!(
             rewrite_command("curl https://x", Stage::ToolPre, &set),
@@ -767,7 +795,10 @@ mod tests {
                 command: "sandbox curl https://x".into(),
             }
         );
-        assert_eq!(rewrite_command("ls /tmp", Stage::ToolPre, &set), RewriteOutcome::Unchanged);
+        assert_eq!(
+            rewrite_command("ls /tmp", Stage::ToolPre, &set),
+            RewriteOutcome::Unchanged
+        );
     }
 
     // ---- add_rule_to_path ----
@@ -797,7 +828,11 @@ mod tests {
         let f = tmp("add-rule-id").join("rules.json");
         add_rule_to_path(&f, sample_rule(None)).unwrap();
         let set = load_layers(&f, None, false);
-        assert!(set.rules[0].id.starts_with("rule-"), "got {}", set.rules[0].id);
+        assert!(
+            set.rules[0].id.starts_with("rule-"),
+            "got {}",
+            set.rules[0].id
+        );
     }
 
     #[test]

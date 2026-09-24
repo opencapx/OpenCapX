@@ -50,8 +50,18 @@ const BASE_ENV_ALLOW: &[&str] = &["PATH", "HOME", "TMPDIR", "TZ", "LANG"];
 /// while the same plugin ran fine under the unix allowlist.
 #[cfg(windows)]
 const PLATFORM_ENV_ALLOW: &[&str] = &[
-    "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC", "WINDIR", "PATHEXT", "TEMP", "TMP", "USERPROFILE",
-    "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "COMSPEC",
+    "WINDIR",
+    "PATHEXT",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "APPDATA",
+    "LOCALAPPDATA",
 ];
 #[cfg(not(windows))]
 const PLATFORM_ENV_ALLOW: &[&str] = &[];
@@ -305,12 +315,14 @@ impl PluginProcess {
             }
         }
         let mut child = cmd.spawn()?;
-        let stdin = child.stdin.take().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::Other, "no stdin")
-        })?;
-        let stdout = child.stdout.take().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::Other, "no stdout")
-        })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no stdin"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no stdout"))?;
         let stdin: Arc<Mutex<ChildStdin>> = Arc::new(Mutex::new(stdin));
 
         // stderr → plugin log file + EventBus (consumed live by SSE/admin/settings audit)
@@ -362,9 +374,8 @@ impl PluginProcess {
                 let bytes = match read_line_capped(&mut r, MAX_PLUGIN_LINE_BYTES) {
                     LineOutcome::Eof => break,
                     LineOutcome::Dropped => {
-                        let n = DROPPED_FRAMES
-                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                            + 1;
+                        let n =
+                            DROPPED_FRAMES.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
                         if n == 1 || n % 100 == 0 {
                             log_line(
                                 &trace_pid,
@@ -433,8 +444,7 @@ impl PluginProcess {
     }
 
     pub fn call(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
-        let (tx, rx): (SyncSender<Value>, Receiver<Value>) =
-            std::sync::mpsc::sync_channel(1);
+        let (tx, rx): (SyncSender<Value>, Receiver<Value>) = std::sync::mpsc::sync_channel(1);
         let id = {
             let mut n = self.next_id.lock().map_err(|_| "poisoned".to_string())?;
             let v = *n;
@@ -577,10 +587,7 @@ impl PluginProcess {
     /// always pings through even without a custom implementation; a custom one can emit deeper health signals.
     pub fn ping(&self, timeout: std::time::Duration) -> bool {
         match self.call("plugin.ping", serde_json::json!({}), timeout) {
-            Ok(v) => v
-                .get("ok")
-                .and_then(|x| x.as_bool())
-                .unwrap_or(true),
+            Ok(v) => v.get("ok").and_then(|x| x.as_bool()).unwrap_or(true),
             Err(_) => false,
         }
     }
@@ -628,8 +635,16 @@ mod tests {
             env: HashMap::new(),
         };
         let on_reverse: OnReverse = Arc::new(|_v: Value, _reply: Reply| {});
-        let p = PluginProcess::spawn("com.opencapx.echo-vision", &echo_root(), &spec, "test", on_reverse, &EnvPolicy::default(), None)
-            .expect("spawn");
+        let p = PluginProcess::spawn(
+            "com.opencapx.echo-vision",
+            &echo_root(),
+            &spec,
+            "test",
+            on_reverse,
+            &EnvPolicy::default(),
+            None,
+        )
+        .expect("spawn");
         let init = p
             .call(
                 "plugin.initialize",
@@ -641,7 +656,9 @@ mod tests {
         let caps = init["capabilities"].as_array().unwrap().clone();
         assert!(caps.iter().any(|c| c["id"] == "image.analyze"));
 
-        let ping = p.call("plugin.ping", json!({}), Duration::from_secs(5)).expect("ping");
+        let ping = p
+            .call("plugin.ping", json!({}), Duration::from_secs(5))
+            .expect("ping");
         assert_eq!(ping["ok"], json!(true));
 
         let out = p
@@ -651,7 +668,10 @@ mod tests {
                 Duration::from_secs(10),
             )
             .expect("analyze");
-        assert!(out["description"].as_str().unwrap().contains("/tmp/test.png"));
+        assert!(out["description"]
+            .as_str()
+            .unwrap()
+            .contains("/tmp/test.png"));
 
         p.shutdown();
     }
@@ -668,8 +688,16 @@ mod tests {
             env: HashMap::new(),
         };
         let on_reverse: OnReverse = Arc::new(|_v: Value, _reply: Reply| {});
-        let p = PluginProcess::spawn("com.opencapx.echo-vision", &echo_root(), &spec, "test", on_reverse, &EnvPolicy::default(), None)
-            .expect("spawn");
+        let p = PluginProcess::spawn(
+            "com.opencapx.echo-vision",
+            &echo_root(),
+            &spec,
+            "test",
+            on_reverse,
+            &EnvPolicy::default(),
+            None,
+        )
+        .expect("spawn");
         let err = p
             .call("no.such.method", json!({}), Duration::from_secs(10))
             .expect_err("must error");
@@ -696,8 +724,16 @@ mod tests {
             env: HashMap::new(),
         };
         let on_reverse: OnReverse = Arc::new(|_v: Value, _reply: Reply| {});
-        let _ = PluginProcess::spawn("com.opencapx.stderr-test", &echo_root(), &spec, "test", on_reverse, &EnvPolicy::default(), None)
-            .expect("spawn");
+        let _ = PluginProcess::spawn(
+            "com.opencapx.stderr-test",
+            &echo_root(),
+            &spec,
+            "test",
+            on_reverse,
+            &EnvPolicy::default(),
+            None,
+        )
+        .expect("spawn");
         let mut got = false;
         let start = std::time::Instant::now();
         while start.elapsed() < std::time::Duration::from_secs(3) {
@@ -736,9 +772,15 @@ mod tests {
     fn read_line_capped_drops_oversized_without_losing_next() {
         let input = format!("ok-1\n{}\nok-2\n", "x".repeat(64));
         let mut r = std::io::BufReader::new(input.as_bytes());
-        assert_eq!(read_line_capped(&mut r, 16), LineOutcome::Line(b"ok-1".to_vec()));
+        assert_eq!(
+            read_line_capped(&mut r, 16),
+            LineOutcome::Line(b"ok-1".to_vec())
+        );
         assert_eq!(read_line_capped(&mut r, 16), LineOutcome::Dropped);
-        assert_eq!(read_line_capped(&mut r, 16), LineOutcome::Line(b"ok-2".to_vec()));
+        assert_eq!(
+            read_line_capped(&mut r, 16),
+            LineOutcome::Line(b"ok-2".to_vec())
+        );
         assert_eq!(read_line_capped(&mut r, 16), LineOutcome::Eof);
     }
 
@@ -747,9 +789,18 @@ mod tests {
     #[test]
     fn read_line_capped_strips_crlf_carriage_return() {
         let mut r = std::io::BufReader::new(&b"a\r\nb\nno-eol\r"[..]);
-        assert_eq!(read_line_capped(&mut r, 16), LineOutcome::Line(b"a".to_vec()));
-        assert_eq!(read_line_capped(&mut r, 16), LineOutcome::Line(b"b".to_vec()));
-        assert_eq!(read_line_capped(&mut r, 16), LineOutcome::Line(b"no-eol".to_vec()));
+        assert_eq!(
+            read_line_capped(&mut r, 16),
+            LineOutcome::Line(b"a".to_vec())
+        );
+        assert_eq!(
+            read_line_capped(&mut r, 16),
+            LineOutcome::Line(b"b".to_vec())
+        );
+        assert_eq!(
+            read_line_capped(&mut r, 16),
+            LineOutcome::Line(b"no-eol".to_vec())
+        );
     }
 
     /// P3 — the plugin first spews a 5 MiB giant line, and the handshake still succeeds (the reader neither OOMs nor blocks); the giant line is counted and dropped.
@@ -937,8 +988,16 @@ for line in sys.stdin:
             isolate: true,
             allow: vec!["OPENCAPX_TEST_SECRET".to_string()],
         };
-        let p2 = PluginProcess::spawn("com.opencapx.env2", &dir, &spec2, "test", on_reverse2, &policy, None)
-            .expect("spawn 2");
+        let p2 = PluginProcess::spawn(
+            "com.opencapx.env2",
+            &dir,
+            &spec2,
+            "test",
+            on_reverse2,
+            &policy,
+            None,
+        )
+        .expect("spawn 2");
         let env2 = wait_env("env2.json");
         assert_eq!(
             env2.get("OPENCAPX_TEST_SECRET").and_then(|v| v.as_str()),
@@ -988,8 +1047,7 @@ for line in sys.stdin:
             match rx.recv_timeout(std::time::Duration::from_millis(300)) {
                 Ok(ev) => {
                     if ev.kind == "plugin.log"
-                        && ev.payload.get("pluginId").and_then(|v| v.as_str())
-                            == Some(pid.as_str())
+                        && ev.payload.get("pluginId").and_then(|v| v.as_str()) == Some(pid.as_str())
                         && ev.payload.get("source").and_then(|v| v.as_str()) == Some("stderr")
                     {
                         delivered += 1;
@@ -1031,10 +1089,8 @@ for line in sys.stdin:
         let data_dir = data_root.join("com.example.sbx");
         std::fs::create_dir_all(&data_dir).unwrap();
         let data_file = data_dir.join("probe.json");
-        let escape_file = std::env::temp_dir().join(format!(
-            "opencapx-sbx-escape-{}.txt",
-            std::process::id()
-        ));
+        let escape_file =
+            std::env::temp_dir().join(format!("opencapx-sbx-escape-{}.txt", std::process::id()));
 
         std::fs::write(
             dir.join("sbx.py"),
@@ -1087,8 +1143,7 @@ for line in sys.stdin:
             }),
             network: Some("none".to_string()),
         };
-        let profile =
-            super::super::sandbox::sandbox_profile("com.example.sbx", &decl);
+        let profile = super::super::sandbox::sandbox_profile("com.example.sbx", &decl);
         let sbx = SandboxSpec {
             profile,
             tmp_dir: data_dir.join("tmp"),
@@ -1110,9 +1165,17 @@ for line in sys.stdin:
         let r = p
             .call("sbx.probe", json!({}), Duration::from_secs(20))
             .expect("probe");
-        assert_eq!(r["escape"], "denied", "writing to the temp dir must be denied by the sandbox: {:?}", r);
+        assert_eq!(
+            r["escape"], "denied",
+            "writing to the temp dir must be denied by the sandbox: {:?}",
+            r
+        );
         assert_eq!(r["data"], "ok", "plugin-data writes must pass: {:?}", r);
-        assert_eq!(r["tmp"], "ok", "TMPDIR is redirected into plugin-data, so tempfile should work: {:?}", r);
+        assert_eq!(
+            r["tmp"], "ok",
+            "TMPDIR is redirected into plugin-data, so tempfile should work: {:?}",
+            r
+        );
         p.shutdown();
         let _ = std::fs::remove_file(&escape_file);
 
@@ -1131,7 +1194,11 @@ for line in sys.stdin:
         let r2 = p2
             .call("sbx.probe", json!({}), Duration::from_secs(20))
             .expect("probe");
-        assert_eq!(r2["escape"], "ok", "the control group should be able to write: {:?}", r2);
+        assert_eq!(
+            r2["escape"], "ok",
+            "the control group should be able to write: {:?}",
+            r2
+        );
         p2.shutdown();
         let _ = std::fs::remove_file(&escape_file);
 

@@ -53,10 +53,7 @@ pub enum VerifyOutcome {
     /// The manifest claims to be signed but trusted-keys has no such keyId.
     UnknownKey { key_id: String },
     /// The manifest's sha256 field does not match the actual archive hash → the package was modified.
-    HashMismatch {
-        declared: String,
-        actual: String,
-    },
+    HashMismatch { declared: String, actual: String },
     /// signature.sig does not match the recomputed HMAC → forged signature.
     BadSignature { key_id: String },
     /// The manifest declares it is signed but the signature field cannot be parsed.
@@ -173,8 +170,8 @@ fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
     }
     let mut out = Vec::with_capacity(s.len() / 2);
     for i in (0..s.len()).step_by(2) {
-        let byte = u8::from_str_radix(&s[i..i + 2], 16)
-            .map_err(|e| format!("hex @{}: {}", i, e))?;
+        let byte =
+            u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| format!("hex @{}: {}", i, e))?;
         out.push(byte);
     }
     Ok(out)
@@ -316,7 +313,12 @@ pub fn verify_with(
                 Ok(s) => s,
                 Err(_) => return (VerifyOutcome::MalformedSignature, TrustSource::None),
             };
-            if !declared_bytes.iter().map(|b| format!("{:02x}", b)).collect::<String>().eq_ignore_ascii_case(&actual) {
+            if !declared_bytes
+                .iter()
+                .map(|b| format!("{:02x}", b))
+                .collect::<String>()
+                .eq_ignore_ascii_case(&actual)
+            {
                 return (
                     VerifyOutcome::HashMismatch {
                         declared: declared_sha,
@@ -347,9 +349,7 @@ pub fn verify_with(
                 );
             }
             (
-                VerifyOutcome::Trusted {
-                    key_id: sig.key_id,
-                },
+                VerifyOutcome::Trusted { key_id: sig.key_id },
                 TrustSource::Local,
             )
         }
@@ -481,10 +481,13 @@ mod tests {
         // First pack once with the "base" content lacking sha256/signature to compute the archive hash
         let tmp = path.with_extension("unsigned.ocplugin");
         let manifest_text = serde_json::to_string(&manifest_no_sig).unwrap();
-        make_zip(&tmp, &[
-            ("opencapx-plugin.json", manifest_text.as_bytes()),
-            ("bin/run.sh", bin),
-        ]);
+        make_zip(
+            &tmp,
+            &[
+                ("opencapx-plugin.json", manifest_text.as_bytes()),
+                ("bin/run.sh", bin),
+            ],
+        );
         let hash = compute_archive_hash(&tmp).unwrap();
         // Embed the hash + signature back into the manifest
         let mut m: serde_json::Value = serde_json::from_str(&manifest_text).unwrap();
@@ -494,10 +497,13 @@ mod tests {
         let signed_manifest = serde_json::to_string(&m).unwrap();
         // Repack (to keep the archive hash consistent: changing the manifest → the hash must be recomputed → but the manifest is skipped by sha256,
         // so after repacking the archive hash is still the concatenation of the same two non-manifest entries)
-        make_zip(path, &[
-            ("opencapx-plugin.json", signed_manifest.as_bytes()),
-            ("bin/run.sh", bin),
-        ]);
+        make_zip(
+            path,
+            &[
+                ("opencapx-plugin.json", signed_manifest.as_bytes()),
+                ("bin/run.sh", bin),
+            ],
+        );
         // Clean up the temporary file
         let _ = std::fs::remove_file(&tmp);
         hash
@@ -535,7 +541,10 @@ mod tests {
         );
         let digest = signing::digest_v2(&tmp).unwrap();
         let sk = ed25519_dalek::SigningKey::from_bytes(&seed);
-        let sig_hex = hex_encode(&sk.sign(format!("opencapx-v2\n{}", digest).as_bytes()).to_bytes());
+        let sig_hex = hex_encode(
+            &sk.sign(format!("opencapx-v2\n{}", digest).as_bytes())
+                .to_bytes(),
+        );
         let mut m = base.clone();
         m["sha256"] = serde_json::Value::String(digest.clone());
         m["signature"] = serde_json::json!({"keyId": key_id, "sig": sig_hex, "alg": "ed25519"});
@@ -558,7 +567,11 @@ mod tests {
             key_id.to_string(),
             serde_json::json!({ "alg": "ed25519", "publicKey": pubkey_hex }),
         );
-        std::fs::write(&p, serde_json::to_string(&serde_json::Value::Object(obj)).unwrap()).unwrap();
+        std::fs::write(
+            &p,
+            serde_json::to_string(&serde_json::Value::Object(obj)).unwrap(),
+        )
+        .unwrap();
         p
     }
 
@@ -594,7 +607,10 @@ mod tests {
         // expected = b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7
         let key = vec![0x0b; 20];
         let got = hmac_sha256_hex(&key, b"Hi There");
-        assert_eq!(got, "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7");
+        assert_eq!(
+            got,
+            "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+        );
     }
 
     /// RFC 8032 TEST 1 anchor: fixed seed → fixed public key (proves the dalek usage is correct).
@@ -644,8 +660,16 @@ mod tests {
         std::env::remove_var("OPENCAPX_TRUSTED_KEYS");
         let _ = std::fs::remove_dir_all(&dir);
 
-        assert_eq!(loaded.len(), 2, "only 2 valid rows, the rest skipped: {:?}", loaded.keys());
-        assert_eq!(loaded.get("hmac-key"), Some(&TrustedKey::Hmac(secret.to_vec())));
+        assert_eq!(
+            loaded.len(),
+            2,
+            "only 2 valid rows, the rest skipped: {:?}",
+            loaded.keys()
+        );
+        assert_eq!(
+            loaded.get("hmac-key"),
+            Some(&TrustedKey::Hmac(secret.to_vec()))
+        );
         let want_pk: [u8; 32] = hex_decode(V2_TEST_PUBKEY_HEX).unwrap().try_into().unwrap();
         assert_eq!(loaded.get("pub-key"), Some(&TrustedKey::Ed25519(want_pk)));
     }
@@ -664,7 +688,9 @@ mod tests {
         make_v2_signed_zip(&zip, "pub-key-1", v2_seed());
         assert_eq!(
             verify(&zip),
-            VerifyOutcome::Trusted { key_id: "pub-key-1".into() }
+            VerifyOutcome::Trusted {
+                key_id: "pub-key-1".into()
+            }
         );
         std::env::remove_var("OPENCAPX_TRUSTED_KEYS");
         let _ = std::fs::remove_dir_all(&dir);
@@ -756,7 +782,10 @@ mod tests {
         make_v2_signed_zip(&zip, "test-key-1", v2_seed());
         match verify(&zip) {
             VerifyOutcome::UnknownKey { key_id } => assert_eq!(key_id, "test-key-1"),
-            other => panic!("an HMAC key against an ed25519 declaration should be UnknownKey, got {:?}", other),
+            other => panic!(
+                "an HMAC key against an ed25519 declaration should be UnknownKey, got {:?}",
+                other
+            ),
         }
 
         // 5) unknown alg (rsa-v1) → MalformedSignature (dispatch rejects directly before computing the digest)
@@ -834,7 +863,12 @@ mod tests {
         let zip = dir.join("signed.zip");
         make_signed_zip(&zip, "test-key-1", secret);
         let outcome = verify(&zip);
-        assert_eq!(outcome, VerifyOutcome::Trusted { key_id: "test-key-1".into() });
+        assert_eq!(
+            outcome,
+            VerifyOutcome::Trusted {
+                key_id: "test-key-1".into()
+            }
+        );
         std::env::remove_var("OPENCAPX_TRUSTED_KEYS");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -851,7 +885,12 @@ mod tests {
         let zip = dir.join("signed.zip");
         make_signed_zip(&zip, "ghost-key", b"doesnt-matter");
         let outcome = verify(&zip);
-        assert_eq!(outcome, VerifyOutcome::UnknownKey { key_id: "ghost-key".into() });
+        assert_eq!(
+            outcome,
+            VerifyOutcome::UnknownKey {
+                key_id: "ghost-key".into()
+            }
+        );
         std::env::remove_var("OPENCAPX_TRUSTED_KEYS");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -995,8 +1034,11 @@ mod tests {
         let sig_hex = std::fs::read_to_string(root.join("golden").join("signature.hex")).unwrap();
         let sig_bytes: [u8; 64] = hex_decode(sig_hex.trim()).unwrap().try_into().unwrap();
         let msg = format!("opencapx-v2\n{}", expect_digest.trim());
-        vk.verify_strict(msg.as_bytes(), &ed25519_dalek::Signature::from_bytes(&sig_bytes))
-            .expect("golden signature must verify");
+        vk.verify_strict(
+            msg.as_bytes(),
+            &ed25519_dalek::Signature::from_bytes(&sig_bytes),
+        )
+        .expect("golden signature must verify");
     }
 
     /// Golden archive + fixture trusted-keys → verify must return Trusted (end-to-end through alg dispatch + loading).
@@ -1046,8 +1088,7 @@ mod tests {
         }
 
         let root = fixtures_signing_root();
-        let tmp = std::env::temp_dir()
-            .join(format!("opencapx-sdk-cross-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("opencapx-sdk-cross-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         let packed = tmp.join("sdk-packed.ocplugin");
@@ -1120,7 +1161,11 @@ assert d == open(os.path.join(root, "golden", "digest_v2.hex")).read().strip(), 
             .join("fixtures")
             .join("registry");
         // registry cache = signed fixture index; local trusted-keys = empty object.
-        std::fs::copy(fixtures.join("index.signed.json"), reg_dir.join("cache.json")).unwrap();
+        std::fs::copy(
+            fixtures.join("index.signed.json"),
+            reg_dir.join("cache.json"),
+        )
+        .unwrap();
         let empty_keys = reg_dir.join("trusted-keys.json");
         std::fs::write(&empty_keys, "{}").unwrap();
         let pub_hex = std::fs::read_to_string(fixtures.join("official.pub.hex")).unwrap();
@@ -1131,7 +1176,9 @@ assert d == open(os.path.join(root, "golden", "digest_v2.hex")).read().strip(), 
             format!("com.opencapx.test-official={}", pub_hex.trim()),
         );
 
-        let archive = fixtures_signing_root().join("golden").join("signed.ocplugin");
+        let archive = fixtures_signing_root()
+            .join("golden")
+            .join("signed.ocplugin");
         let (outcome, source) = verify_with_source(&archive);
 
         std::env::remove_var("OPENCAPX_TRUSTED_KEYS");

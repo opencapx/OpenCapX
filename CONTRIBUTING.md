@@ -47,13 +47,16 @@ The gate also runs through [lefthook](https://lefthook.dev), installed by `pnpm 
 script runs `lefthook install`; manual alternative: `pnpm exec lefthook install`).
 
 - **pre-commit** runs the part of the gate that matches what you staged: Rust changes get
+  `cargo fmt` (auto-fix on the staged files, re-staged via `stage_fixed`) followed by
   `cargo clippy --all-targets` plus `cargo test --bin opencapx`, TypeScript changes get
   `tsc --noEmit`, catalog changes get `i18n:check`.
 - **pre-push** runs the full five-set gate, serial end-to-end tests included.
 
 `git commit --no-verify` / `git push --no-verify` bypass a hook for one run; do not make that a
-habit. rustfmt is not part of the hooks yet — the tree predates it, and a whole-tree formatting
-pass is a change of its own.
+habit. Formatting never needs a manual pass: the pre-commit hook formats exactly the staged
+`.rs` files and re-stages them, while CI enforces `cargo fmt --check` on the whole tree. The
+whole tree was formatted in one pass when the check was introduced — plain `cargo fmt` with the
+default config, no rustfmt.toml.
 
 ## Commit style
 

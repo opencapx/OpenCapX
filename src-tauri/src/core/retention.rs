@@ -72,11 +72,11 @@ pub fn append_crash(path: &std::path::Path, record: &str) {
 pub fn spawn_retention_worker() {
     std::thread::spawn(|| loop {
         let (traces, logs) = prune_all();
-// O1 — the events table is bounded in the same pass: the desktop stays resident without restart, clearing only on open is not enough.
+        // O1 — the events table is bounded in the same pass: the desktop stays resident without restart, clearing only on open is not enough.
         let events = super::shared_store()
             .map(|s| super::storage::prune_events_shared(&s))
             .unwrap_or(0);
-// P1 — the screenshot cache is bounded in the same pass (this machine once measured 216MB, all large screenshots).
+        // P1 — the screenshot cache is bounded in the same pass (this machine once measured 216MB, all large screenshots).
         let screens = super::vision::cache_dir()
             .map(|d| prune_screen_captures_at(&d))
             .unwrap_or(0);
@@ -96,9 +96,9 @@ pub fn prune_all() -> (usize, usize) {
 }
 
 fn remove_quiet(path: &std::path::Path) -> bool {
-// O5 — evict the path from trace handle caches before deleting: avoids cached handles writing to the inode of a deleted file.
-// Both trace trees (plugin / rpc) must be cleared — each has its own handles table,
-// and remove is a no-op for paths it does not own, so evicting either one is safe.
+    // O5 — evict the path from trace handle caches before deleting: avoids cached handles writing to the inode of a deleted file.
+    // Both trace trees (plugin / rpc) must be cleared — each has its own handles table,
+    // and remove is a no-op for paths it does not own, so evicting either one is safe.
     super::plugin_trace::evict_path(path);
     super::req_trace::evict_path(path);
     match std::fs::remove_file(path) {
@@ -131,7 +131,7 @@ fn prune_traces_at(root: &std::path::Path) -> usize {
         if !dir.is_dir() {
             continue;
         }
-// (path, mtime, size), sorted by mtime newest→oldest
+        // (path, mtime, size), sorted by mtime newest→oldest
         let mut files: Vec<(PathBuf, SystemTime, u64)> = std::fs::read_dir(&dir)
             .map(|rd| {
                 rd.filter_map(|e| e.ok())
@@ -149,7 +149,7 @@ fn prune_traces_at(root: &std::path::Path) -> usize {
         }
         files.sort_by_key(|(_, mtime, _)| std::cmp::Reverse(*mtime));
         let age_limit = Duration::from_secs(TRACE_MAX_AGE_DAYS * 86_400);
-// First filter by "most recent 20 and within 14 days"; drop the rest
+        // First filter by "most recent 20 and within 14 days"; drop the rest
         let mut kept: Vec<(PathBuf, u64)> = Vec::new();
         for (i, (path, mtime, size)) in files.into_iter().enumerate() {
             let recent = i < TRACE_MAX_SESSIONS;
@@ -163,7 +163,7 @@ fn prune_traces_at(root: &std::path::Path) -> usize {
                 removed += 1;
             }
         }
-// Then delete from oldest by total size (50MB) (kept is already sorted newest→oldest)
+        // Then delete from oldest by total size (50MB) (kept is already sorted newest→oldest)
         let mut total: u64 = kept.iter().map(|(_, s)| *s).sum();
         while total > TRACE_MAX_BYTES && !kept.is_empty() {
             let (path, size) = kept.pop().expect("non-empty");
@@ -261,7 +261,7 @@ mod tests {
         dir
     }
 
-/// Create a file: marker bytes at the head, length set_len to len (sparse), optionally backdating mtime.
+    /// Create a file: marker bytes at the head, length set_len to len (sparse), optionally backdating mtime.
     fn touch(dir: &std::path::Path, name: &str, marker: &str, len: u64, age: Option<Duration>) {
         let path = dir.join(name);
         let mut f = File::create(&path).unwrap();
@@ -272,13 +272,13 @@ mod tests {
         }
     }
 
-/// S2 — traces three-tier bounds: count (most recent 20) / age (14 days) / total size (over 50MB delete from oldest).
+    /// S2 — traces three-tier bounds: count (most recent 20) / age (14 days) / total size (over 50MB delete from oldest).
     #[test]
     fn prune_traces_enforces_count_age_and_size() {
         let root = fixture_root("traces");
         let _ = std::fs::read_dir(&root);
 
-// ① Count: 25 fresh files → keep only the most recent 20 (delete the oldest 5)
+        // ① Count: 25 fresh files → keep only the most recent 20 (delete the oldest 5)
         let a = root.join("com.a");
         std::fs::create_dir_all(&a).unwrap();
         for i in 0..25u64 {
@@ -290,16 +290,28 @@ mod tests {
                 Some(Duration::from_secs((25 - i) * 60)),
             );
         }
-// ② Age: 1 file from 30 days ago + 2 fresh → delete the old one
+        // ② Age: 1 file from 30 days ago + 2 fresh → delete the old one
         let b = root.join("com.b");
         std::fs::create_dir_all(&b).unwrap();
-        touch(&b, "old.ndjson", "o", 10, Some(Duration::from_secs(30 * 86_400)));
+        touch(
+            &b,
+            "old.ndjson",
+            "o",
+            10,
+            Some(Duration::from_secs(30 * 86_400)),
+        );
         touch(&b, "new1.ndjson", "n", 10, None);
         touch(&b, "new2.ndjson", "n", 10, None);
-// ③ Total size: 2 fresh 30MB files (sparse) → delete the oldest 1
+        // ③ Total size: 2 fresh 30MB files (sparse) → delete the oldest 1
         let c = root.join("com.c");
         std::fs::create_dir_all(&c).unwrap();
-        touch(&c, "big-old.ndjson", "b", 30 * 1024 * 1024, Some(Duration::from_secs(3600)));
+        touch(
+            &c,
+            "big-old.ndjson",
+            "b",
+            30 * 1024 * 1024,
+            Some(Duration::from_secs(3600)),
+        );
         touch(&c, "big-new.ndjson", "b", 30 * 1024 * 1024, None);
 
         let removed = prune_traces_at(&root);
@@ -309,12 +321,15 @@ mod tests {
         assert_eq!(count(&a), 20);
         assert_eq!(count(&b), 2);
         assert_eq!(count(&c), 1);
-        assert!(c.join("big-new.ndjson").exists(), "size pruning deletes from oldest");
+        assert!(
+            c.join("big-new.ndjson").exists(),
+            "size pruning deletes from oldest"
+        );
 
         let _ = std::fs::remove_dir_all(&root);
     }
 
-/// P1 — screenshot cache: most recent 20 ∩ 7 days; delete old/excess, leave non-screenshot files alone.
+    /// P1 — screenshot cache: most recent 20 ∩ 7 days; delete old/excess, leave non-screenshot files alone.
     #[test]
     fn prune_screen_captures_bounds_cache() {
         let root = fixture_root("screen");
@@ -327,17 +342,26 @@ mod tests {
                 Some(Duration::from_secs((25 - i) * 60)),
             );
         }
-        touch(&root, "screen-old.png", "p", 10, Some(Duration::from_secs(30 * 86_400)));
+        touch(
+            &root,
+            "screen-old.png",
+            "p",
+            10,
+            Some(Duration::from_secs(30 * 86_400)),
+        );
         touch(&root, "other.bin", "p", 10, None);
         let removed = prune_screen_captures_at(&root);
         assert_eq!(removed, 5 + 1, "count 5 + age 1");
-        assert!(root.join("other.bin").exists(), "non-screenshot files are untouched");
+        assert!(
+            root.join("other.bin").exists(),
+            "non-screenshot files are untouched"
+        );
         let remain = std::fs::read_dir(&root).unwrap().count();
         assert_eq!(remain, SCREEN_KEEP + 1, "keep 20 screenshots + other.bin");
         let _ = std::fs::remove_dir_all(&root);
     }
 
-/// S2 — log rotation: small files stay put; over the cap, chain-shift, keeping `.log.1/.log.2`.
+    /// S2 — log rotation: small files stay put; over the cap, chain-shift, keeping `.log.1/.log.2`.
     #[test]
     fn rotate_logs_caps_and_shifts_backups() {
         let root = fixture_root("logs");
@@ -356,14 +380,17 @@ mod tests {
         let head = |name: &str| std::fs::read(root.join(name)).unwrap()[..3].to_vec();
         assert_eq!(head("com.y.log.2"), b"ONE", "old .1 moved to .2");
         assert_eq!(head("com.y.log.1"), b"NEW", ".log moved to .1");
-        assert!(!root.join("com.y.log").exists(), ".log is gone after rotation (rebuilt on next append)");
+        assert!(
+            !root.join("com.y.log").exists(),
+            ".log is gone after rotation (rebuilt on next append)"
+        );
 
         let _ = std::fs::remove_dir_all(&root);
     }
 
-/// The rpc trace subtree must also be covered by prune_traces() (each agent directory uses the same 20/14d/50MB policy).
-/// Tests the public entry point: the change is just "prune_traces scans one more subtree".
-/// Asserts only the total count, not the survivors — 25 files written in the same second share an mtime, so intra-group order is undefined.
+    /// The rpc trace subtree must also be covered by prune_traces() (each agent directory uses the same 20/14d/50MB policy).
+    /// Tests the public entry point: the change is just "prune_traces scans one more subtree".
+    /// Asserts only the total count, not the survivors — 25 files written in the same second share an mtime, so intra-group order is undefined.
     #[test]
     fn prune_traces_covers_rpc_subtree() {
         let _g = super::super::plugin_trace::traces_env_lock();
@@ -376,12 +403,19 @@ mod tests {
         // 25 trace files → over the per-directory limit of 20, the oldest 5 are deleted
         for i in 0..25u64 {
             let p = agent_dir.join(format!("rpc-{i:020}.ndjson"));
-            std::fs::write(&p, "{\"ev\":\"start\",\"spanId\":\"s0\",\"name\":\"rpc\",\"ts\":1,\"attrs\":{}}\n").unwrap();
+            std::fs::write(
+                &p,
+                "{\"ev\":\"start\",\"spanId\":\"s0\",\"name\":\"rpc\",\"ts\":1,\"attrs\":{}}\n",
+            )
+            .unwrap();
         }
 
         let removed = prune_traces();
 
-        assert_eq!(removed, 5, "oldest files over the limit under rpc/ are deleted");
+        assert_eq!(
+            removed, 5,
+            "oldest files over the limit under rpc/ are deleted"
+        );
         let left = std::fs::read_dir(&agent_dir).unwrap().count();
         assert_eq!(left, 20);
 

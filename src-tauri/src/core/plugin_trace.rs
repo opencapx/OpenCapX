@@ -51,14 +51,22 @@ pub fn traces_root() -> PathBuf {
 }
 
 pub fn session_path(plugin_id: &str, session_id: &str) -> PathBuf {
-    traces_root().join(sanitize(plugin_id)).join(format!("{}.ndjson", session_id))
+    traces_root()
+        .join(sanitize(plugin_id))
+        .join(format!("{}.ndjson", session_id))
 }
 
 /// Prevent odd characters in a plugin id from breaking the directory hierarchy (similar to config::sanitize).
 /// pub(crate): reused by req_trace (agent ids need the same path-traversal protection).
 pub(crate) fn sanitize(s: &str) -> String {
     s.chars()
-        .map(|c| if c == '/' || c == '\\' || c == '.' || c.is_whitespace() { '_' } else { c })
+        .map(|c| {
+            if c == '/' || c == '\\' || c == '.' || c.is_whitespace() {
+                '_'
+            } else {
+                c
+            }
+        })
         .collect()
 }
 
@@ -89,7 +97,11 @@ pub fn record(plugin_id: &str, session_id: &str, dir: Direction, payload: &serde
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        match std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
             Ok(f) => {
                 map.insert(path.clone(), f);
             }
@@ -130,7 +142,9 @@ pub fn list_sessions(plugin_id: &str) -> Vec<TraceSummary> {
         if p.extension().and_then(|e| e.to_str()) != Some("ndjson") {
             continue;
         }
-        let Some(stem) = p.file_stem().and_then(|s| s.to_str()) else { continue };
+        let Some(stem) = p.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
         let meta = match std::fs::metadata(&p) {
             Ok(m) => m,
             Err(_) => continue,
@@ -149,19 +163,21 @@ pub fn list_sessions(plugin_id: &str) -> Vec<TraceSummary> {
         let line_count = count_lines(&p);
         // ended_at: ts of the last line (if there are ≥2 lines), otherwise None
         let ended_at = if line_count >= 2 {
-            std::fs::File::open(&p).ok().and_then(|mut f| -> Option<u64> {
-                use std::io::{Read, Seek, SeekFrom};
-                let mut buf = Vec::new();
-                f.seek(SeekFrom::End(0)).ok()?;
-                let len = f.metadata().ok()?.len();
-                // Read the last 8 KiB to find the final newline
-                let off = len.saturating_sub(8192);
-                f.seek(SeekFrom::Start(off)).ok()?;
-                f.read_to_end(&mut buf).ok()?;
-                let txt = String::from_utf8_lossy(&buf);
-                let last = txt.lines().filter(|s| !s.is_empty()).last()?;
-                serde_json::from_str::<TraceLine>(last).ok().map(|l| l.ts)
-            })
+            std::fs::File::open(&p)
+                .ok()
+                .and_then(|mut f| -> Option<u64> {
+                    use std::io::{Read, Seek, SeekFrom};
+                    let mut buf = Vec::new();
+                    f.seek(SeekFrom::End(0)).ok()?;
+                    let len = f.metadata().ok()?.len();
+                    // Read the last 8 KiB to find the final newline
+                    let off = len.saturating_sub(8192);
+                    f.seek(SeekFrom::Start(off)).ok()?;
+                    f.read_to_end(&mut buf).ok()?;
+                    let txt = String::from_utf8_lossy(&buf);
+                    let last = txt.lines().filter(|s| !s.is_empty()).last()?;
+                    serde_json::from_str::<TraceLine>(last).ok().map(|l| l.ts)
+                })
         } else {
             None
         };
@@ -181,7 +197,10 @@ fn count_lines(p: &Path) -> u64 {
     std::fs::File::open(p)
         .map(|f| {
             use std::io::BufRead;
-            std::io::BufReader::new(f).lines().filter_map(|l| l.ok()).count() as u64
+            std::io::BufReader::new(f)
+                .lines()
+                .filter_map(|l| l.ok())
+                .count() as u64
         })
         .unwrap_or(0)
 }
@@ -236,11 +255,31 @@ mod tests {
 
         let s1 = "111";
         let s2 = "222";
-        record(id, s1, Direction::Out, &serde_json::json!({"id":1,"method":"initialize"}));
+        record(
+            id,
+            s1,
+            Direction::Out,
+            &serde_json::json!({"id":1,"method":"initialize"}),
+        );
         std::thread::sleep(std::time::Duration::from_secs(1));
-        record(id, s1, Direction::In, &serde_json::json!({"id":1,"result":{"ok":true}}));
-        record(id, s1, Direction::Out, &serde_json::json!({"method":"ping"}));
-        record(id, s2, Direction::Out, &serde_json::json!({"id":2,"method":"shutdown"}));
+        record(
+            id,
+            s1,
+            Direction::In,
+            &serde_json::json!({"id":1,"result":{"ok":true}}),
+        );
+        record(
+            id,
+            s1,
+            Direction::Out,
+            &serde_json::json!({"method":"ping"}),
+        );
+        record(
+            id,
+            s2,
+            Direction::Out,
+            &serde_json::json!({"id":2,"method":"shutdown"}),
+        );
 
         let sessions = list_sessions(id);
         assert_eq!(sessions.len(), 2, "there should be 2 session files");
@@ -272,10 +311,8 @@ mod tests {
     #[test]
     fn record_survives_handle_eviction() {
         let _g = lock_env();
-        let base = std::env::temp_dir().join(format!(
-            "opencapx-trace-cache-{}",
-            std::process::id()
-        ));
+        let base =
+            std::env::temp_dir().join(format!("opencapx-trace-cache-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::env::set_var("OPENCAPX_TRACES_DIR", &base);
         let id = "com.opencapx.cache-7";
@@ -283,7 +320,11 @@ mod tests {
         record(id, "s1", Direction::Out, &serde_json::json!({"n": 2}));
         evict_path(&session_path(id, "s1"));
         record(id, "s1", Direction::Out, &serde_json::json!({"n": 3}));
-        assert_eq!(read_session(id, "s1", 50).len(), 3, "same-file append before and after eviction");
+        assert_eq!(
+            read_session(id, "s1", 50).len(),
+            3,
+            "same-file append before and after eviction"
+        );
         std::env::remove_var("OPENCAPX_TRACES_DIR");
         clear_for_test(id);
         let _ = std::fs::remove_dir_all(&base);

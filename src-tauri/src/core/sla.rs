@@ -11,7 +11,7 @@
 //! Config is stored in the SQLite `sla_config(sk PRIMARY KEY, value TEXT)` table as JSON;
 //! `set_sla_config` validates before writing, preventing illegal values from blowing up the background thread.
 
-use super::event::{OpencapxEvent, EventBus};
+use super::event::{EventBus, OpencapxEvent};
 use super::storage::SharedStore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -35,10 +35,18 @@ pub struct SlaConfig {
     pub poll_secs: u64,
 }
 
-fn default_p95() -> u64 { 2000 }
-fn default_fail_rate() -> f64 { 25.0 }
-fn default_window() -> u64 { 300 }
-fn default_poll() -> u64 { 30 }
+fn default_p95() -> u64 {
+    2000
+}
+fn default_fail_rate() -> f64 {
+    25.0
+}
+fn default_window() -> u64 {
+    300
+}
+fn default_poll() -> u64 {
+    30
+}
 
 impl Default for SlaConfig {
     fn default() -> Self {
@@ -77,33 +85,44 @@ fn ensure_config_table(store: &SharedStore) {
                     value TEXT NOT NULL
                 )",
                 [],
-            ).unwrap_or(0)
+            )
+            .unwrap_or(0)
         });
     }
 }
 
 pub fn load_config(store: &SharedStore) -> SlaConfig {
     ensure_config_table(store);
-    let raw: Option<String> = store.lock().ok().and_then(|mut s| {
-        s.with_conn_ref(|c| {
-            c.query_row(
-                "SELECT value FROM sla_config WHERE sk = ?1",
-                [CONFIG_KEY],
-                |r| r.get::<_, String>(0),
-            )
-            .ok()
+    let raw: Option<String> = store
+        .lock()
+        .ok()
+        .and_then(|mut s| {
+            s.with_conn_ref(|c| {
+                c.query_row(
+                    "SELECT value FROM sla_config WHERE sk = ?1",
+                    [CONFIG_KEY],
+                    |r| r.get::<_, String>(0),
+                )
+                .ok()
+            })
         })
-    }).flatten();
+        .flatten();
     raw.and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default()
 }
 
 pub fn save_config(store: &SharedStore, cfg: &SlaConfig) -> Result<(), String> {
     if cfg.window_secs == 0 || cfg.window_secs > 86400 {
-        return Err(format!("window_secs out of range (1..=86400): {}", cfg.window_secs));
+        return Err(format!(
+            "window_secs out of range (1..=86400): {}",
+            cfg.window_secs
+        ));
     }
     if cfg.poll_secs == 0 || cfg.poll_secs > 3600 {
-        return Err(format!("poll_secs out of range (1..=3600): {}", cfg.poll_secs));
+        return Err(format!(
+            "poll_secs out of range (1..=3600): {}",
+            cfg.poll_secs
+        ));
     }
     if !(0.0..=100.0).contains(&cfg.fail_rate_threshold_pct) {
         return Err(format!(
@@ -118,7 +137,8 @@ pub fn save_config(store: &SharedStore, cfg: &SlaConfig) -> Result<(), String> {
             c.execute(
                 "INSERT OR REPLACE INTO sla_config (sk, value) VALUES (?1, ?2)",
                 rusqlite::params![CONFIG_KEY, body],
-            ).unwrap_or(0)
+            )
+            .unwrap_or(0)
         })
     });
     Ok(())
@@ -201,7 +221,10 @@ pub fn detect_violations(store: &SharedStore, cfg: &SlaConfig, now: u64) -> Vec<
             let mut lats = stat.ok_latencies.clone();
             lats.sort_unstable();
             let idx = (lats.len() as f64 * 0.95).ceil() as usize;
-            let p95 = lats.get(idx.saturating_sub(1).min(lats.len() - 1)).copied().unwrap_or(0);
+            let p95 = lats
+                .get(idx.saturating_sub(1).min(lats.len() - 1))
+                .copied()
+                .unwrap_or(0);
             if (p95 as u64) > cfg.p95_threshold_ms {
                 out.push(SlaViolation {
                     plugin_id: plugin_id.clone(),
@@ -250,7 +273,8 @@ pub fn list_violations(store: &SharedStore, limit: usize) -> Vec<SlaViolation> {
                 };
                 let it = match stmt.query_map([limit as i64], |r| {
                     let payload: String = r.get(3)?;
-                    let p: serde_json::Value = serde_json::from_str(&payload).unwrap_or(serde_json::Value::Null);
+                    let p: serde_json::Value =
+                        serde_json::from_str(&payload).unwrap_or(serde_json::Value::Null);
                     Ok((
                         r.get::<_, String>(0)?,
                         r.get::<_, String>(1)?,
@@ -286,10 +310,7 @@ pub fn list_violations(store: &SharedStore, limit: usize) -> Vec<SlaViolation> {
                             .get("observed")
                             .and_then(|v| v.as_f64())
                             .unwrap_or(0.0);
-                        let samples = payload
-                            .get("samples")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0);
+                        let samples = payload.get("samples").and_then(|v| v.as_u64()).unwrap_or(0);
                         SlaViolation {
                             plugin_id,
                             capability,
@@ -312,16 +333,16 @@ pub fn spawn_sla_monitor(store: SharedStore, bus: Arc<EventBus>) {
     std::thread::spawn(move || {
         let mut last_seen: HashMap<(String, String, String), u64> = HashMap::new();
         let cfg = load_config(&store);
-        let mut next_poll_at = std::time::Instant::now()
-            + std::time::Duration::from_secs(cfg.poll_secs);
+        let mut next_poll_at =
+            std::time::Instant::now() + std::time::Duration::from_secs(cfg.poll_secs);
         loop {
             std::thread::sleep(std::time::Duration::from_secs(2));
             if std::time::Instant::now() < next_poll_at {
                 continue;
             }
             let cfg = load_config(&store);
-            next_poll_at = std::time::Instant::now()
-                + std::time::Duration::from_secs(cfg.poll_secs.max(2));
+            next_poll_at =
+                std::time::Instant::now() + std::time::Duration::from_secs(cfg.poll_secs.max(2));
             let now = super::event_replay::now_secs();
             for v in detect_violations(&store, &cfg, now) {
                 let key = (v.plugin_id.clone(), v.capability.clone(), v.kind.clone());
@@ -363,7 +384,14 @@ mod tests {
         Arc::new(Mutex::new(StoreEnum::Db(s)))
     }
 
-    fn cap_sample(store: &SharedStore, cap: &str, plugin: &str, elapsed: i64, ts: i64, result: &str) {
+    fn cap_sample(
+        store: &SharedStore,
+        cap: &str,
+        plugin: &str,
+        elapsed: i64,
+        ts: i64,
+        result: &str,
+    ) {
         if let Ok(mut s) = store.lock() {
             s.record_capability_call(cap, plugin, elapsed, ts as u64, result, None);
         }
@@ -377,14 +405,35 @@ mod tests {
         // Slow pair (plug-a, image.analyze): 10 ok, 9 at 100ms + 1 at 5000ms → p95 ≈ 5000 > 1000 threshold
         for i in 0..10 {
             let elapsed = if i == 9 { 5000 } else { 100 };
-            cap_sample(&store, "image.analyze", "plug-a", elapsed, (now - 60 + i) as i64, "ok");
+            cap_sample(
+                &store,
+                "image.analyze",
+                "plug-a",
+                elapsed,
+                (now - 60 + i) as i64,
+                "ok",
+            );
         }
         // High-failure pair (plug-b, shell.exec): 6 ok + 5 timeout → 5/11 ≈ 45% > 25%
         for i in 0..6 {
-            cap_sample(&store, "shell.exec", "plug-b", 200, (now - 50 + i) as i64, "ok");
+            cap_sample(
+                &store,
+                "shell.exec",
+                "plug-b",
+                200,
+                (now - 50 + i) as i64,
+                "ok",
+            );
         }
         for i in 0..5 {
-            cap_sample(&store, "shell.exec", "plug-b", 60000, (now - 40 + i) as i64, "timeout");
+            cap_sample(
+                &store,
+                "shell.exec",
+                "plug-b",
+                60000,
+                (now - 40 + i) as i64,
+                "timeout",
+            );
         }
         // Healthy pair (plug-c, camera): 8 ok all at 50ms → should not trigger
         for i in 0..8 {
@@ -426,7 +475,14 @@ mod tests {
         let now = 1_000_000u64;
         // Only 5 samples, all fail
         for i in 0..5 {
-            cap_sample(&store, "shell.exec", "plug-x", 60000, (now - 30 + i) as i64, "err");
+            cap_sample(
+                &store,
+                "shell.exec",
+                "plug-x",
+                60000,
+                (now - 30 + i) as i64,
+                "err",
+            );
         }
         let cfg = SlaConfig {
             p95_threshold_ms: 100,
@@ -435,7 +491,11 @@ mod tests {
             poll_secs: 30,
         };
         let vios = detect_violations(&store, &cfg, now);
-        assert!(vios.is_empty(), "5 samples should not trigger (noise); actual {} entries", vios.len());
+        assert!(
+            vios.is_empty(),
+            "5 samples should not trigger (noise); actual {} entries",
+            vios.len()
+        );
     }
 
     /// Samples outside the window must be ignored.
@@ -445,7 +505,14 @@ mod tests {
         let now = 1_000_000u64;
         // All from an hour ago, far outside the 60s window
         for i in 0..10 {
-            cap_sample(&store, "shell.exec", "plug-old", 60000, (now - 3600 + i) as i64, "err");
+            cap_sample(
+                &store,
+                "shell.exec",
+                "plug-old",
+                60000,
+                (now - 3600 + i) as i64,
+                "err",
+            );
         }
         let cfg = SlaConfig {
             p95_threshold_ms: 0,
@@ -454,7 +521,11 @@ mod tests {
             poll_secs: 30,
         };
         let vios = detect_violations(&store, &cfg, now);
-        assert!(vios.is_empty(), "samples outside the window must be ignored; actual {} entries", vios.len());
+        assert!(
+            vios.is_empty(),
+            "samples outside the window must be ignored; actual {} entries",
+            vios.len()
+        );
     }
 
     /// Config save / load round-trip + validation.
@@ -477,21 +548,32 @@ mod tests {
         // Validation: negative / out of range
         assert!(save_config(
             &store,
-            &SlaConfig { window_secs: 0, ..cfg.clone() }
-        ).is_err());
+            &SlaConfig {
+                window_secs: 0,
+                ..cfg.clone()
+            }
+        )
+        .is_err());
         assert!(save_config(
             &store,
-            &SlaConfig { poll_secs: 99999, ..cfg.clone() }
-        ).is_err());
+            &SlaConfig {
+                poll_secs: 99999,
+                ..cfg.clone()
+            }
+        )
+        .is_err());
         assert!(save_config(
             &store,
-            &SlaConfig { fail_rate_threshold_pct: 150.0, ..cfg.clone() }
-        ).is_err());
+            &SlaConfig {
+                fail_rate_threshold_pct: 150.0,
+                ..cfg.clone()
+            }
+        )
+        .is_err());
 
         // Guard against workspace pollution
-        let _ = std::fs::remove_dir_all(std::env::temp_dir().join(format!(
-            "opencapx-sla-{}-cfg",
-            std::process::id()
-        )));
+        let _ = std::fs::remove_dir_all(
+            std::env::temp_dir().join(format!("opencapx-sla-{}-cfg", std::process::id())),
+        );
     }
 }

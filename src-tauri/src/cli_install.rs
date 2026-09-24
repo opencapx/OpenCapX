@@ -67,9 +67,12 @@ fn is_ours(shim: &Path, target: &Path) -> bool {
 /// target directory is not writable; without it the error carries the `sudo` command instead.
 pub fn install(elevate: bool) -> Result<String, String> {
     if !supported() {
-        return Err("not supported on this platform — add the shim directory to PATH manually".into());
+        return Err(
+            "not supported on this platform — add the shim directory to PATH manually".into(),
+        );
     }
-    let shim = crate::hooks::ensure_shim().map_err(|e| format!("cannot refresh the stable CLI copy: {e}"))?;
+    let shim = crate::hooks::ensure_shim()
+        .map_err(|e| format!("cannot refresh the stable CLI copy: {e}"))?;
     install_at(&shim, &target_path(), elevate)
 }
 
@@ -87,11 +90,19 @@ fn install_at(shim: &Path, target: &Path, elevate: bool) -> Result<String, Strin
         ));
     }
     match symlink(shim, target) {
-        Ok(()) => Ok(format!("installed: {} -> {}", target.display(), shim.display())),
+        Ok(()) => Ok(format!(
+            "installed: {} -> {}",
+            target.display(),
+            shim.display()
+        )),
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
             if elevate {
                 elevate_shell(&link_command(shim, target))?;
-                Ok(format!("installed: {} -> {}", target.display(), shim.display()))
+                Ok(format!(
+                    "installed: {} -> {}",
+                    target.display(),
+                    shim.display()
+                ))
             } else {
                 Err(format!(
                     "{} is not writable — run: sudo {}",
@@ -130,7 +141,10 @@ fn uninstall_at(shim: &Path, target: &Path, elevate: bool) -> Result<String, Str
                 elevate_shell(&remove_command(target))?;
                 Ok(format!("removed: {}", target.display()))
             } else {
-                Err(format!("permission denied — run: sudo {}", remove_command(target)))
+                Err(format!(
+                    "permission denied — run: sudo {}",
+                    remove_command(target)
+                ))
             }
         }
         Err(e) => Err(format!("failed to remove the symlink: {e}")),
@@ -158,13 +172,18 @@ fn symlink(src: &Path, dst: &Path) -> std::io::Result<()> {
 
 #[cfg(windows)]
 fn symlink(_src: &Path, _dst: &Path) -> std::io::Result<()> {
-    Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "symlinks are not used on Windows"))
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "symlinks are not used on Windows",
+    ))
 }
 
 #[cfg(unix)]
 fn executable(p: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
-    p.metadata().map(|m| m.permissions().mode() & 0o111 != 0).unwrap_or(false)
+    p.metadata()
+        .map(|m| m.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
 }
 
 #[cfg(windows)]
@@ -244,14 +263,20 @@ mod tests {
         assert!(is_ours(&shim, &target));
 
         // Idempotent: a second run reports rather than recreates.
-        assert!(install_at(&shim, &target, false).unwrap().contains("already"));
+        assert!(install_at(&shim, &target, false)
+            .unwrap()
+            .contains("already"));
 
         let s = status_at(&shim, &target);
         assert!(s.installed && !s.foreign);
 
-        assert!(uninstall_at(&shim, &target, false).unwrap().starts_with("removed"));
+        assert!(uninstall_at(&shim, &target, false)
+            .unwrap()
+            .starts_with("removed"));
         assert!(!target.exists());
-        assert!(uninstall_at(&shim, &target, false).unwrap().contains("not installed"));
+        assert!(uninstall_at(&shim, &target, false)
+            .unwrap()
+            .contains("not installed"));
     }
 
     #[test]
@@ -279,7 +304,13 @@ mod tests {
 
     #[test]
     fn shell_quote_survives_spaces_and_apostrophes() {
-        assert_eq!(shell_quote(Path::new("/Users/a b/x'y")), "'/Users/a b/x'\\''y'");
-        assert_eq!(link_command(Path::new("/a b/s"), Path::new("/c d/t")), "ln -sfn '/a b/s' '/c d/t'");
+        assert_eq!(
+            shell_quote(Path::new("/Users/a b/x'y")),
+            "'/Users/a b/x'\\''y'"
+        );
+        assert_eq!(
+            link_command(Path::new("/a b/s"), Path::new("/c d/t")),
+            "ln -sfn '/a b/s' '/c d/t'"
+        );
     }
 }

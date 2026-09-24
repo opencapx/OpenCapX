@@ -9,7 +9,7 @@
 //! Events flow through the EventBus end to end (`capability.subscribed` / `capability.event` /
 //! `capability.unsubscribed`); the Automation evaluation §15 is built on the same stream.
 
-use super::event::{OpencapxEvent, EventBus};
+use super::event::{EventBus, OpencapxEvent};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -78,7 +78,10 @@ fn validate_watch_input(input: &Value) -> Result<(PathBuf, bool), String> {
     if path.is_empty() {
         return Err("invalid input: path must be non-empty".into());
     }
-    let recursive = input.get("recursive").and_then(|r| r.as_bool()).unwrap_or(false);
+    let recursive = input
+        .get("recursive")
+        .and_then(|r| r.as_bool())
+        .unwrap_or(false);
     Ok((PathBuf::from(path), recursive))
 }
 
@@ -87,7 +90,10 @@ fn validate_watch_input(input: &Value) -> Result<(PathBuf, bool), String> {
 /// This only blocks "the shape is simply wrong": the watcher skips capture errors without reporting, so a bad region
 /// that is not stopped at subscription time manifests as silently never emitting events.
 fn validate_screen_input(input: &Value) -> Result<(u64, Option<Value>), String> {
-    let interval = input.get("interval").and_then(|i| i.as_u64()).unwrap_or(SCREEN_INTERVAL_DEFAULT);
+    let interval = input
+        .get("interval")
+        .and_then(|i| i.as_u64())
+        .unwrap_or(SCREEN_INTERVAL_DEFAULT);
     if !(SCREEN_INTERVAL_MIN..=SCREEN_INTERVAL_MAX).contains(&interval) {
         return Err(format!(
             "invalid input: interval must be {}..={} seconds (default {})",
@@ -107,9 +113,7 @@ fn validate_screen_input(input: &Value) -> Result<(u64, Option<Value>), String> 
                 }
             }
             _ => {
-                return Err(
-                    "invalid input: region must be {x, y, width, height} (integers)".into()
-                )
+                return Err("invalid input: region must be {x, y, width, height} (integers)".into())
             }
         }
     }
@@ -118,8 +122,14 @@ fn validate_screen_input(input: &Value) -> Result<(u64, Option<Value>), String> 
 
 /// Subscription parameters: the validation result per capability type, each watcher takes what it needs.
 enum WatchSpec {
-    File { path: PathBuf, recursive: bool },
-    Screen { interval: Duration, region: Option<Value> },
+    File {
+        path: PathBuf,
+        recursive: bool,
+    },
+    Screen {
+        interval: Duration,
+        region: Option<Value>,
+    },
 }
 
 /// Establish a subscription: validate → write to the table → start the watcher → `capability.subscribed` on the bus.
@@ -136,7 +146,10 @@ pub fn subscribe(
         return Err(format!("capability is not subscribable: {}", capability));
     }
     if count_for_agent(agent_id) >= MAX_PER_AGENT {
-        return Err(format!("subscription limit reached ({} per agent)", MAX_PER_AGENT));
+        return Err(format!(
+            "subscription limit reached ({} per agent)",
+            MAX_PER_AGENT
+        ));
     }
     let spec = match capability {
         "file.watch" => {
@@ -145,7 +158,10 @@ pub fn subscribe(
         }
         "screen.watch" => {
             let (interval, region) = validate_screen_input(input)?;
-            WatchSpec::Screen { interval: Duration::from_secs(interval), region }
+            WatchSpec::Screen {
+                interval: Duration::from_secs(interval),
+                region,
+            }
         }
         _ => return Err(format!("capability is not subscribable: {}", capability)),
     };
@@ -164,10 +180,23 @@ pub fn subscribe(
     }
     match spec {
         WatchSpec::File { path, recursive } => spawn_file_watcher(
-            bus.clone(), stop, id.clone(), capability, agent_id, path, recursive, POLL_INTERVAL,
+            bus.clone(),
+            stop,
+            id.clone(),
+            capability,
+            agent_id,
+            path,
+            recursive,
+            POLL_INTERVAL,
         ),
         WatchSpec::Screen { interval, region } => spawn_screen_watcher(
-            bus.clone(), stop, id.clone(), capability, agent_id, interval, region,
+            bus.clone(),
+            stop,
+            id.clone(),
+            capability,
+            agent_id,
+            interval,
+            region,
         ),
     }
     bus.publish(&OpencapxEvent::new(
@@ -201,7 +230,10 @@ pub fn cleanup_conn(conn_id: &str, bus: &EventBus) -> usize {
 }
 
 fn unsubscribe_with_reason(subscription_id: &str, bus: &EventBus, reason: &str) -> bool {
-    let removed = registry().lock().ok().and_then(|mut r| r.remove(subscription_id));
+    let removed = registry()
+        .lock()
+        .ok()
+        .and_then(|mut r| r.remove(subscription_id));
     match removed {
         Some(sub) => {
             sub.stop.store(true, Ordering::Relaxed);
@@ -248,7 +280,9 @@ fn scan(root: &Path, recursive: bool) -> HashMap<PathBuf, std::time::SystemTime>
     }
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for e in entries.flatten() {
             if out.len() >= MAX_ENTRIES {
                 return out;
@@ -271,7 +305,10 @@ fn scan(root: &Path, recursive: bool) -> HashMap<PathBuf, std::time::SystemTime>
 }
 
 /// Diff two snapshots → a list of (event, path), capped per round at MAX_EVENTS_PER_CYCLE.
-fn diff(prev: &HashMap<PathBuf, std::time::SystemTime>, next: &HashMap<PathBuf, std::time::SystemTime>) -> Vec<(&'static str, PathBuf)> {
+fn diff(
+    prev: &HashMap<PathBuf, std::time::SystemTime>,
+    next: &HashMap<PathBuf, std::time::SystemTime>,
+) -> Vec<(&'static str, PathBuf)> {
     let mut events = Vec::new();
     let mut push = |event: &'static str, p: &PathBuf| {
         if events.len() < MAX_EVENTS_PER_CYCLE {
@@ -281,7 +318,9 @@ fn diff(prev: &HashMap<PathBuf, std::time::SystemTime>, next: &HashMap<PathBuf, 
     for (p, m) in next {
         match prev.get(p) {
             None => push("created", p),
-            Some(old) if *m > *old && *old != std::time::SystemTime::UNIX_EPOCH => push("modified", p),
+            Some(old) if *m > *old && *old != std::time::SystemTime::UNIX_EPOCH => {
+                push("modified", p)
+            }
             _ => {}
         }
     }
@@ -347,7 +386,15 @@ fn spawn_file_watcher(
             if stop.load(Ordering::Relaxed) {
                 return;
             }
-            poll_file_watch(&bus, &mut prev, &path, recursive, &sub_id, &capability, &agent_id);
+            poll_file_watch(
+                &bus,
+                &mut prev,
+                &path,
+                recursive,
+                &sub_id,
+                &capability,
+                &agent_id,
+            );
         }
     });
 }
@@ -474,21 +521,41 @@ mod tests {
         assert!(subscribable("file.watch"));
         assert!(subscribable("screen.watch"), "v1.3 second subscribe type");
         assert!(!subscribable("file.read"), "call type is not subscribable");
-        assert!(!subscribable("screen.capture"), "call type is not subscribable");
-        assert!(!subscribable("image.analyze"), "call type is not subscribable");
+        assert!(
+            !subscribable("screen.capture"),
+            "call type is not subscribable"
+        );
+        assert!(
+            !subscribable("image.analyze"),
+            "call type is not subscribable"
+        );
         assert!(!subscribable("nope.nope"), "unknown id is not subscribable");
-        assert!(super::super::capability::known("file.watch"), "file.watch must be in CAPABILITY_IDS");
-        assert!(super::super::capability::known("screen.watch"), "screen.watch must be in CAPABILITY_IDS");
+        assert!(
+            super::super::capability::known("file.watch"),
+            "file.watch must be in CAPABILITY_IDS"
+        );
+        assert!(
+            super::super::capability::known("screen.watch"),
+            "screen.watch must be in CAPABILITY_IDS"
+        );
     }
 
     #[test]
     fn watch_input_requires_path() {
-        assert!(validate_watch_input(&json!({})).unwrap_err().contains("path"));
-        assert!(validate_watch_input(&json!({ "path": "" })).unwrap_err().contains("non-empty"));
+        assert!(validate_watch_input(&json!({}))
+            .unwrap_err()
+            .contains("path"));
+        assert!(validate_watch_input(&json!({ "path": "" }))
+            .unwrap_err()
+            .contains("non-empty"));
         let (p, r) = validate_watch_input(&json!({ "path": "/tmp" })).unwrap();
         assert_eq!(p, PathBuf::from("/tmp"));
         assert!(!r);
-        assert!(validate_watch_input(&json!({ "path": "/tmp", "recursive": true })).unwrap().1);
+        assert!(
+            validate_watch_input(&json!({ "path": "/tmp", "recursive": true }))
+                .unwrap()
+                .1
+        );
     }
 
     /// screen.watch input: interval defaults to 30 / bounds; region shape is checked first.
@@ -506,20 +573,31 @@ mod tests {
         assert_eq!(iv, 60);
         assert_eq!(region.unwrap()["width"], json!(800));
         // interval out of range
-        assert!(validate_screen_input(&json!({ "interval": 4 })).unwrap_err().contains("interval"));
-        assert!(validate_screen_input(&json!({ "interval": 3601 })).unwrap_err().contains("interval"));
+        assert!(validate_screen_input(&json!({ "interval": 4 }))
+            .unwrap_err()
+            .contains("interval"));
+        assert!(validate_screen_input(&json!({ "interval": 3601 }))
+            .unwrap_err()
+            .contains("interval"));
         // Bad region shapes: missing field / negative coordinate / zero size
         assert!(validate_screen_input(&json!({ "region": { "x": 0 } }))
             .unwrap_err()
             .contains("region must be"));
-        assert!(validate_screen_input(&json!({ "region": { "x": -1, "y": 0, "width": 10, "height": 10 } }))
-            .unwrap_err()
-            .contains("≥0"));
-        assert!(validate_screen_input(&json!({ "region": { "x": 0, "y": 0, "width": 0, "height": 10 } }))
-            .unwrap_err()
-            .contains("≥1"));
+        assert!(validate_screen_input(
+            &json!({ "region": { "x": -1, "y": 0, "width": 10, "height": 10 } })
+        )
+        .unwrap_err()
+        .contains("≥0"));
+        assert!(validate_screen_input(
+            &json!({ "region": { "x": 0, "y": 0, "width": 0, "height": 10 } })
+        )
+        .unwrap_err()
+        .contains("≥1"));
         // region is not an object: treated as absent (same leniency as vision::capture, does not block subscription)
-        assert!(validate_screen_input(&json!({ "region": "full" })).unwrap().1.is_none());
+        assert!(validate_screen_input(&json!({ "region": "full" }))
+            .unwrap()
+            .1
+            .is_none());
     }
 
     #[test]
@@ -527,32 +605,90 @@ mod tests {
         let _g = lock();
         let bus = Arc::new(EventBus::new());
         // call type / unknown id → not subscribable
-        let e = subscribe("ag_t", "conn-a", "file.read", &json!({ "path": "/tmp" }), &bus).unwrap_err();
+        let e = subscribe(
+            "ag_t",
+            "conn-a",
+            "file.read",
+            &json!({ "path": "/tmp" }),
+            &bus,
+        )
+        .unwrap_err();
         assert!(e.contains("not subscribable"), "{}", e);
         // missing path
         let e = subscribe("ag_t", "conn-a", "file.watch", &json!({}), &bus).unwrap_err();
         assert!(e.contains("path"), "{}", e);
         // screen.watch: an out-of-range interval is stopped at subscription time (the watcher only skips without reporting, so it must fail fast here)
-        let e = subscribe("ag_t", "conn-a", "screen.watch", &json!({ "interval": 1 }), &bus).unwrap_err();
+        let e = subscribe(
+            "ag_t",
+            "conn-a",
+            "screen.watch",
+            &json!({ "interval": 1 }),
+            &bus,
+        )
+        .unwrap_err();
         assert!(e.contains("interval"), "{}", e);
-        let e = subscribe("ag_t", "conn-a", "screen.watch", &json!({ "region": { "x": 0 } }), &bus).unwrap_err();
+        let e = subscribe(
+            "ag_t",
+            "conn-a",
+            "screen.watch",
+            &json!({ "region": { "x": 0 } }),
+            &bus,
+        )
+        .unwrap_err();
         assert!(e.contains("region"), "{}", e);
         // A valid screen.watch subscription (default 30s interval; the test process ends long before the first frame, so no real screenshot)
-        let sw = subscribe("ag_t", "conn-a", "screen.watch", &json!({ "interval": 3600 }), &bus).unwrap();
+        let sw = subscribe(
+            "ag_t",
+            "conn-a",
+            "screen.watch",
+            &json!({ "interval": 3600 }),
+            &bus,
+        )
+        .unwrap();
         assert!(sw.starts_with("sub_"));
         assert!(unsubscribe(&sw, &bus));
         // The same agent reaches 32 (subscribing to a non-existent path still counts as establishing a subscription — the watcher spins idle, which is legal)
         let mut ids = Vec::new();
         for i in 0..MAX_PER_AGENT {
-            ids.push(subscribe("ag_cap", "conn-a", "file.watch", &json!({ "path": "/definitely/not/here" }), &bus).unwrap());
+            ids.push(
+                subscribe(
+                    "ag_cap",
+                    "conn-a",
+                    "file.watch",
+                    &json!({ "path": "/definitely/not/here" }),
+                    &bus,
+                )
+                .unwrap(),
+            );
             assert_eq!(ids.len(), i + 1);
         }
-        let e = subscribe("ag_cap", "conn-a", "file.watch", &json!({ "path": "/tmp" }), &bus).unwrap_err();
+        let e = subscribe(
+            "ag_cap",
+            "conn-a",
+            "file.watch",
+            &json!({ "path": "/tmp" }),
+            &bus,
+        )
+        .unwrap_err();
         assert!(e.contains("limit"), "{}", e);
         // Other agents are unaffected; unsubscribing one frees a slot
-        assert!(subscribe("ag_other", "conn-b", "file.watch", &json!({ "path": "/tmp" }), &bus).is_ok());
+        assert!(subscribe(
+            "ag_other",
+            "conn-b",
+            "file.watch",
+            &json!({ "path": "/tmp" }),
+            &bus
+        )
+        .is_ok());
         assert!(unsubscribe(&ids[0], &bus));
-        assert!(subscribe("ag_cap", "conn-a", "file.watch", &json!({ "path": "/tmp" }), &bus).is_ok());
+        assert!(subscribe(
+            "ag_cap",
+            "conn-a",
+            "file.watch",
+            &json!({ "path": "/tmp" }),
+            &bus
+        )
+        .is_ok());
         // clean up
         cleanup_conn("conn-a", &bus);
         cleanup_conn("conn-b", &bus);
@@ -562,9 +698,30 @@ mod tests {
     fn unsubscribe_is_idempotent_and_cleanup_conn_scoped() {
         let _g = lock();
         let bus = Arc::new(EventBus::new());
-        let a1 = subscribe("ag_x", "conn-1", "file.watch", &json!({ "path": "/tmp/none-1" }), &bus).unwrap();
-        let a2 = subscribe("ag_x", "conn-1", "file.watch", &json!({ "path": "/tmp/none-2" }), &bus).unwrap();
-        let b1 = subscribe("ag_x", "conn-2", "file.watch", &json!({ "path": "/tmp/none-3" }), &bus).unwrap();
+        let a1 = subscribe(
+            "ag_x",
+            "conn-1",
+            "file.watch",
+            &json!({ "path": "/tmp/none-1" }),
+            &bus,
+        )
+        .unwrap();
+        let a2 = subscribe(
+            "ag_x",
+            "conn-1",
+            "file.watch",
+            &json!({ "path": "/tmp/none-2" }),
+            &bus,
+        )
+        .unwrap();
+        let b1 = subscribe(
+            "ag_x",
+            "conn-2",
+            "file.watch",
+            &json!({ "path": "/tmp/none-3" }),
+            &bus,
+        )
+        .unwrap();
         // Idempotent: duplicate unsubscribe is not an error
         assert!(unsubscribe(&a1, &bus));
         assert!(!unsubscribe(&a1, &bus));
@@ -661,9 +818,7 @@ mod tests {
             let budget = Duration::from_secs(60);
             loop {
                 if start.elapsed() >= budget {
-                    panic!(
-                        "timed out waiting for {event} on {path_contains}"
-                    );
+                    panic!("timed out waiting for {event} on {path_contains}");
                 }
                 match rx.recv_timeout(Duration::from_secs(5)) {
                     Ok(e)
@@ -720,7 +875,10 @@ mod tests {
         std::thread::sleep(Duration::from_millis(200));
         // drain: there should be no more capability.event
         while let Ok(e) = rx.try_recv() {
-            assert_ne!(e.kind, "capability.event", "no more events should be reported after the watcher stops");
+            assert_ne!(
+                e.kind, "capability.event",
+                "no more events should be reported after the watcher stops"
+            );
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -734,15 +892,22 @@ mod tests {
         let _g = lock();
         let bus = Arc::new(EventBus::new());
         let rx = bus.subscribe();
-        let sid = subscribe("ag_sw", "conn-sw", "screen.watch", &json!({ "interval": 5 }), &bus)
-            .expect("screen.watch subscribable");
+        let sid = subscribe(
+            "ag_sw",
+            "conn-sw",
+            "screen.watch",
+            &json!({ "interval": 5 }),
+            &bus,
+        )
+        .expect("screen.watch subscribable");
         let deadline = std::time::Instant::now() + Duration::from_secs(60);
         let mut got = None;
         while std::time::Instant::now() < deadline {
             match rx.recv_timeout(Duration::from_secs(2)) {
-                Ok(e) if e.kind == "capability.event"
-                    && e.payload["capability"] == json!("screen.watch")
-                    && e.payload["event"] == json!("changed") =>
+                Ok(e)
+                    if e.kind == "capability.event"
+                        && e.payload["capability"] == json!("screen.watch")
+                        && e.payload["event"] == json!("changed") =>
                 {
                     got = Some(e);
                     break;
@@ -754,7 +919,11 @@ mod tests {
         assert_eq!(e.payload["subscriptionId"], json!(sid));
         assert_eq!(e.payload["agentId"], json!("ag_sw"));
         let img = e.payload["image"].as_str().unwrap();
-        assert!(Path::new(img).is_file(), "event carries an existing frame file: {}", img);
+        assert!(
+            Path::new(img).is_file(),
+            "event carries an existing frame file: {}",
+            img
+        );
         unsubscribe(&sid, &bus);
         assert!(active().is_empty());
     }
@@ -778,11 +947,18 @@ mod tests {
         next.insert(PathBuf::from("/a/dir-new"), t0); // new directory → created
         let mut events = diff(&prev, &next);
         events.sort_by_key(|(e, p)| (e.to_string(), p.clone()));
-        assert_eq!(events.len(), 4, "new.txt + dir-new created, stay.txt.mod modified, gone.txt removed: {:?}", events);
+        assert_eq!(
+            events.len(),
+            4,
+            "new.txt + dir-new created, stay.txt.mod modified, gone.txt removed: {:?}",
+            events
+        );
         assert!(events.contains(&("created", PathBuf::from("/a/new.txt"))));
         assert!(events.contains(&("created", PathBuf::from("/a/dir-new"))));
         assert!(events.contains(&("modified", PathBuf::from("/a/stay.txt.mod"))));
-        assert!(events.iter().any(|(e, p)| *e == "removed" && p.ends_with("gone.txt")));
+        assert!(events
+            .iter()
+            .any(|(e, p)| *e == "removed" && p.ends_with("gone.txt")));
         // Cap: 300 new files → only MAX_EVENTS_PER_CYCLE reported
         let empty = HashMap::new();
         let mut big = HashMap::new();
@@ -804,8 +980,14 @@ mod tests {
 
         let flat = scan(&dir, false);
         assert!(flat.contains_key(dir.join("top.txt").as_path()));
-        assert!(flat.contains_key(dir.join("x").as_path()), "single level also records directory presence");
-        assert!(!flat.contains_key(dir.join("x/mid.txt").as_path()), "single level does not enter subdirectory files");
+        assert!(
+            flat.contains_key(dir.join("x").as_path()),
+            "single level also records directory presence"
+        );
+        assert!(
+            !flat.contains_key(dir.join("x/mid.txt").as_path()),
+            "single level does not enter subdirectory files"
+        );
 
         let deep = scan(&dir, true);
         assert!(deep.contains_key(dir.join("x/mid.txt").as_path()));

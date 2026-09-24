@@ -107,7 +107,9 @@ pub fn evict_path(path: &Path) {
 
 /// Write one line of NDJSON. Any failure returns silently.
 fn write_line(path: &PathBuf, line: &RpcTraceLine) {
-    let Ok(s) = serde_json::to_string(line) else { return };
+    let Ok(s) = serde_json::to_string(line) else {
+        return;
+    };
     let mut map = match handles().lock() {
         Ok(m) => m,
         Err(_) => return,
@@ -116,7 +118,11 @@ fn write_line(path: &PathBuf, line: &RpcTraceLine) {
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        match std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
             Ok(f) => {
                 map.insert(path.clone(), f);
             }
@@ -160,7 +166,11 @@ pub fn begin(agent_id: &str, conn_id: &str, project: &str) -> String {
         },
     );
     CTX.with(|c| {
-        *c.borrow_mut() = Some(Ctx { path, stack: vec!["s0".into()], next_span: 1 });
+        *c.borrow_mut() = Some(Ctx {
+            path,
+            stack: vec!["s0".into()],
+            next_span: 1,
+        });
     });
     trace_id
 }
@@ -169,7 +179,9 @@ pub fn begin(agent_id: &str, conn_id: &str, project: &str) -> String {
 pub fn span(name: &str, attrs: Value) -> Span {
     let id = CTX.with(|c| {
         let mut b = c.borrow_mut();
-        let Some(ctx) = b.as_mut() else { return String::new() };
+        let Some(ctx) = b.as_mut() else {
+            return String::new();
+        };
         let id = format!("s{}", ctx.next_span);
         ctx.next_span += 1;
         let parent = ctx.stack.last().cloned();
@@ -186,7 +198,10 @@ pub fn span(name: &str, attrs: Value) -> Span {
         ctx.stack.push(id.clone());
         id
     });
-    Span { id, _not_send: PhantomData }
+    Span {
+        id,
+        _not_send: PhantomData,
+    }
 }
 
 /// Explicitly managed span: end consumes ownership, mem::take clears the id so the Drop fallback no longer fires.
@@ -228,7 +243,11 @@ fn end_span(id: &str, ok: bool, error: Option<&str>, attrs: Value) {
             &RpcTraceLine::End {
                 span_id: id.to_string(),
                 ts: now_ms(),
-                status: if ok { SpanStatus::Ok } else { SpanStatus::Error },
+                status: if ok {
+                    SpanStatus::Ok
+                } else {
+                    SpanStatus::Error
+                },
                 error: error.map(String::from),
                 attrs: if attrs.as_object().map(|o| o.is_empty()).unwrap_or(false) {
                     None
@@ -285,7 +304,11 @@ pub fn finish(ok: bool, error: Option<&str>, attrs: Value) {
             &RpcTraceLine::End {
                 span_id: root,
                 ts: now_ms(),
-                status: if ok { SpanStatus::Ok } else { SpanStatus::Error },
+                status: if ok {
+                    SpanStatus::Ok
+                } else {
+                    SpanStatus::Error
+                },
                 error: error.map(String::from),
                 attrs: if attrs.as_object().map(|o| o.is_empty()).unwrap_or(false) {
                     None
@@ -328,7 +351,9 @@ pub struct RpcTraceSummary {
 
 fn line_ts(line: &RpcTraceLine) -> u64 {
     match line {
-        RpcTraceLine::Start { ts, .. } | RpcTraceLine::Event { ts, .. } | RpcTraceLine::End { ts, .. } => *ts,
+        RpcTraceLine::Start { ts, .. }
+        | RpcTraceLine::Event { ts, .. }
+        | RpcTraceLine::End { ts, .. } => *ts,
     }
 }
 
@@ -365,15 +390,21 @@ fn list_traces_at(root: &Path, agent_id: &str) -> Vec<RpcTraceSummary> {
         if p.extension().and_then(|e| e.to_str()) != Some("ndjson") {
             continue;
         }
-        let Some(stem) = p.file_stem().and_then(|s| s.to_str()) else { continue };
-        let Ok(meta) = std::fs::metadata(&p) else { continue };
+        let Some(stem) = p.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let Ok(meta) = std::fs::metadata(&p) else {
+            continue;
+        };
         let mut started_at = 0u64;
         let mut ended_at = None;
         let mut count = 0u64;
         let mut last: Option<RpcTraceLine> = None;
         if let Ok(text) = std::fs::read_to_string(&p) {
             for l in text.lines().filter(|l| !l.is_empty()) {
-                let Ok(line) = serde_json::from_str::<RpcTraceLine>(l) else { continue };
+                let Ok(line) = serde_json::from_str::<RpcTraceLine>(l) else {
+                    continue;
+                };
                 if started_at == 0 {
                     started_at = line_ts(&line);
                 }
@@ -415,7 +446,10 @@ pub fn read_trace(agent_id: &str, trace_id: &str, limit: usize) -> Vec<RpcTraceL
 fn read_trace_at(root: &Path, agent_id: &str, file_stem: &str, limit: usize) -> Vec<RpcTraceLine> {
     let path = root
         .join(super::plugin_trace::sanitize(agent_id))
-        .join(format!("{}.ndjson", super::plugin_trace::sanitize(file_stem)));
+        .join(format!(
+            "{}.ndjson",
+            super::plugin_trace::sanitize(file_stem)
+        ));
     let Ok(text) = std::fs::read_to_string(&path) else {
         return Vec::new();
     };
@@ -438,7 +472,10 @@ pub fn hook_traces_root() -> PathBuf {
 fn hook_path(agent_id: &str, session_id: &str) -> PathBuf {
     hook_traces_root()
         .join(super::plugin_trace::sanitize(agent_id))
-        .join(format!("{}.ndjson", super::plugin_trace::sanitize(session_id)))
+        .join(format!(
+            "{}.ndjson",
+            super::plugin_trace::sanitize(session_id)
+        ))
 }
 
 /// hook event persistence: called by event::ingest, independent of the /rpc thread-local context
@@ -496,22 +533,32 @@ fn list_all_in(root: &Path, is_rpc: bool) -> Vec<(u64, TraceEntry)> {
         if !dir.is_dir() {
             continue;
         }
-        let Some(agent_id) = dir.file_name().and_then(|s| s.to_str()) else { continue };
-        let Ok(files) = std::fs::read_dir(&dir) else { continue };
+        let Some(agent_id) = dir.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let Ok(files) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for f in files.flatten() {
             let p = f.path();
             if p.extension().and_then(|e| e.to_str()) != Some("ndjson") {
                 continue;
             }
-            let Some(stem) = p.file_stem().and_then(|s| s.to_str()) else { continue };
-            let Ok(meta) = std::fs::metadata(&p) else { continue };
+            let Some(stem) = p.file_stem().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            let Ok(meta) = std::fs::metadata(&p) else {
+                continue;
+            };
             let mtime = meta
                 .modified()
                 .ok()
                 .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
-            let Ok(text) = std::fs::read_to_string(&p) else { continue };
+            let Ok(text) = std::fs::read_to_string(&p) else {
+                continue;
+            };
             let mut started_at = 0u64;
             let mut ended_at = None;
             let mut count = 0u64;
@@ -520,7 +567,9 @@ fn list_all_in(root: &Path, is_rpc: bool) -> Vec<(u64, TraceEntry)> {
             let mut last: Option<RpcTraceLine> = None;
             let mut status = String::new();
             for l in text.lines().filter(|l| !l.is_empty()) {
-                let Ok(line) = serde_json::from_str::<RpcTraceLine>(l) else { continue };
+                let Ok(line) = serde_json::from_str::<RpcTraceLine>(l) else {
+                    continue;
+                };
                 if started_at == 0 {
                     started_at = line_ts(&line);
                 }
@@ -533,7 +582,10 @@ fn list_all_in(root: &Path, is_rpc: bool) -> Vec<(u64, TraceEntry)> {
                     project = project_from_line(&line);
                     project_seen = true;
                 }
-                if let RpcTraceLine::End { span_id, status: s, .. } = &line {
+                if let RpcTraceLine::End {
+                    span_id, status: s, ..
+                } = &line
+                {
                     if span_id == "s0" {
                         status = match s {
                             SpanStatus::Ok => "ok".into(),
@@ -669,15 +721,21 @@ pub fn list_trace_agents() -> Vec<TraceAgentSummary> {
     collect_agents_at(&hook_traces_root(), &mut map, false);
     let mut out: Vec<TraceAgentSummary> = map
         .into_iter()
-        .map(|(agent_id, (rpc_count, hook_count, last_ts))| TraceAgentSummary {
-            agent_id,
-            rpc_count,
-            hook_count,
-            last_ts,
-        })
+        .map(
+            |(agent_id, (rpc_count, hook_count, last_ts))| TraceAgentSummary {
+                agent_id,
+                rpc_count,
+                hook_count,
+                last_ts,
+            },
+        )
         .collect();
     // Most recently active first; ties broken by id to avoid order jitter
-    out.sort_by(|a, b| b.last_ts.cmp(&a.last_ts).then_with(|| a.agent_id.cmp(&b.agent_id)));
+    out.sort_by(|a, b| {
+        b.last_ts
+            .cmp(&a.last_ts)
+            .then_with(|| a.agent_id.cmp(&b.agent_id))
+    });
     out
 }
 
@@ -759,7 +817,10 @@ pub fn export_chains_to(dir: &str, project: &str) -> Result<ExportReport, String
         // Source path same as read_trace_at: both the agent/trace segments go through sanitize.
         let src = rpc_traces_root()
             .join(super::plugin_trace::sanitize(&e.agent_id))
-            .join(format!("{}.ndjson", super::plugin_trace::sanitize(&e.trace_id)));
+            .join(format!(
+                "{}.ndjson",
+                super::plugin_trace::sanitize(&e.trace_id)
+            ));
         let file = format!("{}.ndjson", super::plugin_trace::sanitize(&e.trace_id));
         let dst = out_dir.join(&file);
         // Pre-overwrite probe: existing files count toward overwritten (only counted for successfully written files).
@@ -781,7 +842,10 @@ pub fn export_chains_to(dir: &str, project: &str) -> Result<ExportReport, String
                     status: e.status,
                 });
             }
-            Err(err) => failures.push(ExportFailure { trace_id: e.trace_id, reason: err.to_string() }),
+            Err(err) => failures.push(ExportFailure {
+                trace_id: e.trace_id,
+                reason: err.to_string(),
+            }),
         }
     }
 
@@ -836,16 +900,29 @@ mod tests {
 
         let tid = begin("ag_x_01", "conn-7", "");
         event("dispatch", serde_json::json!({ "tool": "opencapx.say" }));
-        let sp = span("capability.opencapx.execute", serde_json::json!({ "capability": "opencapx.execute" }));
+        let sp = span(
+            "capability.opencapx.execute",
+            serde_json::json!({ "capability": "opencapx.execute" }),
+        );
         event("gate.denied", serde_json::json!({ "pluginId": "com.demo" }));
         sp.end(true, None, serde_json::json!({ "elapsedMs": 12 }));
         finish(true, None, serde_json::json!({ "durMs": 20 }));
 
         let lines = read_all("ag_x_01", &tid);
-        assert_eq!(lines.len(), 6, "start+event+start+event+end+end is 6 lines in total");
+        assert_eq!(
+            lines.len(),
+            6,
+            "start+event+start+event+end+end is 6 lines in total"
+        );
         // Root start: no parent, name=rpc, with agent/conn
         match &lines[0] {
-            RpcTraceLine::Start { span_id, parent_id, name, attrs, .. } => {
+            RpcTraceLine::Start {
+                span_id,
+                parent_id,
+                name,
+                attrs,
+                ..
+            } => {
                 assert_eq!(span_id, "s0");
                 assert!(parent_id.is_none());
                 assert_eq!(name, "rpc");
@@ -864,7 +941,9 @@ mod tests {
         }
         // Child span parent = s0
         match &lines[2] {
-            RpcTraceLine::Start { span_id, parent_id, .. } => {
+            RpcTraceLine::Start {
+                span_id, parent_id, ..
+            } => {
                 assert_eq!(span_id, "s1");
                 assert_eq!(parent_id.as_deref(), Some("s0"));
             }
@@ -880,7 +959,9 @@ mod tests {
         }
         // child end ok
         match &lines[4] {
-            RpcTraceLine::End { span_id, status, .. } => {
+            RpcTraceLine::End {
+                span_id, status, ..
+            } => {
                 assert_eq!(span_id, "s1");
                 assert_eq!(*status, SpanStatus::Ok);
             }
@@ -888,7 +969,12 @@ mod tests {
         }
         // root end ok + durMs
         match &lines[5] {
-            RpcTraceLine::End { span_id, status, attrs, .. } => {
+            RpcTraceLine::End {
+                span_id,
+                status,
+                attrs,
+                ..
+            } => {
                 assert_eq!(span_id, "s0");
                 assert_eq!(*status, SpanStatus::Ok);
                 assert_eq!(attrs.as_ref().unwrap()["durMs"], 20);
@@ -927,7 +1013,12 @@ mod tests {
         let lines = read_all("ag_x_02", &tid);
         // root start + child start + child end (error, dropped) + root end
         match &lines[2] {
-            RpcTraceLine::End { span_id, status, error, .. } => {
+            RpcTraceLine::End {
+                span_id,
+                status,
+                error,
+                ..
+            } => {
                 assert_eq!(span_id, "s1");
                 assert_eq!(*status, SpanStatus::Error);
                 assert_eq!(error.as_deref(), Some("dropped without end"));
@@ -957,8 +1048,14 @@ mod tests {
         let list = list_traces("ag_list");
         assert_eq!(list.len(), 3);
         assert_eq!(list[0].trace_id, t3, "newest first");
-        assert!(list[0].ended_at.is_none(), "a pending trace's ended_at should be None");
-        assert!(list[1].ended_at.is_some(), "a finished trace should have ended_at");
+        assert!(
+            list[0].ended_at.is_none(),
+            "a pending trace's ended_at should be None"
+        );
+        assert!(
+            list[1].ended_at.is_some(),
+            "a finished trace should have ended_at"
+        );
         assert!(list[1].line_count >= 2);
         assert!(list[2].size_bytes > 0);
 
@@ -985,7 +1082,12 @@ mod tests {
         std::env::set_var("OPENCAPX_TRACES_DIR", &base);
 
         // Do not call begin — hook_event must work independently of the /rpc context
-        hook_event("ag_h", "sess-a1", "agent.started", serde_json::json!({ "message": "prompt" }));
+        hook_event(
+            "ag_h",
+            "sess-a1",
+            "agent.started",
+            serde_json::json!({ "message": "prompt" }),
+        );
         hook_event("ag_h", "sess-a1", "agent.completed", serde_json::json!({}));
         hook_event("ag_h", "sess-b2", "agent.started", serde_json::json!({}));
 
@@ -996,8 +1098,12 @@ mod tests {
         assert_eq!(lines.len(), 2);
         // read_*_at reverse order (newest first): [0] = the later-written completed, [1] = the earlier-written started.
         // spanId is always "s0" (a uniform viewer shape, no parent/child)
-        assert!(matches!(&lines[0], RpcTraceLine::Event { span_id, name, .. } if span_id == "s0" && name == "agent.completed"));
-        assert!(matches!(&lines[1], RpcTraceLine::Event { span_id, name, .. } if span_id == "s0" && name == "agent.started"));
+        assert!(
+            matches!(&lines[0], RpcTraceLine::Event { span_id, name, .. } if span_id == "s0" && name == "agent.completed")
+        );
+        assert!(
+            matches!(&lines[1], RpcTraceLine::Event { span_id, name, .. } if span_id == "s0" && name == "agent.started")
+        );
 
         std::env::remove_var("OPENCAPX_TRACES_DIR");
         let _ = std::fs::remove_dir_all(&base);
@@ -1089,7 +1195,10 @@ mod tests {
         assert_eq!(all.len(), 2, "the two agents each have one trace");
         assert_eq!(all[0].trace_id, t2, "started_at descending: newest first");
         assert_eq!(all[0].agent_id, "ag_pb");
-        assert_eq!(all[0].project, "", "a trace missing the project field is grouped as unknown");
+        assert_eq!(
+            all[0].project, "",
+            "a trace missing the project field is grouped as unknown"
+        );
         assert_eq!(all[1].trace_id, t1);
         assert_eq!(all[1].agent_id, "ag_pa");
         assert_eq!(all[1].project, "proj/a");
@@ -1142,7 +1251,12 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
         std::env::set_var("OPENCAPX_TRACES_DIR", &base);
 
-        hook_event("ag_ha", "sess-1", "agent.started", serde_json::json!({ "project": "proj/h" }));
+        hook_event(
+            "ag_ha",
+            "sess-1",
+            "agent.started",
+            serde_json::json!({ "project": "proj/h" }),
+        );
         hook_event("ag_hb", "sess-2", "agent.started", serde_json::json!({}));
 
         let all = list_all_hook_sessions();
@@ -1151,7 +1265,11 @@ mod tests {
         assert_eq!(find("sess-1").agent_id, "ag_ha");
         assert_eq!(find("sess-1").project, "proj/h");
         assert_eq!(find("sess-2").agent_id, "ag_hb");
-        assert_eq!(find("sess-2").project, "", "a hook session with no project is grouped as unknown");
+        assert_eq!(
+            find("sess-2").project,
+            "",
+            "a hook session with no project is grouped as unknown"
+        );
 
         std::env::remove_var("OPENCAPX_TRACES_DIR");
         let _ = std::fs::remove_dir_all(&base);
@@ -1178,17 +1296,33 @@ mod tests {
         finish(true, None, serde_json::Value::Null);
 
         let report = export_chains_to(out.to_str().unwrap(), "proj/exp").unwrap();
-        assert_eq!(report.exported, 2, "only the two chains of proj/exp are exported");
+        assert_eq!(
+            report.exported, 2,
+            "only the two chains of proj/exp are exported"
+        );
         assert_eq!(report.overwritten, 0);
         assert!(report.failures.is_empty());
         assert_eq!(report.project, "proj/exp");
-        assert!(report.chains.iter().all(|c| c.trace_id == t1 || c.trace_id == t2));
-        assert!(report.chains.iter().any(|c| c.trace_id == t1 && c.status == "ok"));
-        assert!(report.chains.iter().any(|c| c.trace_id == t2 && c.status == "error"));
+        assert!(report
+            .chains
+            .iter()
+            .all(|c| c.trace_id == t1 || c.trace_id == t2));
+        assert!(report
+            .chains
+            .iter()
+            .any(|c| c.trace_id == t1 && c.status == "ok"));
+        assert!(report
+            .chains
+            .iter()
+            .any(|c| c.trace_id == t2 && c.status == "error"));
 
         // Persisted at the single-level subdirectory `<dir>/<sanitize(project)>/`.
         let proj_dir = out.join("proj_exp");
-        assert_eq!(report.dir, proj_dir.to_string_lossy().to_string(), "report.dir points at the actually written subdirectory");
+        assert_eq!(
+            report.dir,
+            proj_dir.to_string_lossy().to_string(),
+            "report.dir points at the actually written subdirectory"
+        );
 
         // The directory holds exactly as many ndjson files as same-project chains.
         let ndjson: Vec<_> = std::fs::read_dir(&proj_dir)
@@ -1196,7 +1330,11 @@ mod tests {
             .flatten()
             .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("ndjson"))
             .collect();
-        assert_eq!(ndjson.len(), 2, "the two same-project chains each have one file, excluding proj/other");
+        assert_eq!(
+            ndjson.len(),
+            2,
+            "the two same-project chains each have one file, excluding proj/other"
+        );
 
         // Byte-level identity: source file == target file (no JSON round-trip).
         for tid in [&t1, &t2] {
@@ -1214,7 +1352,10 @@ mod tests {
 
         // index.json is parseable, with schema/chainCount/project/chains correct.
         let manifest_path = proj_dir.join("index.json");
-        assert_eq!(report.manifest_path, manifest_path.to_string_lossy().to_string());
+        assert_eq!(
+            report.manifest_path,
+            manifest_path.to_string_lossy().to_string()
+        );
         let manifest: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
         assert_eq!(manifest["schema"], 1);
@@ -1228,13 +1369,17 @@ mod tests {
         assert_eq!(again.overwritten, 2, "both already existed on rerun");
 
         // A project with no chains → no_chains, and it **does not touch the filesystem**: neither the selection directory nor nested subdirectories are created.
-        let untouched = std::env::temp_dir().join(format!("opencapx-reqexport-nc-{}", std::process::id()));
+        let untouched =
+            std::env::temp_dir().join(format!("opencapx-reqexport-nc-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&untouched);
         assert_eq!(
             export_chains_to(untouched.to_str().unwrap(), "proj/none").unwrap_err(),
             "no_chains"
         );
-        assert!(!untouched.exists(), "a no_chains early return must not leave any directory behind");
+        assert!(
+            !untouched.exists(),
+            "a no_chains early return must not leave any directory behind"
+        );
 
         std::env::remove_var("OPENCAPX_TRACES_DIR");
         let _ = std::fs::remove_dir_all(&base);
@@ -1247,7 +1392,8 @@ mod tests {
     fn export_chains_empty_project_falls_back_to_no_project_dir() {
         let _g = lock_env();
         let base = std::env::temp_dir().join(format!("opencapx-reqtrace-{}", std::process::id()));
-        let out = std::env::temp_dir().join(format!("opencapx-reqexport-np-{}", std::process::id()));
+        let out =
+            std::env::temp_dir().join(format!("opencapx-reqexport-np-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let _ = std::fs::remove_dir_all(&out);
         std::env::set_var("OPENCAPX_TRACES_DIR", &base);
@@ -1261,8 +1407,14 @@ mod tests {
         assert_eq!(report.project, "");
         let proj_dir = out.join("_no-project");
         assert_eq!(report.dir, proj_dir.to_string_lossy().to_string());
-        assert!(proj_dir.join(format!("{}.ndjson", tid)).exists(), "the chain lands under the _no-project level");
-        assert_eq!(report.manifest_path, proj_dir.join("index.json").to_string_lossy().to_string());
+        assert!(
+            proj_dir.join(format!("{}.ndjson", tid)).exists(),
+            "the chain lands under the _no-project level"
+        );
+        assert_eq!(
+            report.manifest_path,
+            proj_dir.join("index.json").to_string_lossy().to_string()
+        );
         assert!(proj_dir.join("index.json").exists());
 
         std::env::remove_var("OPENCAPX_TRACES_DIR");
@@ -1275,7 +1427,8 @@ mod tests {
     fn export_chains_reports_dir_unwritable() {
         let _g = lock_env();
         let base = std::env::temp_dir().join(format!("opencapx-reqtrace-{}", std::process::id()));
-        let bogus = std::env::temp_dir().join(format!("opencapx-reqexport-file-{}", std::process::id()));
+        let bogus =
+            std::env::temp_dir().join(format!("opencapx-reqexport-file-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let _ = std::fs::remove_file(&bogus);
         std::env::set_var("OPENCAPX_TRACES_DIR", &base);

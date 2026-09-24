@@ -1,12 +1,14 @@
 # Git hooks via lefthook — installed by `pnpm install` (the prepare script runs `lefthook install`).
 #
 # The commands mirror the verification gate in CONTRIBUTING.md, scoped to what you staged:
-# Rust changes get clippy + the bin test suite, TypeScript changes get tsc, catalog changes get
-# i18n:check. pre-push runs the full five-set gate, serial end-to-end tests included.
+# Rust changes get fmt --check + clippy + the bin test suite, TypeScript changes get tsc,
+# catalog changes get i18n:check. pre-push runs the full five-set gate, serial end-to-end tests included.
 # commit-msg runs commitlint (Conventional Commits) — config in commitlint.config.mjs.
 #
 # One-commit bypass: `git commit --no-verify` / `git push --no-verify`. Use sparingly.
-# rustfmt is deliberately not here: the tree predates it; a dedicated formatting pass will add it.
+# fmt auto-fixes on commit: only the files you staged ({staged_files}), and stage_fixed re-stages
+# what it rewrote, so the commit is always formatted and matches the hooks' verdict. CI keeps
+# fmt --check because it must reject, not rewrite.
 
 commit-msg:
   commands:
@@ -18,8 +20,10 @@ pre-commit:
     rust:
       glob: "*.rs"
       run: |
+        cargo fmt --manifest-path src-tauri/Cargo.toml -- {staged_files} &&
         cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets &&
         cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx
+      stage_fixed: true
     typescript:
       glob: "*.{ts,tsx}"
       run: npx tsc --noEmit
@@ -31,7 +35,7 @@ pre-push:
   commands:
     gate:
       run: |
-        (cd src-tauri && cargo test --bin opencapx && cargo clippy --all-targets) &&
+        (cd src-tauri && cargo fmt --check && cargo test --bin opencapx && cargo clippy --all-targets) &&
         npx tsc --noEmit &&
         pnpm run i18n:check &&
         (cd packages/ts-sdk && npm test) &&

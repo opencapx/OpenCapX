@@ -269,8 +269,9 @@ pub fn switch_profile(name: &str) -> Result<(), String> {
     // 2. Open the new store and replace the global one
     let path = db_path_for(name);
     let storage = super::storage::Storage::open(&path).map_err(|e| e.to_string())?;
-    let new_store: super::storage::SharedStore =
-        std::sync::Arc::new(std::sync::Mutex::new(super::storage::StoreEnum::Db(storage)));
+    let new_store: super::storage::SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
+        super::storage::StoreEnum::Db(storage),
+    ));
     let _old = super::replace_shared_store(new_store);
 
     // 3. Persist active
@@ -337,7 +338,10 @@ fn try_open_checked(path: &Path) -> Result<super::storage::Storage, String> {
             })
             .unwrap_or_else(|| "quick_check unavailable".into());
         if verdict != "ok" {
-            return Err(format!("quick_check: {}", verdict.chars().take(120).collect::<String>()));
+            return Err(format!(
+                "quick_check: {}",
+                verdict.chars().take(120).collect::<String>()
+            ));
         }
     }
     Ok(store)
@@ -402,7 +406,10 @@ pub fn open_profile_store(name: &str) -> (super::storage::StoreEnum, Option<Quar
                         q.reason = format!("{}; fresh db also failed: {}", q.reason, e2);
                         q
                     });
-                    (super::storage::StoreEnum::Mem(super::agent::SessionStore::new()), q)
+                    (
+                        super::storage::StoreEnum::Mem(super::agent::SessionStore::new()),
+                        q,
+                    )
                 }
             }
         }
@@ -482,9 +489,7 @@ mod tests {
         // OPENCAPX_HOME is the cross-platform override; on Windows neither HOME nor
         // USERPROFILE reaches dirs::home_dir() (Known Folder API), which used to make
         // these tests share the real home and leak state into each other.
-        let guard = HomeGuard(
-            std::env::var_os("OPENCAPX_HOME").unwrap_or_default(),
-        );
+        let guard = HomeGuard(std::env::var_os("OPENCAPX_HOME").unwrap_or_default());
         std::env::set_var("OPENCAPX_HOME", home);
         std::env::set_var("HOME", home);
         std::env::set_var("USERPROFILE", home);
@@ -516,17 +521,24 @@ mod tests {
             "must come back with a fresh working db, not memory"
         );
         assert_eq!(q.from, path.display().to_string());
-        assert_eq!(fs::read(&q.to).unwrap(), b"not a database at all", "bad bytes preserved");
+        assert_eq!(
+            fs::read(&q.to).unwrap(),
+            b"not a database at all",
+            "bad bytes preserved"
+        );
         // The live path must not retain the WAL bytes of that "bigger db": either the file
         // is gone (SQLite clears it itself when the salt does not match) or it is a fresh
         // empty WAL the new db created. Leave it behind and those pages get treated as
         // authoritative on the next open — exactly how this went wrong.
         match fs::read(&wal) {
-            Ok(bytes) => assert_ne!(bytes, b"stale wal of a bigger db", "stale wal must not survive"),
+            Ok(bytes) => assert_ne!(
+                bytes, b"stale wal of a bigger db",
+                "stale wal must not survive"
+            ),
             Err(e) => assert_eq!(e.kind(), std::io::ErrorKind::NotFound),
         }
         let _ = shm; // -shm is a derived cache that SQLite clears and rebuilds on open
-        // New db is usable: creating/writing a row succeeds
+                     // New db is usable: creating/writing a row succeeds
         let can_write = match &store {
             super::super::storage::StoreEnum::Db(s) => s
                 .with_conn_ref(|c| {
@@ -566,18 +578,30 @@ mod tests {
         let (store, q) = open_profile_store(DEFAULT_PROFILE);
         assert!(q.is_none(), "healthy db must not be quarantined");
         let kept: i64 = match &store {
-            super::super::storage::StoreEnum::Db(s) => s
-                .with_conn_ref(|c| c.query_row("SELECT count(*) FROM events WHERE id='keep1'", [], |r| r.get::<_, i64>(0)).unwrap()),
+            super::super::storage::StoreEnum::Db(s) => s.with_conn_ref(|c| {
+                c.query_row("SELECT count(*) FROM events WHERE id='keep1'", [], |r| {
+                    r.get::<_, i64>(0)
+                })
+                .unwrap()
+            }),
             _ => -1,
         };
         assert_eq!(kept, 1, "existing rows must survive a normal open");
         // Quarantine record: write → read back → dismiss
-        let q2 = Quarantine { from: "a".into(), to: "b".into(), reason: "r".into(), at: 1 };
+        let q2 = Quarantine {
+            from: "a".into(),
+            to: "b".into(),
+            reason: "r".into(),
+            at: 1,
+        };
         write_db_recovery_notice(&q2);
         let notice = db_recovery_notice().expect("notice readable");
         assert_eq!(notice["reason"], "r");
         dismiss_db_recovery_notice().unwrap();
-        assert!(db_recovery_notice().is_none(), "dismiss must clear the notice");
+        assert!(
+            db_recovery_notice().is_none(),
+            "dismiss must clear the notice"
+        );
         let _ = fs::remove_dir_all(&home);
     }
 
@@ -645,7 +669,9 @@ mod tests {
         create_profile("work").unwrap();
         set_active_profile("work").unwrap();
         assert_eq!(active_profile_name(), "work");
-        assert!(load_profiles().iter().any(|p| p.name == "work" && p.is_active));
+        assert!(load_profiles()
+            .iter()
+            .any(|p| p.name == "work" && p.is_active));
     }
 
     #[test]
