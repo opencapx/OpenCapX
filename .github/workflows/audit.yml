@@ -1,0 +1,42 @@
+# Dependency audit — Rust (cargo-deny: RustSec advisories, license allow list,
+# unknown sources) and npm (pnpm audit). cargo-deny runs on PRs so a newly added
+# bad dependency fails its own PR; pnpm audit is scheduled-only because npm
+# advisories appear mid-flight in transitive dev deps and should not block
+# unrelated work.
+
+name: audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/Cargo.lock"
+      - "deny.toml"
+      - ".github/workflows/audit.yml"
+  schedule:
+    # Mondays 04:23 UTC — off the :00 pile-up
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+
+jobs:
+  cargo-deny:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - name: cargo deny check
+        run: cargo deny --manifest-path src-tauri/Cargo.toml check --hide-inclusion-graph
+
+  pnpm-audit:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - name: pnpm audit (high and above)
+        run: pnpm audit --audit-level high
