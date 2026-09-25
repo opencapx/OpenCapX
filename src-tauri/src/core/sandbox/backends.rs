@@ -229,7 +229,7 @@ fn bwrap_probe() -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn run_bwrap(parsed: &Parsed, scratch: &Path) -> std::io::Result<i32> {
+pub(crate) fn run_bwrap(parsed: &Parsed, scratch: &Path) -> std::io::Result<i32> {
     let bwrap = which("bwrap")
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "bwrap not found"))?;
     let home = crate::core::home_dir().map(|h| canonicalize_lossy(&h));
