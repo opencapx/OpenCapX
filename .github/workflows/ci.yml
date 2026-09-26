@@ -33,7 +33,10 @@ jobs:
       - name: test
         env:
           PYTHONPATH: packages/plugin-sdk
-        run: cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx
+        run: |
+          set -o pipefail
+          cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx 2>&1 | tee /tmp/rust-test.log
+          node scripts/assert-test-count.mjs /tmp/rust-test.log rust 1080
       - name: node plugin e2e (ts-sdk fixture)
         run: cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx install_grant_execute_ts_e2e -- --ignored --test-threads=1
 
@@ -45,7 +48,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: test
-        run: cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx 2>&1 | tee rust-test.log
+          node scripts/assert-test-count.mjs rust-test.log rust 1070
   frontend:
     runs-on: ubuntu-22.04
     steps:

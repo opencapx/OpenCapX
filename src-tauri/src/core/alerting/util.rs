@@ -1,8 +1,6 @@
 //! Shared kind/weekday/hour helpers used by routes, silences, correlations, and the simulator.
 //! Mechanical move from core/alerting.rs.
 
-use super::*;
-
 /// Derive weekday from unix seconds: 0=Sun, 1=Mon, ..., 6=Sat (aligned with Unix libc).
 pub(crate) fn weekday_from_unix(ts: u64) -> u8 {
     // The Unix epoch 1970-01-01 is a Thursday. Thursday in the 0=Sun representation = 4.

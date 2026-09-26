@@ -2,7 +2,7 @@
 //! Mechanical move from main.rs.
 
 use super::*;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 
 /// `opencapx install-cli` — symlink the stable shim into PATH so `opencapx` resolves from any
 /// terminal. The Settings row calls `cli_install::install(true)` directly.

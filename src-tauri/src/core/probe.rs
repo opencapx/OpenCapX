@@ -280,7 +280,6 @@ mod tests {
     #[test]
     fn storage_roundtrip_preserves_report_fields() {
         use crate::core::storage::{Storage, StoreEnum};
-        use std::path::PathBuf;
         use std::sync::{Arc, Mutex};
         let dir = std::env::temp_dir().join(format!("opencapx-probe-rt-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);

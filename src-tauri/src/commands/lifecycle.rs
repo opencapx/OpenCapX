@@ -1,8 +1,6 @@
 //! plugin lifecycle, kill switch, safe mode, metrics, profiles commands.
 //! Mechanical move from main.rs.
 
-use super::*;
-
 /// Phase 32 — full plugin capability dependency graph (nodes = installed plugins, edges = shared capabilities).
 #[tauri::command]
 pub(crate) fn list_plugin_dependency_graph() -> crate::core::plugin::CapabilityGraphDto {

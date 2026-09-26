@@ -1,8 +1,6 @@
 //! the permission lexicon: the known-permissions table, Decision, name validation, reserved sets, defaults.
 //! Mechanical move from core/permission.rs.
 
-use super::*;
-
 /// (permission, default decision). New permissions must be synced to docs/permissions.md.
 pub const PERMISSIONS: &[(&str, &str)] = &[
     ("pet.animation", "granted"),

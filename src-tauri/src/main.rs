@@ -561,11 +561,9 @@ pub(crate) static GUARD_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::*;
     use crate::commands::*;
     use crate::hook_entry::*;
     use crate::settings_file::*;
-    use crate::tray::*;
 
     #[test]
     fn commands_dto_roundtrip() {

@@ -1,8 +1,6 @@
 //! permission and agent-identity commands.
 //! Mechanical move from main.rs.
 
-use super::*;
-
 #[tauri::command]
 pub(crate) fn list_permissions() -> Vec<crate::core::permission::PluginPermissionsDto> {
     let plugins = crate::core::plugin::PluginManager::shared().list();
