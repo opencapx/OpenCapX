@@ -12,7 +12,7 @@ Before the plugin ecosystem scales:
 - [ ] A real Windows sandbox backend for `opencapx sandbox` (the microVM tier via WHP, or a restricted-token approximation) — until then `--require` gives rules the fail-closed stance
 
 - [ ] Extend OS-permission preflight beyond read-only macOS probes (Windows/Linux status, first-use guidance to System Settings)
-- [ ] Enforce network.request domain scopes (the structure is reserved in the permission model; the matcher is not wired for domains yet)
+- [x] Enforce network.request domain scopes (the matcher shipped in v1.5; the scope write sources — manifest declaration + the agent editor — landed after)
 - [ ] Rotate the registry official key to the offline ceremony key ([key-ceremony.md](docs/key-ceremony.md)) — the add-then-retire window contract is pinned by a test; execution waits until external publishers actually exist
 - [x] Put a copy of the updater private key into encrypted offline storage now (password-manager attachment or a second machine)
 - [ ] Shard the updater key across offline custodians ([split-seed.mjs](scripts/split-seed.mjs)) once the install base justifies it

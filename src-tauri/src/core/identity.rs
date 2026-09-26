@@ -380,6 +380,36 @@ pub fn check_agent(store: &SharedStore, agent_id: &str, perm: &str) -> Decision 
 /// §4.3 enforcement point 3 (Agent half): derived declared permissions **refuse to
 /// be written as granted** — clicking Always at the Agent layer would also leave a
 /// permanent grant row, and this plugs that (review 7).
+/// Set (or clear) the domain scope on an existing agent-permission row — the user-side source of
+/// `browser.control` scope. UPDATE-only on purpose: a scope tightens a decision that already
+/// exists; it never creates one. `domains == None` (empty input) clears the scope back to
+/// unrestricted. Returns false when the row (or the permission vocabulary) is absent.
+pub fn set_agent_scope(
+    store: &SharedStore,
+    agent_id: &str,
+    perm: &str,
+    scope_json: Option<&str>,
+) -> Result<bool, String> {
+    if !permission::known_or_declared(store, perm) {
+        return Ok(false);
+    }
+    let now = now_secs() as i64;
+    store
+        .lock()
+        .ok()
+        .and_then(|mut s| {
+            s.with_conn(|c| {
+                c.execute(
+                    "UPDATE agent_permissions SET scope = ?3, updated_at = ?4 WHERE agent_id = ?1 AND permission = ?2",
+                    params![agent_id, perm, scope_json, now],
+                )
+                .unwrap_or(0)
+            })
+            .map(|n: usize| n > 0)
+        })
+        .ok_or_else(|| "storage unavailable".to_string())
+}
+
 pub fn set_agent_decision(store: &SharedStore, agent_id: &str, perm: &str, decision: &str) -> bool {
     if !permission::known_or_declared(store, perm)
         || !["granted", "denied", "ask"].contains(&decision)

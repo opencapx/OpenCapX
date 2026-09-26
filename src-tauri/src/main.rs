@@ -409,6 +409,7 @@ fn main() {
             commands::plugins::uninstall_plugin,
             commands::plugins::preview_uninstall_plugin,
             commands::permissions::list_permissions,
+            commands::permissions::set_agent_permission_scope,
             commands::permissions::set_permission,
             commands::permissions::agents_list,
             commands::permissions::agent_revoke,

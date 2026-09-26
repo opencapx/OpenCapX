@@ -316,7 +316,7 @@ impl PluginManager {
                         ptype: m.ptype,
                         status,
                         capabilities: capability_ids,
-                        permissions: m.permissions,
+                        permissions: m.permissions.iter().map(|d| d.name().to_string()).collect(),
                         path: path_row,
                         auto_reload: auto_reload != 0,
                         probe_status: probe_status.filter(|s| !s.is_empty()),

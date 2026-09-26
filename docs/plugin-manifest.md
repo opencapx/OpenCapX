@@ -16,7 +16,7 @@ Every plugin root directory must contain an `opencapx-plugin.json`. This is the 
 | `type` | string | ✅ | `pet` \| `capability`. v1 has only these two; `agent` is unimplemented and rejected at parse time (SDKs kept in sync) |
 | `runtime` | object | capability ✅ / pet ❌ | See below |
 | `capabilities` | string[] | capability ✅ | Declares the capability IDs provided, see [capability.md](capability.md); third-party domains use the object form `{"id","permission","default"(ask\|denied),"timeoutSecs"(1..=600, defaults to 60s)}` |
-| `permissions` | string[] | ❌ | Declares the permissions required, see [permissions.md](permissions.md) |
+| `permissions` | (string \| {name, domains})[] | ❌ | Declares the permissions required, see [permissions.md](permissions.md). The object form attaches a domain allow-list (v1: `browser.control` only) that scopes `browser.read` egress |
 | `states` | string[] | pet ✅ | The set of states the pet supports |
 | `author` | string | ❌ | |
 | `homepage` | string | ❌ | |
@@ -56,7 +56,7 @@ Every plugin root directory must contain an `opencapx-plugin.json`. This is the 
     "command": "bin/vision-plugin"
   },
   "capabilities": ["image.analyze", "image.ocr"],
-  "permissions": ["image.read", "network.request"],
+  "permissions": ["image.read", "network.request", { "name": "browser.control", "domains": ["api.example.com", "*.github.com"] }],
   "author": "OpenCapX",
   "license": "MIT"
 }

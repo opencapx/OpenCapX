@@ -2,15 +2,20 @@
 //! Mechanical move from core/permission.rs.
 
 use super::*;
+use serde::{Deserialize, Serialize};
 
 /// One item of install confirmation (§4.3 integration points #3 / #7).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstallAsk {
     pub permission: String,
     /// true = derived from a plugin-domain declaration → **once-only** (no Always; not grantable on the settings page)
     pub declared: bool,
     /// The default written for a declared item in the manifest (ask | denied); ignored for built-in items
     pub declared_default: String,
+    /// Object-form domain allow-list (v1: browser.control only) — shown in the install dialog and
+    /// written to plugin_permissions.scope as {"allowed":[...]} (fail-closed once written).
+    #[serde(default)]
+    pub domains: Option<Vec<String>>,
 }
 
 /// Default for declared-derived (§4.3 integration point #2): static table first, then frozen declaration table, then denied.
@@ -92,6 +97,7 @@ pub fn confirm_install_with(
             "permission": perm,
             "canAlways": can_always,
             "declared": ask.declared,
+            "domains": ask.domains,
         });
         let decision = match asker.ask(&AskRequest {
             id: id.clone(),
@@ -252,6 +258,27 @@ pub fn commit_install_decisions(
 
 /// Upserts a batch of install decisions within a transaction (`plugin_permissions`). The install commit phase and
 /// `commit_install_decisions` share this single SQL source.
+/// Object-form `domains` declarations (v1: browser.control) land in `plugin_permissions.scope`
+/// as `{"allowed":[...]}` — same transaction as the decision rows, so scope and decision never
+/// diverge. Called at both upsert sites (interactive install and the CLI batch path).
+pub fn apply_declared_scopes_in_tx(
+    tx: &rusqlite::Transaction,
+    plugin_id: &str,
+    permissions: &[crate::core::plugin::PermissionDecl],
+    now: i64,
+) -> Result<(), String> {
+    for d in permissions {
+        let Some(domains) = d.domains() else { continue };
+        let scope_json = crate::core::scope::domains_to_scope_json(domains);
+        tx.execute(
+            "UPDATE plugin_permissions SET scope = ?3, updated_at = ?4 WHERE plugin_id = ?1 AND permission = ?2",
+            rusqlite::params![plugin_id, d.name(), scope_json, now],
+        )
+        .map_err(|e| format!("scope write {} failed: {}", d.name(), e))?;
+    }
+    Ok(())
+}
+
 pub fn upsert_install_decisions_in_tx(
     tx: &rusqlite::Transaction,
     plugin_id: &str,

@@ -47,6 +47,101 @@ fn manifest_rejects_unknown_permission_and_capability() {
 }
 
 #[test]
+fn manifest_parses_object_form_permission_with_domains() {
+    let dir = std::env::temp_dir().join(format!("opencapx-manifest-dom-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+            dir.join("opencapx-plugin.json"),
+            r#"{"id":"x","name":"X","version":"0.1.0","apiVersion":"1","type":"capability","runtime":{"type":"process","command":"true"},"capabilities":["browser.read"],"permissions":["image.read",{"name":"browser.control","domains":["api.example.com",".github.com"]}]}"#,
+        )
+        .unwrap();
+    let m = PluginManager::read_manifest(&dir).unwrap();
+    let names: Vec<&str> = m.permissions.iter().map(|d| d.name()).collect();
+    assert_eq!(names, vec!["image.read", "browser.control"]);
+    let scoped = m
+        .permissions
+        .iter()
+        .find(|d| d.name() == "browser.control")
+        .unwrap();
+    assert_eq!(
+        scoped.domains().map(|v| v.to_vec()),
+        Some(vec![
+            "api.example.com".to_string(),
+            ".github.com".to_string()
+        ])
+    );
+    assert!(m
+        .permissions
+        .iter()
+        .find(|d| d.name() == "image.read")
+        .unwrap()
+        .domains()
+        .is_none());
+    // plan carries the domains for the install dialog
+    let plan = PluginManager::install_ask_plan(&m);
+    let bc = plan
+        .iter()
+        .find(|a| a.permission == "browser.control")
+        .unwrap();
+    assert_eq!(
+        bc.domains.as_deref(),
+        Some(["api.example.com".to_string(), ".github.com".to_string()].as_slice())
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn manifest_rejects_bad_domain_declarations() {
+    let dir = std::env::temp_dir().join(format!("opencapx-manifest-baddom-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let base = r##"{"id":"x","name":"X","version":"0.1.0","apiVersion":"1","type":"capability","runtime":{"type":"process","command":"true"},"capabilities":["image.analyze"],"permissions":"##;
+    for (perms, needle) in [
+        (
+            r#"[{"name":"clipboard.read","domains":["a.com"]}]"#,
+            "does not support a domains declaration",
+        ),
+        (
+            r#"[{"name":"browser.control","domains":["UPPER.com"]}]"#,
+            "invalid domain entry",
+        ),
+        (
+            r#"[{"name":"browser.control","domains":["*wild"]}]"#,
+            "invalid domain entry",
+        ),
+        (
+            r#"[{"name":"browser.control","domains":["-lead.com"]}]"#,
+            "invalid domain entry",
+        ),
+        (
+            r#"[{"name":"browser.control","domains":["a.com","a.com"]}]"#,
+            "duplicate domain entry",
+        ),
+        (
+            r#"[{"name":"browser.control","domains":["a.com","b.com","c.com","d.com","e.com","f.com","g.com","h.com","i.com","j.com","k.com","l.com","m.com","n.com","o.com","p.com","q.com","r.com","s.com","t.com","u.com","v.com","w.com","x.com","y.com","z.com","a1.com","b1.com","c1.com","d1.com","e1.com","f1.com","g1.com"]}]"#,
+            "at most 32",
+        ),
+    ] {
+        std::fs::write(
+            dir.join("opencapx-plugin.json"),
+            format!("{}{}}}", base, perms),
+        )
+        .unwrap();
+        let err = PluginManager::read_manifest(&dir).unwrap_err();
+        assert!(err.contains(needle), "expected {:?} in {:?}", needle, err);
+    }
+    // plain form stays valid and untouched
+    std::fs::write(
+        dir.join("opencapx-plugin.json"),
+        format!("{}[\"clipboard.read\"]}}", base),
+    )
+    .unwrap();
+    assert!(PluginManager::read_manifest(&dir).is_ok());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn manifest_rejects_traversal_plugin_id() {
     // P0 regression (docs/permission-domains.md §7): an id like `../..` could exploit
     // root.join(id) + remove_dir_all to traverse and delete an arbitrary directory; it must be
@@ -595,7 +690,13 @@ fn echo_manifest_is_valid() {
     assert_eq!(m.id, "com.opencapx.echo-vision");
     assert_eq!(m.ptype, "capability");
     assert_eq!(m.capability_ids(), vec!["image.analyze".to_string()]);
-    assert_eq!(m.permissions, vec!["image.read".to_string()]);
+    assert_eq!(
+        m.permissions
+            .iter()
+            .map(|d| d.name().to_string())
+            .collect::<Vec<_>>(),
+        vec!["image.read".to_string()]
+    );
 }
 
 /// pet-type plugin: starts successfully, and a reverse `core.emit` triggers a `{pluginId}.{kind}` event.

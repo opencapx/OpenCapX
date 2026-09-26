@@ -16,6 +16,10 @@ pub struct PermissionEntryDto {
     /// overriding every per-agent granted — the UI shows the "global" badge based on this.
     #[serde(default)]
     pub global: String,
+    /// Effective domain/path scope JSON ({"allowed":[...]}); None = unrestricted.
+    /// Sources: the manifest's object-form domains (plugin layer) or the agent editor (agent layer).
+    #[serde(default)]
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -34,6 +38,27 @@ pub fn view(
     plugins: &[crate::core::plugin::PluginStatusDto],
 ) -> Vec<PluginPermissionsDto> {
     let all_decls = crate::core::declaration::all(store);
+    // scope column is plugin-layer only in v1 (manifest-declared browser.control domains)
+    let mut scope_rows: std::collections::HashMap<(String, String), Option<String>> =
+        std::collections::HashMap::new();
+    store.lock().ok().and_then(|mut s| {
+        s.with_conn(|c| {
+            let _ = c
+                .prepare("SELECT plugin_id, permission, scope FROM plugin_permissions WHERE scope IS NOT NULL")
+                .and_then(|mut st| {
+                    st.query_map([], |r| {
+                        let pid: String = r.get(0)?;
+                        let perm: String = r.get(1)?;
+                        let sc: Option<String> = r.get(2)?;
+                        scope_rows.insert((pid, perm), sc);
+                        Ok(())
+                    })
+                    .map(|_| ())
+                    .map_err(|e| e)
+                });
+            0
+        })
+    });
     plugins
         .iter()
         .map(|p| {
@@ -57,6 +82,10 @@ pub fn view(
                         high_risk: HIGH_RISK.contains(&perm.as_str()),
                         declared: is_declared(store, perm),
                         global: global_override_str(store, perm).to_string(),
+                        scope: scope_rows
+                            .get(&(p.id.clone(), perm.clone()))
+                            .cloned()
+                            .flatten(),
                     })
                     .collect(),
             }
@@ -68,6 +97,25 @@ pub fn view(
 /// decision = agent_permissions override > default table; default lets the frontend mark "unchanged").
 /// §4.3 integration point #6: vocabulary = static table ∪ frozen declaration table, otherwise new-domain permissions are "denied by default and impossible to grant".
 pub fn agent_view(store: &SharedStore, agent_id: &str) -> Vec<PermissionEntryDto> {
+    // agent-layer scopes (browser.control editor): fetch once, attach below
+    let mut agent_scopes: std::collections::HashMap<String, Option<String>> =
+        std::collections::HashMap::new();
+    store.lock().ok().and_then(|mut s| {
+        s.with_conn(|c| {
+            let _ = c
+                .prepare("SELECT permission, scope FROM agent_permissions WHERE agent_id = ?1 AND scope IS NOT NULL")
+                .and_then(|mut st| {
+                    st.query_map(rusqlite::params![agent_id], |r| {
+                        let perm: String = r.get(0)?;
+                        let sc: Option<String> = r.get(1)?;
+                        agent_scopes.insert(perm, sc);
+                        Ok(())
+                    })
+                    .map(|_| ())
+                });
+            0
+        })
+    });
     let mut entries: Vec<PermissionEntryDto> = PERMISSIONS
         .iter()
         .map(|(perm, default)| PermissionEntryDto {
@@ -78,6 +126,7 @@ pub fn agent_view(store: &SharedStore, agent_id: &str) -> Vec<PermissionEntryDto
             high_risk: HIGH_RISK.contains(perm),
             declared: false,
             global: global_override_str(store, perm).to_string(),
+            scope: agent_scopes.get(*perm).cloned().flatten(),
         })
         .collect();
     for (perm, default) in crate::core::declaration::declared_permission_defaults(store) {
@@ -91,6 +140,7 @@ pub fn agent_view(store: &SharedStore, agent_id: &str) -> Vec<PermissionEntryDto
             high_risk: HIGH_RISK.contains(&perm.as_str()),
             declared: true,
             global: global_override_str(store, &perm).to_string(),
+            scope: agent_scopes.get(&perm).cloned().flatten(),
             permission: perm,
         });
     }

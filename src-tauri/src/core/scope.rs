@@ -81,6 +81,43 @@ fn url_host(url: &str) -> Option<String> {
 
 /// Whether a domain entry covers host: `example.com` = this domain + subdomains;
 /// `.example.com` / `*.example.com` = subdomains only; everything else is an exact match.
+/// Domain-entry grammar for scope writers (manifest declaration and the agent-permission editor):
+/// a lowercase ASCII host (`api.example.com`), or a dot-boundary wildcard (`.example.com` /
+/// `*.example.com` = subdomains only). Mirrors what `domain_covers` can match; anything else is
+/// rejected at the write boundary so the matcher never sees a dead entry.
+pub fn valid_domain_entry(entry: &str) -> bool {
+    let e = entry.strip_prefix('*').unwrap_or(entry);
+    let e = e.strip_prefix('.').unwrap_or(e);
+    if e.is_empty() || e.len() > 253 {
+        return false;
+    }
+    let wildcarded = entry.starts_with('*') || entry.starts_with('.');
+    if entry.starts_with("*") && !entry.strip_prefix('*').unwrap_or("").starts_with('.') {
+        return false; // `*` may only introduce `.suffix`, never a bare host
+    }
+    if !wildcarded && entry.starts_with('.') {
+        return false;
+    }
+    e.split('.').all(|lbl| {
+        !lbl.is_empty()
+            && lbl.len() <= 63
+            && lbl
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            && !lbl.starts_with('-')
+            && !lbl.ends_with('-')
+    })
+}
+
+/// Serialize a domain allow-list into the scope JSON `decide_domain` consumes.
+/// An empty list maps to `None` (unrestricted) — writing a scope is always an explicit choice.
+pub fn domains_to_scope_json(domains: &[String]) -> Option<String> {
+    if domains.is_empty() {
+        return None;
+    }
+    serde_json::json!({ "allowed": domains }).to_string().into()
+}
+
 fn domain_covers(entry: &str, host: &str) -> bool {
     let e = entry.trim().to_ascii_lowercase();
     let h = host.trim().to_ascii_lowercase();

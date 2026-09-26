@@ -29,7 +29,7 @@ pub struct Manifest {
     #[serde(default)]
     pub capabilities: Vec<CapabilityDecl>,
     #[serde(default)]
-    pub permissions: Vec<String>,
+    pub permissions: Vec<PermissionDecl>,
     #[serde(default)]
     pub states: Vec<String>,
     /// Phase 53 — optional alerting sub-config (severityHints table).
@@ -64,6 +64,36 @@ pub struct Manifest {
     /// Shape is owned by plugin_sig: keep the raw JSON, no strong typing here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<serde_json::Value>,
+}
+
+/// Permission declaration: plain string form (back-compat), or object form with a domain
+/// allow-list (v1: only `browser.control` may carry `domains`; enforced in validate_manifest).
+/// The domains land in `plugin_permissions.scope` as `{"allowed":[...]}` at install time and are
+/// enforced per-request by `core::scope::decide_domain` (fail-closed once written).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum PermissionDecl {
+    Plain(String),
+    Scoped {
+        name: String,
+        #[serde(default)]
+        domains: Vec<String>,
+    },
+}
+
+impl PermissionDecl {
+    pub fn name(&self) -> &str {
+        match self {
+            PermissionDecl::Plain(n) | PermissionDecl::Scoped { name: n, .. } => n,
+        }
+    }
+    /// Declared domain allow-list, if the object form carried one.
+    pub fn domains(&self) -> Option<&[String]> {
+        match self {
+            PermissionDecl::Plain(_) => None,
+            PermissionDecl::Scoped { domains, .. } => Some(domains),
+        }
+    }
 }
 
 /// §4.2 capability declaration shape: "string | object" (untagged parse; old manifests work as-is).

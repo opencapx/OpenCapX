@@ -259,6 +259,17 @@ Decision order: denied match → reject; allowed match → pass; neither matches
 
 **Domain-type scope (v1.5, enforced)**: `browser.read` (parameter `url`) constrains the host by the scope of `browser.control`, with two-layer semantics identical to the path type. Entry rules: `example.com` = this domain + subdomains (dot boundary, `notexample.com` does not match); `.example.com` / `*.example.com` = subdomains only; a URL's port, userinfo, and case do not participate in matching; http(s) only. No configured domain = closed, null = unrestricted.
 
+**Where scopes come from** (v1):
+
+- **Plugin manifest declaration** — the `permissions[]` object form carries an allow-list, written to the plugin layer's `browser.control` row at install (same transaction as the decisions):
+  ```json
+  "permissions": ["image.read", { "name": "browser.control", "domains": ["api.example.com", "*.github.com"] }]
+  ```
+  Grammar: lowercase ASCII host, or `.suffix` / `*.suffix` (subdomains only); at most 32 entries, deduplicated; `denied` entries are not declarable — a manifest states what it needs, never what it bans. The install dialog lists the declared domains before you confirm.
+- **The agent editor** — Settings → Agents → an agent's `browser.control` row has a *Domains…* editor (one entry per line, same grammar; empty = clear back to unrestricted). This writes the agent layer's row only.
+
+Once either layer holds a scope, `browser.read` from that layer fails closed outside the list. `network.request` remains a vocabulary placeholder: it gates nothing today — the real network gate is `browser.control`, which is what the scope constrains.
+
 ## Runtime Check Flow
 
 ```text

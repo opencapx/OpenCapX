@@ -356,7 +356,7 @@ fn check_declaration(report: &mut VerifyReport, m: &Manifest) {
     }
     for c in &m.capabilities {
         if let Some((perm, _)) = c.mapping() {
-            if !m.permissions.iter().any(|p| p == perm) {
+            if !m.permissions.iter().any(|d| d.name() == perm) {
                 findings.push(format!(
                     "mapped permission {} not listed in permissions[]",
                     perm

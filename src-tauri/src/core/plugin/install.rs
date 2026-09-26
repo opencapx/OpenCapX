@@ -136,6 +136,7 @@ impl PluginManager {
                 )
                 .map_err(|e| format!("plugin row failed: {}", e))?;
                 crate::core::permission::upsert_install_decisions_in_tx(&tx, &m.id, decisions, now as i64)?;
+                crate::core::permission::apply_declared_scopes_in_tx(&tx, &m.id, &m.permissions, now as i64)?;
                 // §4.6 frozen declaration table + domain registration (P1 installs locally and occupies first) — same transaction,
                 // a domain conflict here must also roll back the whole batch, leaving no half state
                 crate::core::declaration::write_in_tx(&tx, &m.id, &m.declarations(), now)?;
