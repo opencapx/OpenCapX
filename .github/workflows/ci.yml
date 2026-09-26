@@ -36,7 +36,7 @@ jobs:
         run: |
           set -o pipefail
           cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx 2>&1 | tee /tmp/rust-test.log
-          python3 scripts/assert-test-count.mjs /tmp/rust-test.log rust
+          node scripts/assert-test-count.mjs /tmp/rust-test.log rust 1080
       - name: node plugin e2e (ts-sdk fixture)
         run: cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx install_grant_execute_ts_e2e -- --ignored --test-threads=1
 
@@ -52,7 +52,7 @@ jobs:
         run: |
           set -o pipefail
           cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx 2>&1 | tee rust-test.log
-          python3 scripts/assert-test-count.mjs rust-test.log rust
+          node scripts/assert-test-count.mjs rust-test.log rust 1070
   frontend:
     runs-on: ubuntu-22.04
     steps:

@@ -3,16 +3,17 @@
 // slipping through. The #20 incident: a truncated tests.rs dropped 31 tests and
 // every check stayed green, because "fewer tests" is not "failing tests".
 //
-// Usage: node scripts/assert-test-count.mjs <log-file> <suite-name>
-// The floor lives here, not in ci.yml, so raising it is a reviewed change.
+// Usage: node scripts/assert-test-count.mjs <log-file> <suite-name> <min-passed>
+// The suite count is platform-dependent (mac-only/windows-only tests), so each
+// CI job passes its own floor with headroom; a drop like #20's (31 tests) lands
+// far below any of them.
 
 import { readFileSync } from "node:fs";
 
-const MIN_RUST_BIN_TESTS = 1100;
-
-const [logPath, suite] = process.argv.slice(2);
-if (!logPath || !suite) {
-  console.error("usage: assert-test-count.mjs <log-file> <suite-name>");
+const [logPath, suite, minRaw] = process.argv.slice(2);
+const min = Number(minRaw);
+if (!logPath || !suite || !Number.isFinite(min)) {
+  console.error("usage: assert-test-count.mjs <log-file> <suite-name> <min-passed>");
   process.exit(2);
 }
 
@@ -29,8 +30,8 @@ for (const m of lines) {
   const n = Number(passed);
   console.log(`assert-test-count [${suite}]: ${status}, ${passed} passed, ${failedN} failed, ${ignored} ignored`);
   if (status !== "ok" || Number(failedN) !== 0) failed = true;
-  if (suite === "rust" && n < MIN_RUST_BIN_TESTS) {
-    console.error(`assert-test-count: ${n} passed is below the floor ${MIN_RUST_BIN_TESTS} — did tests get lost?`);
+  if (n < min) {
+    console.error(`assert-test-count: ${n} passed is below the floor ${min} — did tests get lost?`);
     failed = true;
   }
 }
