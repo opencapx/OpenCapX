@@ -38,16 +38,36 @@ pub fn data_dir() -> std::path::PathBuf {
     std::env::temp_dir().join("opencapx-data")
 }
 
-mod alerting_tables;
+mod aggregations;
 mod core_tables;
+mod correlations;
+mod delivery;
+mod endpoints;
+mod escalations;
+mod hints;
+mod presets;
 mod ratings;
+mod recipients;
+mod routes;
 mod rows;
+mod silences;
+mod stats;
 mod store;
 
-pub use alerting_tables::*;
+pub use aggregations::*;
 pub use core_tables::*;
+pub use correlations::*;
+pub use delivery::*;
+pub use endpoints::*;
+pub use escalations::*;
+pub use hints::*;
+pub use presets::*;
 pub use ratings::*;
+pub use recipients::*;
+pub use routes::*;
 pub use rows::*;
+pub use silences::*;
+pub use stats::*;
 pub use store::*;
 
 #[cfg(test)]
