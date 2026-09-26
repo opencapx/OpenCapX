@@ -2,6 +2,9 @@
 //! ask decisions go through a runtime prompt: Allow once / Always / Deny; 60s of no action counts as Deny;
 //! high-risk permissions are not offered Always. When the UI is absent (test process / frontend not ready), ask quickly resolves to Deny.
 
+// Path-stability layer: the glob re-exports keep every crate::<...>::X path working
+// after the module splits; clippy flags the ones nothing outside consumes yet.
+#![allow(unused_imports)]
 use super::storage::SharedStore;
 use rusqlite::params;
 use serde_json::json;

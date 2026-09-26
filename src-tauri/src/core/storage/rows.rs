@@ -1,8 +1,6 @@
 //! row types shared with the alerting and ratings layers.
 //! Mechanical move from core/storage.rs.
 
-use super::*;
-
 /// Plugin rating (shared by the marketplace / installed plugins). Plugin Rating DTO, exposed to Tauri.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PluginRating {

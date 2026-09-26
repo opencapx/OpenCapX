@@ -7,7 +7,7 @@
 //! In the returned plan, `stop_order` is `layers` reversed + each layer reversed internally (started last, stopped first).
 
 use serde::Serialize;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::plugin::{CapabilityGraphEdgeDto, PluginManager};
 

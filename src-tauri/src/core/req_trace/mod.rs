@@ -18,6 +18,9 @@
 //! ├── event: ask.shown / ask.answered / ask.timeout / ask.cancelled
 //! └── end line {status, error}
 
+// Path-stability layer: the glob re-exports keep every crate::<...>::X path working
+// after the module splits; clippy flags the ones nothing outside consumes yet.
+#![allow(unused_imports)]
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::cell::RefCell;

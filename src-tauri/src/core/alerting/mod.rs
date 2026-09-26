@@ -16,6 +16,9 @@
 //!
 //! URL validation: must start with `http://` or `https://`, length ≤ 2048, no `..` / newline.
 
+// Path-stability layer: the glob re-exports keep every crate::<...>::X path working
+// after the module splits; clippy flags the ones nothing outside consumes yet.
+#![allow(unused_imports)]
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};

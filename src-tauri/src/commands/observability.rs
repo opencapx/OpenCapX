@@ -1,8 +1,6 @@
 //! audit, timeline, notifications, logs, replay, traces commands.
 //! Mechanical move from main.rs.
 
-use super::*;
-
 #[derive(serde::Serialize)]
 pub(crate) struct AuditEntry {
     id: String,

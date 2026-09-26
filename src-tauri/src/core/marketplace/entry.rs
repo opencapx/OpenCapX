@@ -1,7 +1,6 @@
 //! market index entry shapes: PluginMarketEntry/Version/Index, PluginUpdateInfo, channel ranking/normalization.
 //! Mechanical move from core/marketplace.rs.
 
-use super::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

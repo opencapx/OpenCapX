@@ -1,8 +1,6 @@
 //! the alerting command surface (endpoints, templates, bundles, silences, acks, recipients, routes, severity, agg/corr/esc, simulator).
 //! Mechanical move from main.rs.
 
-use super::*;
-
 /// Phase 59 — write a text file (for export to disk). Phase 59 adds no fs plugin, uses std::fs directly.
 #[tauri::command]
 pub(crate) fn write_text_file(path: String, content: String) -> Result<(), String> {

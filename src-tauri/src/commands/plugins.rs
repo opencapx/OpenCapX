@@ -1,8 +1,6 @@
 //! plugin install/update/config/settings-view commands.
 //! Mechanical move from main.rs.
 
-use super::*;
-
 /// **dev/test only; the UI exposes only .ocplugin and the marketplace**: install from an unpacked directory,
 /// for test fixtures and local development.
 #[tauri::command]

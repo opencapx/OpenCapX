@@ -1,8 +1,6 @@
 //! pet pack and ask/permission-answer commands.
 //! Mechanical move from main.rs.
 
-use super::*;
-
 #[tauri::command]
 pub(crate) fn list_pet_packs() -> Vec<crate::core::petpack::PetPackInfo> {
     crate::core::petpack::list()

@@ -3,6 +3,9 @@
 //! See docs/permissions.md "Agent Identity" for auth: Bearer token + X-OpenCapX-Agent,
 //! any of the three checks failing means 401 (code 40101 anonymous/bad token, 40102 revoked) and an auth.rejected audit is written.
 
+// Path-stability layer: the glob re-exports keep every crate::<...>::X path working
+// after the module splits; clippy flags the ones nothing outside consumes yet.
+#![allow(unused_imports)]
 use crate::core::event::{self, EventBus};
 use crate::core::identity::{self, Credentials};
 use crate::core::storage::SharedStore;

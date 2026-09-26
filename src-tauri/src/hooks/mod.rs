@@ -2,6 +2,8 @@
 //! (~/.claude/settings.json, ...). Entries are identified by their command
 //! string so install is idempotent and foreign hooks are never touched.
 
+// Path-stability layer after the module split.
+#![allow(unused_imports)]
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::path::PathBuf;

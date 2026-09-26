@@ -1,6 +1,9 @@
 //! SQLite storage: sessions, event audit ring, plugin/permission/capability tables (used by P4).
 //! See docs/plugin-manifest.md, docs/events.md.
 
+// Path-stability layer: the glob re-exports keep every crate::<...>::X path working
+// after the module splits; clippy flags the ones nothing outside consumes yet.
+#![allow(unused_imports)]
 use crate::core::agent::{state_str, AgentState, Session, SessionSink};
 use crate::core::event::OpencapxEvent;
 use rusqlite::Connection;

@@ -1,5 +1,8 @@
 //! Tauri command modules, grouped by domain. Mechanical move from main.rs.
 
+// Path-stability layer: the glob re-exports keep every crate::<...>::X path working
+// after the module splits; clippy flags the ones nothing outside consumes yet.
+#![allow(unused_imports)]
 use super::*;
 pub(crate) mod alerting;
 pub(crate) mod lifecycle;
