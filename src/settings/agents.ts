@@ -31,6 +31,8 @@ interface AgentPermEntry {
   declared: boolean;
   /// Global policy override ('' = no override); denied is a hard gate that overrides any per-agent granted.
   global: string;
+  /// Domain allow-list JSON ({"allowed":[...]}) for browser.control; null = unrestricted.
+  scope: string | null;
 }
 
 /// Agents tab (docs/permissions.md 'Agents view'): identity cards +
@@ -125,6 +127,9 @@ async function refreshIdAgents(): Promise<void> {
       await refreshIdAgents();
     });
   });
+  box.querySelectorAll("button[data-agent-scope]").forEach((b) => {
+    b.addEventListener("click", () => showAgentScopeDialog((b as HTMLElement).dataset.agentScope!));
+  });
   box.querySelectorAll("select[data-agent-perm]").forEach((s) => {
     s.addEventListener("change", async () => {
       const el = s as HTMLSelectElement;
@@ -136,6 +141,52 @@ async function refreshIdAgents(): Promise<void> {
       await refreshIdAgents();
     });
   });
+}
+
+/// browser.control domain-scope editor: one entry per line (host, or .suffix / *.suffix).
+/// Empty textarea = clear the scope back to unrestricted. The backend re-validates the grammar.
+async function showAgentScopeDialog(agentId: string): Promise<void> {
+  let current: string[] = [];
+  try {
+    const perms = await invoke<AgentPermEntry[]>("agent_permissions", { agentId });
+    const row = perms.find((p) => p.permission === "browser.control");
+    if (row?.scope) current = JSON.parse(row.scope).allowed ?? [];
+  } catch { /* fall through with an empty editor */ }
+  const textarea = document.createElement("textarea");
+  textarea.className = "logs-input";
+  textarea.rows = 5;
+  textarea.style.width = "100%";
+  textarea.value = current.join("\n");
+  const dlg = document.createElement("dialog");
+  dlg.className = "modal";
+  dlg.innerHTML = `
+    <div class="modal-body">
+      <p class="setting-label">${esc(t("permScopeTitle"))}</p>
+      <p class="setting-hint">${esc(t("permScopeHint"))}</p>
+      <button class="btn ghost" type="button" data-clear>${esc(t("permScopeClear"))}</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" type="button" data-save>${esc(t("permScopeSave"))}</button>
+      <button class="btn ghost" type="button" data-cancel>${esc(t("installPreviewCancel"))}</button>
+    </div>`;
+  const slot = dlg.querySelector(".modal-body")!;
+  slot.insertBefore(textarea, dlg.querySelector(".modal-actions"));
+  dlg.querySelector("[data-clear]")!.addEventListener("click", () => { textarea.value = ""; });
+  dlg.querySelector("[data-cancel]")!.addEventListener("click", () => dlg.close());
+  dlg.querySelector("[data-save]")!.addEventListener("click", async () => {
+    const domains = textarea.value.split("\n").map((l) => l.trim()).filter(Boolean);
+    try {
+      await invoke("set_agent_permission_scope", { agentId, permission: "browser.control", domains });
+      dlg.close();
+      await refreshIdAgents();
+    } catch (e) {
+      textarea.setCustomValidity(String(e));
+      textarea.reportValidity();
+    }
+  });
+  document.body.appendChild(dlg);
+  dlg.showModal();
+  dlg.addEventListener("close", () => dlg.remove());
 }
 
 /// One-time re-authorization token dialog: the token appears only once here and never enters any persistent frontend state.

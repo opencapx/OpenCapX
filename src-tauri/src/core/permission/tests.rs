@@ -494,6 +494,7 @@ fn ask_builtin(p: &str) -> InstallAsk {
         permission: p.to_string(),
         declared: false,
         declared_default: "ask".into(),
+        domains: None,
     }
 }
 
@@ -503,6 +504,7 @@ fn ask_declared(p: &str, default: &str) -> InstallAsk {
         permission: p.to_string(),
         declared: true,
         declared_default: default.into(),
+        domains: None,
     }
 }
 
@@ -1207,4 +1209,101 @@ fn core_policy_list_only_lists_mapped_permissions() {
         .expect("still listed");
     assert_eq!(cb2.override_decision, None);
     assert_eq!(cb2.effective, "ask");
+}
+
+/// v1 domain scope: apply_declared_scopes_in_tx writes the manifest's object-form domains into
+/// plugin_permissions.scope; decide_domain then fail-closes outside the list (enforcement itself
+/// is covered by core::scope's own table — this pins the write path).
+#[test]
+fn declared_domains_land_in_plugin_permissions_scope() {
+    let _g = crate::core::TEST_STORE_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let s = gate_store("scope-install");
+    let d = vec![("browser.control".to_string(), "ask".to_string())];
+    commit_install_decisions(&s, "com.scope", &d).unwrap();
+    {
+        let mut g = s.lock().unwrap();
+        let scoped = crate::core::plugin::PermissionDecl::Scoped {
+            name: "browser.control".into(),
+            domains: vec!["api.example.com".into(), "*.github.com".into()],
+        };
+        g.try_with_conn(|c| {
+            let tx = c
+                .unchecked_transaction()
+                .map_err(|e| format!("begin: {e}"))?;
+            apply_declared_scopes_in_tx(&tx, "com.scope", std::slice::from_ref(&scoped), 42)?;
+            tx.commit().map_err(|e| format!("commit: {e}"))
+        })
+        .unwrap()
+        .unwrap();
+    }
+    let scope: Option<String> = s
+        .lock()
+        .unwrap()
+        .with_conn_ref(|c| {
+            c.query_row(
+                "SELECT scope FROM plugin_permissions WHERE plugin_id = 'com.scope' AND permission = 'browser.control'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+        })
+        .unwrap();
+    let v: serde_json::Value = serde_json::from_str(scope.as_deref().unwrap()).unwrap();
+    assert_eq!(v["allowed"][0], "api.example.com");
+    // fail-closed outside, covered inside
+    let scope_str = scope.as_deref();
+    assert_eq!(
+        crate::core::scope::decide_domain(scope_str, "api.example.com"),
+        crate::core::scope::ScopeOutcome::Allowed
+    );
+    assert_eq!(
+        crate::core::scope::decide_domain(scope_str, "evil.example.com"),
+        crate::core::scope::ScopeOutcome::Denied
+    );
+    assert_eq!(
+        crate::core::scope::decide_domain(None, "evil.example.com"),
+        crate::core::scope::ScopeOutcome::Unscoped
+    );
+}
+
+/// The agent-side editor write path: set_agent_scope updates an existing row, refuses a missing one,
+/// and clearing returns the row to unrestricted.
+#[test]
+fn set_agent_scope_updates_and_clears() {
+    let _g = crate::core::TEST_STORE_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let s = gate_store("agent-scope");
+    let (id, _) = crate::core::identity::register(&s, "claude", "mcp").unwrap();
+    crate::core::identity::set_agent_decision(&s, &id, "browser.control", "granted");
+    let json = crate::core::scope::domains_to_scope_json(&["api.example.com".to_string()]).unwrap();
+    assert!(
+        crate::core::identity::set_agent_scope(&s, &id, "browser.control", Some(&json)).unwrap()
+    );
+    let read: Option<String> = s.lock().unwrap().with_conn_ref(|c| {
+        c.query_row(
+            "SELECT scope FROM agent_permissions WHERE agent_id = ?1 AND permission = 'browser.control'",
+            rusqlite::params![id],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }).unwrap();
+    assert_eq!(read.as_deref(), Some(json.as_str()));
+    // clearing
+    assert!(crate::core::identity::set_agent_scope(&s, &id, "browser.control", None).unwrap());
+    let read2: Option<String> = s.lock().unwrap().with_conn_ref(|c| {
+        c.query_row(
+            "SELECT scope FROM agent_permissions WHERE agent_id = ?1 AND permission = 'browser.control'",
+            rusqlite::params![id],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }).unwrap();
+    assert!(read2.is_none());
+    // missing row
+    assert!(
+        !crate::core::identity::set_agent_scope(&s, &id, "clipboard.read", Some(&json)).unwrap()
+    );
 }

@@ -137,3 +137,44 @@ pub(crate) fn core_permission_reset(permission: String) -> Result<bool, String> 
     };
     crate::core::permission::clear_global_override(&store, &permission).map(|_| true)
 }
+
+/// Set (or clear) the domain scope on an agent's `browser.control` row — the user-side source of
+/// network egress scope. Empty `domains` clears back to unrestricted. The scope takes the shape
+/// `core::scope::decide_domain` enforces per request (fail-closed once set).
+#[tauri::command]
+pub(crate) fn set_agent_permission_scope(
+    agent_id: String,
+    permission: String,
+    domains: Vec<String>,
+) -> Result<bool, String> {
+    if permission != "browser.control" {
+        return Err("scope is only supported for browser.control in v1".into());
+    }
+    if domains.len() > 32 {
+        return Err("at most 32 domain entries".into());
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for d in &domains {
+        if !crate::core::scope::valid_domain_entry(d) {
+            return Err(format!(
+                "invalid domain entry {:?} (lowercase host, or .suffix / *.suffix)",
+                d
+            ));
+        }
+        if !seen.insert(d.clone()) {
+            return Err(format!("duplicate domain entry {:?}", d));
+        }
+    }
+    let scope_json = crate::core::scope::domains_to_scope_json(&domains);
+    let store = crate::core::shared_store().ok_or("storage not ready")?;
+    let updated = crate::core::identity::set_agent_scope(
+        &store,
+        &agent_id,
+        &permission,
+        scope_json.as_deref(),
+    )?;
+    if !updated {
+        return Err("no such agent permission row — set a decision first".into());
+    }
+    Ok(true)
+}

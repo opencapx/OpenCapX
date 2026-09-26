@@ -142,14 +142,40 @@ impl PluginManager {
         // Core's existing word list, so tightening the lexical rule does not change the built-in list); new domain names must be given by the object form of this list
         // declaration (and must not dangle).
         let declared_perms = m.declared_permission_names();
-        for p in &m.permissions {
+        for d in &m.permissions {
+            let p = d.name();
             if crate::core::permission::known(p) {
+                // v1 scope declaration: only browser.control may carry a domain allow-list;
+                // `denied` entries are not declarable — a manifest states what it needs, never what it bans
+                if let Some(domains) = d.domains() {
+                    if p != "browser.control" {
+                        return Err(format!(
+                            "permission {} does not support a domains declaration (v1: browser.control only)",
+                            p
+                        ));
+                    }
+                    if domains.len() > 32 {
+                        return Err("browser.control domains: at most 32 entries".into());
+                    }
+                    let mut seen = std::collections::BTreeSet::new();
+                    for e in domains {
+                        if !super::super::scope::valid_domain_entry(e) {
+                            return Err(format!(
+                                "invalid domain entry {:?} (lowercase host, or .suffix / *.suffix)",
+                                e
+                            ));
+                        }
+                        if !seen.insert(e.clone()) {
+                            return Err(format!("duplicate domain entry {:?}", e));
+                        }
+                    }
+                }
                 continue;
             }
             if !crate::core::permission::valid_name(p) {
                 return Err(format!("invalid permission name {:?}", p));
             }
-            if declared_perms.iter().any(|d| d == p) {
+            if declared_perms.iter().any(|x| x == p) {
                 continue;
             }
             return Err(format!(

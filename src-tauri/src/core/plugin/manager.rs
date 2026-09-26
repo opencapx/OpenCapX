@@ -198,30 +198,45 @@ impl PluginManager {
     /// each item annotated with whether it is declaration-derived (→ once-only) and its default tier.
     pub(crate) fn install_ask_plan(m: &Manifest) -> Vec<crate::core::permission::InstallAsk> {
         let mut plan: Vec<crate::core::permission::InstallAsk> = Vec::new();
-        let mut push = |permission: String, declared: bool, default: Option<&str>| {
+        fn push(
+            plan: &mut Vec<crate::core::permission::InstallAsk>,
+            permission: &str,
+            declared: bool,
+            default: Option<&str>,
+        ) {
             if plan.iter().any(|a| a.permission == permission) {
                 return;
             }
             plan.push(crate::core::permission::InstallAsk {
-                permission,
+                permission: permission.to_string(),
                 declared,
                 declared_default: default.unwrap_or("ask").to_string(),
+                domains: None,
             });
-        };
-        for p in &m.permissions {
+        }
+        for d in &m.permissions {
+            let p = d.name();
             // built-in names as before; declared permission names get the `declared` marker from the inline mapping
             let declared = !crate::core::permission::known(p);
             let default = m
                 .capabilities
                 .iter()
-                .find(|c| c.mapping().map(|(perm, _)| perm) == Some(p.as_str()))
+                .find(|c| c.mapping().map(|(perm, _)| perm) == Some(p))
                 .and_then(|c| c.mapping().map(|(_, d)| d))
                 .map(|s| s.to_string());
-            push(p.clone(), declared, default.as_deref());
+            if plan.iter().any(|a| a.permission == p) {
+                continue;
+            }
+            plan.push(crate::core::permission::InstallAsk {
+                permission: p.to_string(),
+                declared,
+                declared_default: default.unwrap_or_else(|| "ask".to_string()),
+                domains: d.domains().map(|v| v.to_vec()),
+            });
         }
         for c in &m.capabilities {
             if let Some((perm, default)) = c.mapping() {
-                push(perm.to_string(), true, Some(default));
+                push(&mut plan, perm, true, Some(default));
             }
         }
         plan
