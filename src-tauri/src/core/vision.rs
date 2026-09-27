@@ -268,6 +268,11 @@ fn capture_command(args: Vec<String>) -> std::process::Command {
     c
 }
 
+/// First-use loop closer: every capture failure points at the probe that can say *why* it
+/// failed — a missing TCC grant on macOS, no `scrot` on Linux, no interactive desktop on
+/// Windows. Kept as one const so the three error paths cannot drift apart.
+const PERMISSION_HINT: &str = " — call system.permission_status for details";
+
 /// screen.capture built-in implementation: the platform command writes to the cache
 /// directory and returns `{image: path}`. macOS/Linux use the platform command (a TCC
 /// denial = a clean non-zero exit, better than silently handing back only the wallpaper
@@ -304,13 +309,14 @@ pub fn capture(input: &Value) -> Result<Value, String> {
             let hint = " (install scrot)";
             #[cfg(not(target_os = "linux"))]
             let hint = "";
-            format!("capture command failed{}: {}", hint, e)
+            format!("capture command failed{}: {}{}", hint, e, PERMISSION_HINT)
         })?;
         if !status.success() {
             // The most common macOS cause is a missing "Screen Recording" TCC permission (the capture is only the wallpaper or fails outright)
             return Err(format!(
-                "capture exited {:?} (macOS: grant Screen Recording permission in System Settings)",
-                status.code()
+                "capture exited {:?} (macOS: grant Screen Recording permission in System Settings){}",
+                status.code(),
+                PERMISSION_HINT
             ));
         }
         if !out.exists() {
@@ -358,7 +364,8 @@ fn capture_windows(input: &Value) -> Result<Value, String> {
             "window capture not supported on Windows builtin (use region or full screen)".into(),
         );
     }
-    let monitors = xcap::Monitor::all().map_err(|e| format!("capture monitors failed: {}", e))?;
+    let monitors = xcap::Monitor::all()
+        .map_err(|e| format!("capture monitors failed: {}{}", e, PERMISSION_HINT))?;
     let monitor = monitors.first().ok_or("no monitor found")?;
     let mut img = monitor
         .capture_image()
