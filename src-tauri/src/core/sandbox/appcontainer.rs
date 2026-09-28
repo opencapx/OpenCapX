@@ -437,7 +437,10 @@ mod imp {
             };
             for p in grant_paths(mode, scratch, rw, home) {
                 let current = read_dacl(&p)?;
-                write_dacl(&p, current.dacl(), &allow_entry(g.sid))?;
+                eprintln!("ocx:ac:ap:got-acl");
+                let d = current.dacl();
+                eprintln!("ocx:ac:ap:got-dacl {d:p}");
+                write_dacl(&p, d, &allow_entry(g.sid))?;
                 g.granted.push(p);
             }
             if mode == Mode::Installer {
@@ -489,13 +492,16 @@ mod imp {
         fn dacl(&self) -> *const ACL {
             let mut present = 0;
             let mut dacl: *mut ACL = std::ptr::null_mut();
+            eprintln!("ocx:ac:gsd:begin psd={:p}", self.0);
             // SAFETY: `self.0` is a live self-relative security descriptor.
             if unsafe {
                 GetSecurityDescriptorDacl(self.0, &mut present, &mut dacl, std::ptr::null_mut())
             } == 0
             {
+                eprintln!("ocx:ac:gsd:rejected present={present} dacl={:p}", dacl);
                 return std::ptr::null();
             }
+            eprintln!("ocx:ac:gsd:done present={present} dacl={:p}", dacl);
             dacl
         }
     }
