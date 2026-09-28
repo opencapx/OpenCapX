@@ -250,16 +250,6 @@ mod imp {
     const HRESULT_ALREADY_EXISTS: i32 = -2147024713; // 0x800700B7
     const HRESULT_FILE_EXISTS: i32 = -2147024895; // 0x800700DF
 
-    /// A SID the OS expects us to `FreeSid` (AllocateAndInitializeSid family:
-    /// CreateAppContainerProfile / DeriveAppContainerSidFromAppContainerName).
-    struct Sid(PSID);
-
-    impl Drop for Sid {
-        fn drop(&mut self) {
-            unsafe { FreeSid(self.0) };
-        }
-    }
-
     /// A SID in a buffer the OS expects us to `LocalFree` (`ConvertStringSidToSidW`).
     /// Freeing one with `FreeSid` is an invalid free — heap corruption that surfaced as the
     /// STATUS_ACCESS_VIOLATION at the end of a CI test run (the allocator notices far from
@@ -336,7 +326,7 @@ mod imp {
         Some(LocalSid(raw))
     }
 
-    fn profile_sid() -> std::io::Result<Sid> {
+    fn profile_sid() -> std::io::Result<LocalSid> {
         ensure_profile()?;
         let name = wide(PROFILE_NAME);
         let mut raw: PSID = std::ptr::null_mut();
@@ -348,7 +338,12 @@ mod imp {
                 hr as u32
             )));
         }
-        Ok(Sid(raw))
+        // The docs page says FreeSid, but the buffer is LocalAlloc'd — FreeSid on it is an
+        // invalid free and the heap corruption surfaced as two CI crashes clustered exactly on
+        // this path (rounds 3 and 4: the crash followed whichever test held the last
+        // DeriveAppContainerSid SID). Chromium's app-container utilities free this SID with
+        // LocalFree too; reality over docs.
+        Ok(LocalSid(raw))
     }
 
     fn sid_to_string(sid: PSID) -> std::io::Result<String> {
@@ -371,7 +366,7 @@ mod imp {
     /// this run added is taken back out before the caller moves on. An ACL left behind would
     /// hand the (stable, profile-wide) sandbox SID permanent access to a user directory.
     struct Grants {
-        sid: Sid,
+        sid: LocalSid,
         /// Paths granted GENERIC_ALL.
         granted: Vec<PathBuf>,
         /// Paths denied GENERIC_ALL.
@@ -384,7 +379,7 @@ mod imp {
             scratch: &Path,
             rw: &[PathBuf],
             home: Option<&Path>,
-            sid: Sid,
+            sid: LocalSid,
         ) -> std::io::Result<Grants> {
             // Built before the first write, so a mid-way failure unwinds through `Drop`.
             let mut g = Grants {
