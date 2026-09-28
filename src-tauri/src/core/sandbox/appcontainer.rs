@@ -250,12 +250,25 @@ mod imp {
     const HRESULT_ALREADY_EXISTS: i32 = -2147024713; // 0x800700B7
     const HRESULT_FILE_EXISTS: i32 = -2147024895; // 0x800700DF
 
-    /// A SID out of a buffer the OS expects us to `FreeSid`.
+    /// A SID the OS expects us to `FreeSid` (AllocateAndInitializeSid family:
+    /// CreateAppContainerProfile / DeriveAppContainerSidFromAppContainerName).
     struct Sid(PSID);
 
     impl Drop for Sid {
         fn drop(&mut self) {
             unsafe { FreeSid(self.0) };
+        }
+    }
+
+    /// A SID in a buffer the OS expects us to `LocalFree` (`ConvertStringSidToSidW`).
+    /// Freeing one with `FreeSid` is an invalid free — heap corruption that surfaced as the
+    /// STATUS_ACCESS_VIOLATION at the end of a CI test run (the allocator notices far from
+    /// the cause, so it dies in whatever test runs last).
+    struct LocalSid(PSID);
+
+    impl Drop for LocalSid {
+        fn drop(&mut self) {
+            unsafe { LocalFree(self.0.cast()) };
         }
     }
 
@@ -313,14 +326,14 @@ mod imp {
         Ok(())
     }
 
-    fn sid_from_string(s: &str) -> Option<Sid> {
+    fn sid_from_string(s: &str) -> Option<LocalSid> {
         let w = wide(s);
         let mut raw: PSID = std::ptr::null_mut();
         // SAFETY: `w` is NUL-terminated, `raw` is a valid out-slot.
         if unsafe { ConvertStringSidToSidW(w.as_ptr(), &mut raw) } == 0 || raw.is_null() {
             return None;
         }
-        Some(Sid(raw))
+        Some(LocalSid(raw))
     }
 
     fn profile_sid() -> std::io::Result<Sid> {
@@ -759,7 +772,7 @@ mod imp {
     ) -> std::io::Result<i32> {
         // Capabilities are SIDs, not GUIDs (`S-1-15-3-1` = internetClient). The array has to
         // outlive the UpdateProcThreadAttribute call, so it lives to the end of this function.
-        let mut cap_owners: Vec<Sid> = Vec::new();
+        let mut cap_owners: Vec<LocalSid> = Vec::new();
         let mut cap_sids: Vec<SID_AND_ATTRIBUTES> = Vec::new();
         for text in caps {
             if let Some(s) = sid_from_string(text) {
@@ -815,10 +828,14 @@ mod imp {
         let stdin = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
         let stdout = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
         let stderr = unsafe { GetStdHandle(STD_ERROR_HANDLE) };
-        // STARTF_USESTDHANDLES with a null handle hands the child a broken stdio and it can die
-        // on it. When this process has no console (a service, a detached test run) leave the
-        // flags clear instead and let the child pick up the session's own console.
-        if !stdin.is_null() && !stdout.is_null() && !stderr.is_null() {
+        // STARTF_USESTDHANDLES with a dead handle hands the child a broken stdio and it can die
+        // on it. GetStdHandle signals "no console" (a service, a detached test run) with
+        // INVALID_HANDLE_VALUE as often as with null — both count as absent here, and the
+        // flags stay clear so the child picks up the session's own console.
+        let dead = |h: windows_sys::Win32::Foundation::HANDLE| {
+            h.is_null() || h as usize == std::usize::MAX
+        };
+        if !dead(stdin) && !dead(stdout) && !dead(stderr) {
             si.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
             si.StartupInfo.hStdInput = stdin;
             si.StartupInfo.hStdOutput = stdout;
