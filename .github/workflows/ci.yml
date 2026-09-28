@@ -53,9 +53,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: test
         shell: bash
+        env:
+          RUST_BACKTRACE: full
         run: |
           set -o pipefail
-          cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx 2>&1 | tee rust-test.log
+          # TEMP (PR #32 diagnosis): serial + nocapture so an ACCESS_VIOLATION shows exactly
+          # which test was running when the heap gave out. Parallel runs move the crash site
+          # between rounds; serial pins it. Revert to the plain invocation once the culprit
+          # is fixed — the count assertion still reads the same log shape.
+          cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx -- --test-threads=1 --nocapture 2>&1 | tee rust-test.log
           node scripts/assert-test-count.mjs rust-test.log rust 1080
   frontend:
     runs-on: ubuntu-22.04
