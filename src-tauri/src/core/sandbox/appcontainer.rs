@@ -961,15 +961,66 @@ mod imp {
         // STARTUPINFOW CreateProcessW reads, and a valid PROCESS_INFORMATION out-slot.
         let started = spawn(cwd.as_ptr(), &mut pi);
         if started == 0 {
-            // TEMP (PR #32 diagnosis): ERROR_FILE_NOT_FOUND came back for every program, which
-            // points at the working directory rather than the image. Retry once without it, so
-            // the log says which of the two calls is the one refusing.
+            // TEMP (PR #32 diagnosis): ERROR_FILE_NOT_FOUND for every program, with and without
+            // a working directory, so the cwd is not it. Bisect what is left — first the lowbox
+            // attribute, then (if that launches) the environment block. Each probe is a normal
+            // call; only the diagnostics around them are temporary.
             let first = unsafe { GetLastError() };
-            eprintln!("ocx:ac:cp:cwd-failed err={first}; retrying without a cwd");
-            let started = spawn(std::ptr::null(), &mut pi);
-            eprintln!("ocx:ac:cp:retry started={started} err={}", unsafe {
+            eprintln!("ocx:ac:cp:failed err={first}; probing without the lowbox attribute");
+            let mut plain = PROCESS_INFORMATION::default();
+            // SAFETY: as above, minus EXTENDED_STARTUPINFO_PRESENT: a plain STARTUPINFOW run of
+            // the same command line, environment and stdio.
+            let plain_ok = unsafe {
+                CreateProcessW(
+                    std::ptr::null(),
+                    cmdline.as_mut_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    1,
+                    CREATE_SUSPENDED,
+                    env.as_ptr() as *const c_void,
+                    cwd.as_ptr(),
+                    &si.StartupInfo,
+                    &mut plain,
+                )
+            };
+            eprintln!("ocx:ac:cp:no-lowbox started={plain_ok} err={}", unsafe {
                 GetLastError()
             });
+            if plain_ok != 0 {
+                // Terminate the probe child; it is suspended and exists only to answer the
+                // question.
+                unsafe { TerminateProcess(plain.hProcess, 1) };
+                unsafe { CloseHandle(plain.hThread) };
+                unsafe { CloseHandle(plain.hProcess) };
+            }
+            // Third probe: same command line, no environment block, no cwd, no lowbox — the
+            // floor. If this launches, the env block is what CreateProcessW is choking on.
+            let mut bare = PROCESS_INFORMATION::default();
+            // SAFETY: the minimum a CreateProcessW needs; the child inherits this process's
+            // environment and directory.
+            let bare_ok = unsafe {
+                CreateProcessW(
+                    std::ptr::null(),
+                    cmdline.as_mut_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    1,
+                    CREATE_SUSPENDED,
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    &si.StartupInfo,
+                    &mut bare,
+                )
+            };
+            eprintln!("ocx:ac:cp:bare started={bare_ok} err={}", unsafe {
+                GetLastError()
+            });
+            if bare_ok != 0 {
+                unsafe { TerminateProcess(bare.hProcess, 1) };
+                unsafe { CloseHandle(bare.hThread) };
+                unsafe { CloseHandle(bare.hProcess) };
+            }
         }
         // The list and the buffer behind it are ours again the moment CreateProcessW returns.
         unsafe { DeleteProcThreadAttributeList(attr_list) };
