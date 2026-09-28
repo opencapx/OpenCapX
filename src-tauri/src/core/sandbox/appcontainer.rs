@@ -795,6 +795,48 @@ mod imp {
         block
     }
 
+    /// The program to launch, as an absolute path.
+    ///
+    /// `CreateProcessW` with a null `lpApplicationName` walks a search list — the parent's
+    /// directory, the current directory, System32, Windows, `PATH` — and it does that walk
+    /// *under the child's token*. For a lowbox that walk is what fails: the Windows CI got
+    /// ERROR_FILE_NOT_FOUND for `cmd` and `curl.exe` alike, and for the same command line
+    /// launched without the lowbox attribute the very same program started. Resolving the path
+    /// here, with the parent's own `PATH` and `PATHEXT`, hands CreateProcessW an exact image and
+    /// takes the search out of the equation.
+    fn resolve_program(program: &str) -> std::io::Result<PathBuf> {
+        let p = Path::new(program);
+        if p.components().count() > 1 {
+            return Ok(p.to_path_buf());
+        }
+        let exts: Vec<String> = std::env::var("PATHEXT")
+            .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into())
+            .split(';')
+            .filter(|e| !e.is_empty())
+            .map(|e| e.to_ascii_lowercase())
+            .collect();
+        let candidates = if p.extension().is_some() {
+            vec![p.to_path_buf()]
+        } else {
+            exts.iter()
+                .map(|e| PathBuf::from(format!("{program}{e}")))
+                .collect()
+        };
+        let path = std::env::var_os("PATH")
+            .ok_or_else(|| std::io::Error::other("PATH is not set; cannot locate the program"))?;
+        for dir in std::env::split_paths(&path) {
+            for c in &candidates {
+                let full = dir.join(c);
+                if full.is_file() {
+                    return Ok(full);
+                }
+            }
+        }
+        Err(std::io::Error::other(format!(
+            "cannot find {program} on PATH"
+        )))
+    }
+
     /// The CRT quoting rules, which is what every Windows command-line parser implements: quote
     /// when the argument is empty or holds whitespace or a quote, and double any backslash run
     /// that precedes a quote or ends the argument.
@@ -941,9 +983,10 @@ mod imp {
         let env = env_block(parsed.policy.env, scratch);
         let cwd = wide_path(scratch);
         eprintln!("ocx:ac:cp:begin cwd={}", scratch.display());
+        let program = wide_path(&resolve_program(&parsed.command[0])?);
         let mut spawn = |dir: *const u16, pi: &mut PROCESS_INFORMATION| unsafe {
             CreateProcessW(
-                std::ptr::null(),
+                program.as_ptr(),
                 cmdline.as_mut_ptr(),
                 std::ptr::null(),
                 std::ptr::null(),
@@ -972,7 +1015,7 @@ mod imp {
             // the same command line, environment and stdio.
             let plain_ok = unsafe {
                 CreateProcessW(
-                    std::ptr::null(),
+                    program.as_ptr(),
                     cmdline.as_mut_ptr(),
                     std::ptr::null(),
                     std::ptr::null(),
@@ -1001,7 +1044,7 @@ mod imp {
             // environment and directory.
             let bare_ok = unsafe {
                 CreateProcessW(
-                    std::ptr::null(),
+                    program.as_ptr(),
                     cmdline.as_mut_ptr(),
                     std::ptr::null(),
                     std::ptr::null(),
