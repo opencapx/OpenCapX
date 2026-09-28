@@ -223,9 +223,9 @@ mod imp {
         CreateAppContainerProfile, DeriveAppContainerSidFromAppContainerName,
     };
     use windows_sys::Win32::Security::{
-        AclSizeInformation, EqualSid, GetAce, GetAclInformation, GetSecurityDescriptorDacl, ACL,
-        ACL_SIZE_INFORMATION, CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION, OBJECT_INHERIT_ACE,
-        PSECURITY_DESCRIPTOR, PSID, SECURITY_CAPABILITIES, SID_AND_ATTRIBUTES,
+        AclSizeInformation, EqualSid, GetAce, GetAclInformation, ACL, ACL_SIZE_INFORMATION,
+        CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION, OBJECT_INHERIT_ACE, PSECURITY_DESCRIPTOR,
+        PSID, SECURITY_CAPABILITIES, SID_AND_ATTRIBUTES,
     };
     use windows_sys::Win32::System::Console::{
         GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
@@ -437,10 +437,13 @@ mod imp {
             };
             for p in grant_paths(mode, scratch, rw, home) {
                 let current = read_dacl(&p)?;
-                eprintln!("ocx:ac:ap:got-acl");
-                let d = current.dacl();
-                eprintln!("ocx:ac:ap:got-dacl {d:p}");
-                write_dacl(&p, d, &allow_entry(g.sid))?;
+                if current.dacl().is_null() {
+                    // A NULL DACL already lets everyone through, including a lowbox token, so
+                    // there is nothing to grant — and writing a DACL where there was none would
+                    // *take* access away from the owner, which is not this layer's call to make.
+                    continue;
+                }
+                write_dacl(&p, current.dacl(), &allow_entry(g.sid))?;
                 g.granted.push(p);
             }
             if mode == Mode::Installer {
@@ -452,6 +455,11 @@ mod imp {
                             continue;
                         }
                         let current = read_dacl(&p)?;
+                        if current.dacl().is_null() {
+                            // Same reasoning as the grant loop: a NULL DACL cannot carry a
+                            // deny ACE, and installing one would mean inventing a DACL.
+                            continue;
+                        }
                         write_dacl(&p, current.dacl(), &deny_entry(g.sid))?;
                         g.denied.push(p);
                     }
@@ -484,42 +492,41 @@ mod imp {
         }
     }
 
-    /// A path's current DACL. The ACL lives inside the returned descriptor, so both are kept
-    /// together and freed together.
-    struct PathAcl(PSECURITY_DESCRIPTOR);
+    /// A path's current DACL, as the descriptor plus the ACL that lives inside it. The ACL
+    /// pointer is a *borrowed* view into the descriptor, so the two are dropped together.
+    struct PathAcl {
+        sd: PSECURITY_DESCRIPTOR,
+        dacl: *const ACL,
+    }
 
     impl PathAcl {
         fn dacl(&self) -> *const ACL {
-            let mut present = 0;
-            let mut dacl: *mut ACL = std::ptr::null_mut();
-            eprintln!("ocx:ac:gsd:begin psd={:p}", self.0);
-            // SAFETY: `self.0` is a live self-relative security descriptor.
-            if unsafe {
-                GetSecurityDescriptorDacl(self.0, &mut present, &mut dacl, std::ptr::null_mut())
-            } == 0
-            {
-                eprintln!("ocx:ac:gsd:rejected present={present} dacl={:p}", dacl);
-                return std::ptr::null();
-            }
-            eprintln!("ocx:ac:gsd:done present={present} dacl={:p}", dacl);
-            dacl
+            self.dacl
         }
     }
 
     impl Drop for PathAcl {
         fn drop(&mut self) {
-            unsafe { LocalFree(self.0.cast()) };
+            if !self.sd.is_null() {
+                unsafe { LocalFree(self.sd.cast()) };
+            }
         }
     }
 
-    /// TEMP (PR #32 diagnosis): a breadcrumb per Win32 call — the CI ACCESS_VIOLATION happens
-    /// somewhere inside the first guarded run and a crash names no API.
+    /// A path's current DACL. The ACL pointer comes out of the same `GetNamedSecurityInfoW`
+    /// call that returns the descriptor, which is the shape Microsoft's own ACL-edit sample
+    /// uses: the DACL is part of the descriptor buffer, so there is no second call to make and
+    /// nothing to get wrong between the two. (TEMP: the Windows CI's ACCESS_VIOLATION landed
+    /// inside a separate `GetSecurityDescriptorDacl` walk of a descriptor that
+    /// `GetNamedSecurityInfoW` had just returned with code 0 — a breadcrumb on each side of it
+    /// pins the fault there and nowhere else.)
     fn read_dacl(path: &Path) -> std::io::Result<PathAcl> {
         eprintln!("ocx:ac:gsi:begin {}", path.display());
         let w = wide_path(path);
+        let mut dacl: *mut ACL = std::ptr::null_mut();
         let mut sd: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
-        // SAFETY: NUL-terminated path, valid out-slot for the descriptor; owner/group/SACL and
-        // the DACL pointer are null because we only want the descriptor itself.
+        // SAFETY: NUL-terminated path; `dacl` and `sd` are valid out-slots; owner/group/SACL
+        // are null because this run only reads and rewrites the DACL.
         let code = unsafe {
             GetNamedSecurityInfoW(
                 w.as_ptr(),
@@ -527,19 +534,19 @@ mod imp {
                 DACL_SECURITY_INFORMATION,
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
-                std::ptr::null_mut(),
+                &mut dacl,
                 std::ptr::null_mut(),
                 &mut sd,
             )
         };
-        eprintln!("ocx:ac:gsi:done code={code} sd={:p}", sd);
+        eprintln!("ocx:ac:gsi:done code={code} sd={:p} dacl={:p}", sd, dacl);
         if code != 0 {
             return Err(std::io::Error::other(format!(
                 "GetNamedSecurityInfoW failed ({code}) on {}",
                 path.display()
             )));
         }
-        Ok(PathAcl(sd))
+        Ok(PathAcl { sd, dacl })
     }
 
     fn write_dacl(
