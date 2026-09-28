@@ -650,19 +650,26 @@ mod imp {
 
     pub(crate) fn run(parsed: &Parsed, scratch: &Path) -> std::io::Result<i32> {
         let home = crate::core::home_dir().map(|h| canonicalize_lossy(&h));
+        // TEMP (crash diagnosis, revert with the ci.yml serial change): breadcrumbs before
+        // each Win32 step so a CI ACCESS_VIOLATION names the API it died in.
+        eprintln!("ocx:ac:profile-sid");
+        let sid = profile_sid()?;
+        eprintln!("ocx:ac:grants");
         let grants = Grants::apply(
             parsed.profile,
             scratch,
             &parsed.policy.rw,
             home.as_deref(),
-            profile_sid()?,
+            sid,
         )?;
+        eprintln!("ocx:ac:spawn");
         let code = spawn_and_wait(
             parsed,
             grants.sid.0,
             capabilities_for(parsed.profile, parsed.policy.allow_net),
             scratch,
         );
+        eprintln!("ocx:ac:done");
         // Whether the child ran, failed to start, or timed out — the grants go back now.
         drop(grants);
         code
