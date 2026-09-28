@@ -1024,6 +1024,8 @@ mod imp {
 }
 
 #[cfg(target_os = "windows")]
-pub(crate) use imp::{acl_has_sid, probe as probe_backend, run as run_appcontainer};
+pub(crate) use imp::{
+    acl_has_sid, package_folder, probe as probe_backend, run as run_appcontainer,
+};
 #[cfg(all(target_os = "windows", test))]
 pub(crate) use imp::{derive_profile_sid_uncached, profile_sid_string};
