@@ -1121,8 +1121,10 @@ fn env_policy_filter_shapes_the_variable_list() {
 
 // --- live AppContainer proofs (Windows only; the profile needs a real user session) ---
 
-/// The profile is created once and reused; deriving its SID again must be stable, or every ACL
-/// written by a previous run would be pointing at a principal that no longer exists.
+/// The profile is created once and reused; deriving its SID again must give the same answer, or
+/// every ACL written by a previous run would be pointing at a principal that no longer exists.
+/// The second derivation deliberately bypasses `profile_sid`'s process cache — comparing the
+/// cache with itself would prove nothing about userenv.
 #[cfg(windows)]
 #[test]
 fn appcontainer_profile_sid_is_stable_across_runs() {
@@ -1137,10 +1139,10 @@ fn appcontainer_profile_sid_is_stable_across_runs() {
         first.starts_with("S-1-15-2-"),
         "an AppContainer SID lives under the AppContainer authority: {first}"
     );
-    let second = appcontainer::profile_sid_string().unwrap();
+    let fresh = appcontainer::derive_profile_sid_uncached().expect("an uncached derivation");
     assert_eq!(
-        first, second,
-        "the profile name must resolve to one stable SID"
+        first, fresh,
+        "a fresh DeriveAppContainerSidFromAppContainerName must resolve the profile to the same SID"
     );
 }
 

@@ -210,6 +210,7 @@ mod imp {
     use super::*;
     use std::ffi::{c_void, OsStr, OsString};
     use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    use std::sync::OnceLock;
     use windows_sys::Win32::Foundation::{
         CloseHandle, GetLastError, LocalFree, GENERIC_ALL, WAIT_TIMEOUT,
     };
@@ -249,15 +250,18 @@ mod imp {
     const HRESULT_ALREADY_EXISTS: i32 = -2147024713; // 0x800700B7
     const HRESULT_FILE_EXISTS: i32 = -2147024895; // 0x800700DF
 
-    /// A SID in a buffer the OS expects us to `LocalFree` (`ConvertStringSidToSidW`).
-    /// Freeing one with `FreeSid` is an invalid free — heap corruption that surfaced as the
-    /// STATUS_ACCESS_VIOLATION at the end of a CI test run (the allocator notices far from
-    /// the cause, so it dies in whatever test runs last).
-    struct LocalSid(PSID);
+    /// A SID this process owns outright: `ConvertStringSidToSidW` hands back a `LocalAlloc`
+    /// block and `LocalFree` is its only correct release. Nothing else produces one — the
+    /// profile SID is not owned, see [`profile_sid`].
+    struct OwnedSid(PSID);
 
-    impl Drop for LocalSid {
+    impl Drop for OwnedSid {
         fn drop(&mut self) {
-            unsafe { LocalFree(self.0.cast()) };
+            if !self.0.is_null() {
+                // SAFETY: every SID that reaches here came from `ConvertStringSidToSidW`, so it
+                // is a `LocalAlloc` block, and it is freed exactly once.
+                unsafe { LocalFree(self.0.cast()) };
+            }
         }
     }
 
@@ -283,11 +287,13 @@ mod imp {
 
     /// The profile has to exist before its SID is usable as a grant trustee. Creating it is
     /// cheap: the first call registers it, every later one takes ERROR_ALREADY_EXISTS.
-    /// Create the profile if it is missing. Called only on that cold path: the hot path
-    /// (`profile_sid`) tries `DeriveAppContainerSidFromAppContainerName` first and lands here
-    /// only when the derivation says the profile is absent — so the create-call's SID, whose
-    /// documented `FreeSid` release is the FreeSid-family allocation this file no longer
-    /// trusts (see the crash notes), is never touched on a normal run at all.
+    ///
+    /// Called only on the cold path: [`profile_sid`] tries
+    /// `DeriveAppContainerSidFromAppContainerName` first and lands here only when the
+    /// derivation says the profile is absent. The SID this call hands back is not ours to
+    /// release (see the note on [`profile_sid`]), so it is left alone; at one leaked profile
+    /// SID per process, on the first run on a machine and never again, that is the cheaper
+    /// mistake than the heap corruption the alternative causes.
     fn ensure_profile() -> std::io::Result<()> {
         let name = wide(PROFILE_NAME);
         let display = wide("OpenCapX Sandbox");
@@ -305,11 +311,6 @@ mod imp {
                 &mut sid,
             )
         };
-        // The create-call's SID is a userenv allocation like Derive's — same LocalFree family
-        // that the docs mislabel. Freed here and never returned.
-        if !sid.is_null() {
-            unsafe { LocalFree(sid.cast()) };
-        }
         if hr < 0 && hr != HRESULT_ALREADY_EXISTS && hr != HRESULT_FILE_EXISTS {
             return Err(std::io::Error::other(format!(
                 "CreateAppContainerProfile failed (hr 0x{:08x})",
@@ -319,17 +320,38 @@ mod imp {
         Ok(())
     }
 
-    fn sid_from_string(s: &str) -> Option<LocalSid> {
+    fn sid_from_string(s: &str) -> Option<OwnedSid> {
         let w = wide(s);
         let mut raw: PSID = std::ptr::null_mut();
         // SAFETY: `w` is NUL-terminated, `raw` is a valid out-slot.
         if unsafe { ConvertStringSidToSidW(w.as_ptr(), &mut raw) } == 0 || raw.is_null() {
             return None;
         }
-        Some(LocalSid(raw))
+        Some(OwnedSid(raw))
     }
 
-    fn profile_sid() -> std::io::Result<LocalSid> {
+    /// The sandbox profile's SID: derived once per process, and never freed.
+    ///
+    /// The docs name `FreeSid` as the release for `DeriveAppContainerSidFromAppContainerName`
+    /// and `CreateAppContainerProfile`, but a name that always resolves to the same profile
+    /// does not get a private SID: userenv hands back a buffer it reuses across calls, so
+    /// releasing it is a double free from the second call on. The Windows CI job showed
+    /// exactly that shape — the whole suite ran in one process, and the first run in which
+    /// every probe *succeeded* (and so derived and freed the same pointer again) died with a
+    /// STATUS_ACCESS_VIOLATION inside the ACL write, which is the first thing after the free
+    /// that dereferences the trustee. Six runs in a row failed that way, and neither
+    /// `FreeSid` nor `LocalFree` moved it, because both are the process heap: the bug was
+    /// the second release, not which one it used.
+    ///
+    /// Caching one pointer per process is the fix, and it is also the cheaper design: the
+    /// profile SID is fixed for the machine's lifetime, so deriving it once is what the hot
+    /// path wants anyway. A failure is *not* cached, so a machine that could not host the
+    /// profile on the first call can still come back on a later one.
+    fn profile_sid() -> std::io::Result<PSID> {
+        static CACHED: OnceLock<usize> = OnceLock::new();
+        if let Some(sid) = CACHED.get() {
+            return Ok(*sid as PSID);
+        }
         let name = wide(PROFILE_NAME);
         let mut raw: PSID = std::ptr::null_mut();
         // SAFETY: NUL-terminated name, valid out-slot.
@@ -348,14 +370,30 @@ mod imp {
                 hr as u32
             )));
         }
-        // The docs page says FreeSid, but the buffer is LocalAlloc'd — FreeSid on it is an
-        // invalid free and the heap corruption surfaced as two CI crashes clustered exactly on
-        // this path (rounds 3 and 4: the crash followed whichever test held the last
-        // DeriveAppContainerSid SID). Chromium's app-container utilities free this SID with
-        // LocalFree too; reality over docs.
-        Ok(LocalSid(raw))
+        // `set` loses the race against a second thread that got there first; both threads
+        // derived the same profile, so the pointer is the same either way.
+        let _ = CACHED.set(raw as usize);
+        Ok(raw)
     }
 
+    /// A second derivation that bypasses the cache, for the stability proof in the tests:
+    /// without it, "the SID is stable across runs" would only be comparing the cache with
+    /// itself. The returned buffer is left alive for the same reason [`profile_sid`] leaves
+    /// its own — one uncached derivation per test process.
+    #[cfg(test)]
+    pub(crate) fn derive_profile_sid_uncached() -> std::io::Result<String> {
+        let name = wide(PROFILE_NAME);
+        let mut raw: PSID = std::ptr::null_mut();
+        // SAFETY: NUL-terminated name, valid out-slot.
+        let hr = unsafe { DeriveAppContainerSidFromAppContainerName(name.as_ptr(), &mut raw) };
+        if hr < 0 || raw.is_null() {
+            return Err(std::io::Error::other(format!(
+                "DeriveAppContainerSidFromAppContainerName failed (hr 0x{:08x})",
+                hr as u32
+            )));
+        }
+        sid_to_string(raw)
+    }
     fn sid_to_string(sid: PSID) -> std::io::Result<String> {
         let mut raw: *mut u16 = std::ptr::null_mut();
         // SAFETY: `sid` is a live SID, `raw` is a valid out-slot for a LocalAlloc'd string.
@@ -376,7 +414,7 @@ mod imp {
     /// this run added is taken back out before the caller moves on. An ACL left behind would
     /// hand the (stable, profile-wide) sandbox SID permanent access to a user directory.
     struct Grants {
-        sid: LocalSid,
+        sid: PSID,
         /// Paths granted GENERIC_ALL.
         granted: Vec<PathBuf>,
         /// Paths denied GENERIC_ALL.
@@ -389,7 +427,7 @@ mod imp {
             scratch: &Path,
             rw: &[PathBuf],
             home: Option<&Path>,
-            sid: LocalSid,
+            sid: PSID,
         ) -> std::io::Result<Grants> {
             // Built before the first write, so a mid-way failure unwinds through `Drop`.
             let mut g = Grants {
@@ -399,7 +437,7 @@ mod imp {
             };
             for p in grant_paths(mode, scratch, rw, home) {
                 let current = read_dacl(&p)?;
-                write_dacl(&p, current.dacl(), &allow_entry(g.sid.0))?;
+                write_dacl(&p, current.dacl(), &allow_entry(g.sid))?;
                 g.granted.push(p);
             }
             if mode == Mode::Installer {
@@ -411,7 +449,7 @@ mod imp {
                             continue;
                         }
                         let current = read_dacl(&p)?;
-                        write_dacl(&p, current.dacl(), &deny_entry(g.sid.0))?;
+                        write_dacl(&p, current.dacl(), &deny_entry(g.sid))?;
                         g.denied.push(p);
                     }
                 }
@@ -425,7 +463,7 @@ mod imp {
             // Denies first: while the `$HOME` grant is still standing, removing the deny over
             // `~/.ssh` would leave a wide-open hole for the length of one ACL write.
             for p in self.denied.drain(..) {
-                if let Err(e) = revoke(&p, &un_deny_entry(self.sid.0)) {
+                if let Err(e) = revoke(&p, &un_deny_entry(self.sid)) {
                     eprintln!(
                         "opencapx sandbox: WARNING: could not remove the deny ACE from {}: {e}",
                         p.display()
@@ -433,7 +471,7 @@ mod imp {
                 }
             }
             for p in self.granted.drain(..) {
-                if let Err(e) = revoke(&p, &un_allow_entry(self.sid.0)) {
+                if let Err(e) = revoke(&p, &un_allow_entry(self.sid)) {
                     eprintln!(
                         "opencapx sandbox: WARNING: could not remove the grant ACE from {}: {e}",
                         p.display()
@@ -648,23 +686,19 @@ mod imp {
     /// every `--check` and every run, and it fails with a reason instead of erroring deep inside
     /// `CreateProcessW`.
     pub(crate) fn probe() -> std::io::Result<()> {
-        sid_to_string(profile_sid()?.0)?;
+        sid_to_string(profile_sid()?)?;
         Ok(())
     }
 
     /// The sandbox profile SID in string form, for the ACL tests.
     #[cfg(test)]
     pub(crate) fn profile_sid_string() -> std::io::Result<String> {
-        sid_to_string(profile_sid()?.0)
+        sid_to_string(profile_sid()?)
     }
 
     pub(crate) fn run(parsed: &Parsed, scratch: &Path) -> std::io::Result<i32> {
         let home = crate::core::home_dir().map(|h| canonicalize_lossy(&h));
-        // TEMP (crash diagnosis, revert with the ci.yml serial change): breadcrumbs before
-        // each Win32 step so a CI ACCESS_VIOLATION names the API it died in.
-        eprintln!("ocx:ac:profile-sid");
         let sid = profile_sid()?;
-        eprintln!("ocx:ac:grants");
         let grants = Grants::apply(
             parsed.profile,
             scratch,
@@ -672,14 +706,12 @@ mod imp {
             home.as_deref(),
             sid,
         )?;
-        eprintln!("ocx:ac:spawn");
         let code = spawn_and_wait(
             parsed,
-            grants.sid.0,
+            grants.sid,
             capabilities_for(parsed.profile, parsed.policy.allow_net),
             scratch,
         );
-        eprintln!("ocx:ac:done");
         // Whether the child ran, failed to start, or timed out — the grants go back now.
         drop(grants);
         code
@@ -784,7 +816,7 @@ mod imp {
     ) -> std::io::Result<i32> {
         // Capabilities are SIDs, not GUIDs (`S-1-15-3-1` = internetClient). The array has to
         // outlive the UpdateProcThreadAttribute call, so it lives to the end of this function.
-        let mut cap_owners: Vec<LocalSid> = Vec::new();
+        let mut cap_owners: Vec<OwnedSid> = Vec::new();
         let mut cap_sids: Vec<SID_AND_ATTRIBUTES> = Vec::new();
         for text in caps {
             if let Some(s) = sid_from_string(text) {
@@ -936,7 +968,7 @@ mod imp {
     }
 }
 
-#[cfg(all(target_os = "windows", test))]
-pub(crate) use imp::profile_sid_string;
 #[cfg(target_os = "windows")]
 pub(crate) use imp::{acl_has_sid, probe as probe_backend, run as run_appcontainer};
+#[cfg(all(target_os = "windows", test))]
+pub(crate) use imp::{derive_profile_sid_uncached, profile_sid_string};
