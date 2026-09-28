@@ -711,6 +711,40 @@ mod imp {
         Ok(())
     }
 
+    /// The AppContainer profile's own folder — `%LOCALAPPDATA%\Packages\OpenCapX.Sandbox`.
+    ///
+    /// This is the only directory a lowbox token can both enter and write without any ACL
+    /// work of ours: `CreateAppContainerProfile` built it for the package SID, and the
+    /// profile path carries the traverse ACEs packaged apps depend on. Everything else under
+    /// the user profile — `%TEMP%` included — is unreachable for a token with no user SID,
+    /// which is why the scratch dir is rooted here rather than in the temp dir.
+    pub(crate) fn package_folder() -> std::io::Result<PathBuf> {
+        use windows_sys::Win32::Security::Isolation::GetAppContainerFolderPath;
+        use windows_sys::Win32::System::Com::CoTaskMemFree;
+
+        let sid = sid_to_string(profile_sid()?)?;
+        let w = wide(&sid);
+        let mut raw: *mut u16 = std::ptr::null_mut();
+        // SAFETY: `w` is a NUL-terminated SID string and `raw` is a valid out-slot for the
+        // CoTaskMem-allocated path the call hands back.
+        let hr = unsafe { GetAppContainerFolderPath(w.as_ptr(), &mut raw) };
+        if hr < 0 || raw.is_null() {
+            return Err(std::io::Error::other(format!(
+                "GetAppContainerFolderPath failed (hr 0x{:08x})",
+                hr as u32
+            )));
+        }
+        let mut len = 0usize;
+        while unsafe { *raw.add(len) } != 0 {
+            len += 1;
+        }
+        // SAFETY: `len` counted the NUL-terminated UTF-16 run starting at `raw`.
+        let path = unsafe { OsString::from_wide(std::slice::from_raw_parts(raw, len)) };
+        // SAFETY: the docs release this buffer with CoTaskMemFree, exactly once.
+        unsafe { CoTaskMemFree(raw.cast()) };
+        Ok(PathBuf::from(path))
+    }
+
     /// The sandbox profile SID in string form, for the ACL tests.
     #[cfg(test)]
     pub(crate) fn profile_sid_string() -> std::io::Result<String> {

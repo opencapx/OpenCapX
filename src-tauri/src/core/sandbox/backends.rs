@@ -37,10 +37,24 @@ pub(crate) fn backend() -> Backend {
 /// Scratch dir handed to the child as its writable area; removed after the run.
 /// Unique per run, not per process: concurrent runs in one process (parallel plugin calls or
 /// tests) would otherwise share a dir, and the first to finish would delete another's live tree.
+///
+/// On Windows the root is the AppContainer profile's own package folder, not `%TEMP%`. A
+/// lowbox token carries no user SID, so it cannot traverse a user-owned directory: naming
+/// `C:\Users\<user>\AppData\Local\Temp\…` as the child's working directory makes
+/// `CreateProcessW` fail with ERROR_FILE_NOT_FOUND whatever program it was asked to start —
+/// which is exactly what the Windows CI showed for every guarded run. The package folder is
+/// the one place such a token can both enter and write.
 pub(crate) fn make_scratch() -> std::io::Result<PathBuf> {
     static SCRATCH_SEQ: AtomicU64 = AtomicU64::new(0);
     let seq = SCRATCH_SEQ.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("opencapx-sandbox-{}-{seq}", std::process::id()));
+    let name = format!("opencapx-sandbox-{}-{seq}", std::process::id());
+    #[cfg(target_os = "windows")]
+    if let Ok(folder) = appcontainer::package_folder() {
+        let dir = folder.join(name);
+        std::fs::create_dir_all(&dir)?;
+        return Ok(dir);
+    }
+    let dir = std::env::temp_dir().join(name);
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }

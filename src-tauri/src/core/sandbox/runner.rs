@@ -294,6 +294,18 @@ pub(crate) fn unguarded_exit(require: bool) -> Option<i32> {
     require.then_some(EXIT_UNGUARDED)
 }
 
+/// How many runs in this process fell back to running the command unguarded. The default
+/// contract is fail-open, which is right in production and useless in a test: a guarded run
+/// that silently never started still returns the command's own exit code, so "the sandbox
+/// blocked it" and "the sandbox never ran" look identical. The live backend tests watch this
+/// to assert the fence was actually up.
+static UNGUARDED_RUNS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Cumulative count of fail-open downgrades since process start.
+pub(crate) fn unguarded_runs() -> u64 {
+    UNGUARDED_RUNS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Shared fallback for every unguardable run (no backend, backend failed to start, unusable
 /// scratch). Default contract is fail-open: warn + `sandbox.unguarded` audit + run as-is.
 /// `--require` flips it: refuse with exit 99 and a `sandbox.blocked` audit.
@@ -306,6 +318,7 @@ fn run_unguarded(parsed: &Parsed, scratch: Option<&Path>, reason: &str) -> i32 {
         }
         return code;
     }
+    UNGUARDED_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     eprintln!("opencapx sandbox: WARNING: {reason}; running WITHOUT sandbox");
     audit_unguarded(&parsed.command, reason);
     run_plain(&parsed.command, parsed.timeout_secs, parsed.policy.env)

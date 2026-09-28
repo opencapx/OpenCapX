@@ -1155,6 +1155,7 @@ fn appcontainer_forwards_exit_code() {
         eprintln!("skip: no sandbox backend on this machine");
         return;
     }
+    let before = unguarded_runs();
     assert_eq!(
         run_cli(&[
             "--".into(),
@@ -1164,6 +1165,12 @@ fn appcontainer_forwards_exit_code() {
             "7".into()
         ]),
         7
+    );
+
+    assert_eq!(
+        unguarded_runs(),
+        before,
+        "the run must not have degraded to the unguarded fallback"
     );
 }
 
@@ -1178,6 +1185,7 @@ fn appcontainer_blocks_writes_outside_scratch() {
     }
     let outside = std::env::temp_dir().join(format!("ocx-sandbox-deny-{}.txt", std::process::id()));
     let _ = std::fs::remove_file(&outside);
+    let before = unguarded_runs();
     let code = run_cli(&[
         "--".into(),
         "cmd".into(),
@@ -1186,6 +1194,7 @@ fn appcontainer_blocks_writes_outside_scratch() {
     ]);
     let leaked = outside.exists();
     let _ = std::fs::remove_file(&outside);
+    assert_eq!(unguarded_runs(), before, "the run must not have degraded");
     assert_ne!(code, 0, "a write outside the scratch dir must fail");
     assert!(
         !leaked,
@@ -1212,6 +1221,7 @@ fn appcontainer_blocks_network() {
         eprintln!("skip: no curl.exe on this machine");
         return;
     }
+    let before = unguarded_runs();
     let code = run_cli(&[
         "--".into(),
         "curl.exe".into(),
@@ -1220,6 +1230,7 @@ fn appcontainer_blocks_network() {
         "5".into(),
         "https://example.com".into(),
     ]);
+    assert_eq!(unguarded_runs(), before, "the run must not have degraded");
     assert_ne!(
         code, 0,
         "curl must not reach the network inside the sandbox"
@@ -1250,6 +1261,7 @@ fn appcontainer_revokes_the_grant_on_rw_dirs() {
         !appcontainer::acl_has_sid(&rw, &sid),
         "precondition: the directory starts without the sandbox SID"
     );
+    let before = unguarded_runs();
     let code = run_cli(&[
         "--rw".into(),
         rw.to_string_lossy().into_owned(),
@@ -1258,6 +1270,7 @@ fn appcontainer_revokes_the_grant_on_rw_dirs() {
         "/c".into(),
         "echo hi".into(),
     ]);
+    assert_eq!(unguarded_runs(), before, "the run must not have degraded");
     assert_eq!(code, 0, "the guarded run itself must succeed");
     assert!(
         !appcontainer::acl_has_sid(&rw, &sid),
