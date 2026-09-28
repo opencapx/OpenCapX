@@ -56,8 +56,11 @@ jobs:
           RUST_BACKTRACE: full
         run: |
           set -o pipefail
-          cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx 2>&1 | tee /tmp/rust-test.log
-          node scripts/assert-test-count.mjs /tmp/rust-test.log rust 1090
+          # TEMP (PR #32 diagnosis): the ACCESS_VIOLATION in the AppContainer backend is not
+          # fixed yet. Serial + nocapture so the per-Win32-call breadcrumbs in appcontainer.rs
+          # name the API the process dies in. Revert to the plain invocation once it is.
+          cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx -- --test-threads=1 --nocapture 2>&1 | tee rust-test.log
+          node scripts/assert-test-count.mjs rust-test.log rust 1090
   frontend:
     runs-on: ubuntu-22.04
     steps:

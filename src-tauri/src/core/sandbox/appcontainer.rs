@@ -506,7 +506,10 @@ mod imp {
         }
     }
 
+    /// TEMP (PR #32 diagnosis): a breadcrumb per Win32 call — the CI ACCESS_VIOLATION happens
+    /// somewhere inside the first guarded run and a crash names no API.
     fn read_dacl(path: &Path) -> std::io::Result<PathAcl> {
+        eprintln!("ocx:ac:gsi:begin {}", path.display());
         let w = wide_path(path);
         let mut sd: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
         // SAFETY: NUL-terminated path, valid out-slot for the descriptor; owner/group/SACL and
@@ -523,6 +526,7 @@ mod imp {
                 &mut sd,
             )
         };
+        eprintln!("ocx:ac:gsi:done code={code} sd={:p}", sd);
         if code != 0 {
             return Err(std::io::Error::other(format!(
                 "GetNamedSecurityInfoW failed ({code}) on {}",
@@ -539,7 +543,9 @@ mod imp {
     ) -> std::io::Result<()> {
         let mut new_acl: *mut ACL = std::ptr::null_mut();
         // SAFETY: one valid entry; `current` is a live ACL or null (meaning "no DACL yet").
+        eprintln!("ocx:ac:sea:begin current={current:p}");
         let code = unsafe { SetEntriesInAclW(1, entry, current, &mut new_acl) };
+        eprintln!("ocx:ac:sea:done code={code} acl={:p}", new_acl);
         if code != 0 {
             return Err(std::io::Error::other(format!(
                 "SetEntriesInAclW failed ({code}) for {}",
@@ -547,6 +553,7 @@ mod imp {
             )));
         }
         let w = wide_path(path);
+        eprintln!("ocx:ac:sni:begin");
         // SAFETY: NUL-terminated path; owner/group/SACL null (leave them alone); `new_acl` was
         // allocated for us and is freed right after, including on the error path.
         let code = unsafe {
@@ -560,6 +567,7 @@ mod imp {
                 std::ptr::null_mut(),
             )
         };
+        eprintln!("ocx:ac:sni:done code={code}");
         unsafe { LocalFree(new_acl.cast()) };
         if code != 0 {
             return Err(std::io::Error::other(format!(
