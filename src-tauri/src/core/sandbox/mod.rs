@@ -34,6 +34,7 @@ mod guard;
 mod profile;
 mod runner;
 
+pub use appcontainer::*;
 pub use backends::*;
 pub use guard::*;
 pub use profile::*;
