@@ -222,10 +222,9 @@ mod imp {
         CreateAppContainerProfile, DeriveAppContainerSidFromAppContainerName,
     };
     use windows_sys::Win32::Security::{
-        AclSizeInformation, EqualSid, FreeSid, GetAce, GetAclInformation,
-        GetSecurityDescriptorDacl, ACL, ACL_SIZE_INFORMATION, CONTAINER_INHERIT_ACE,
-        DACL_SECURITY_INFORMATION, OBJECT_INHERIT_ACE, PSECURITY_DESCRIPTOR, PSID,
-        SECURITY_CAPABILITIES, SID_AND_ATTRIBUTES,
+        AclSizeInformation, EqualSid, GetAce, GetAclInformation, GetSecurityDescriptorDacl, ACL,
+        ACL_SIZE_INFORMATION, CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION, OBJECT_INHERIT_ACE,
+        PSECURITY_DESCRIPTOR, PSID, SECURITY_CAPABILITIES, SID_AND_ATTRIBUTES,
     };
     use windows_sys::Win32::System::Console::{
         GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
@@ -284,6 +283,11 @@ mod imp {
 
     /// The profile has to exist before its SID is usable as a grant trustee. Creating it is
     /// cheap: the first call registers it, every later one takes ERROR_ALREADY_EXISTS.
+    /// Create the profile if it is missing. Called only on that cold path: the hot path
+    /// (`profile_sid`) tries `DeriveAppContainerSidFromAppContainerName` first and lands here
+    /// only when the derivation says the profile is absent — so the create-call's SID, whose
+    /// documented `FreeSid` release is the FreeSid-family allocation this file no longer
+    /// trusts (see the crash notes), is never touched on a normal run at all.
     fn ensure_profile() -> std::io::Result<()> {
         let name = wide(PROFILE_NAME);
         let display = wide("OpenCapX Sandbox");
@@ -301,11 +305,10 @@ mod imp {
                 &mut sid,
             )
         };
-        // Free a returned SID when there is one (the created-this-call path); the
-        // already-exists path hands back null, which is not an error — DeriveAppContainerSid
-        // below fetches the SID for the existing profile.
+        // The create-call's SID is a userenv allocation like Derive's — same LocalFree family
+        // that the docs mislabel. Freed here and never returned.
         if !sid.is_null() {
-            unsafe { FreeSid(sid) };
+            unsafe { LocalFree(sid.cast()) };
         }
         if hr < 0 && hr != HRESULT_ALREADY_EXISTS && hr != HRESULT_FILE_EXISTS {
             return Err(std::io::Error::other(format!(
@@ -327,11 +330,18 @@ mod imp {
     }
 
     fn profile_sid() -> std::io::Result<LocalSid> {
-        ensure_profile()?;
         let name = wide(PROFILE_NAME);
         let mut raw: PSID = std::ptr::null_mut();
         // SAFETY: NUL-terminated name, valid out-slot.
-        let hr = unsafe { DeriveAppContainerSidFromAppContainerName(name.as_ptr(), &mut raw) };
+        let mut hr = unsafe { DeriveAppContainerSidFromAppContainerName(name.as_ptr(), &mut raw) };
+        if hr < 0 || raw.is_null() {
+            // Cold path only: the derivation fails when the registry has no such profile.
+            // Create it once, then derive again — every later run derives directly.
+            ensure_profile()?;
+            raw = std::ptr::null_mut();
+            // SAFETY: as above.
+            hr = unsafe { DeriveAppContainerSidFromAppContainerName(name.as_ptr(), &mut raw) };
+        }
         if hr < 0 || raw.is_null() {
             return Err(std::io::Error::other(format!(
                 "DeriveAppContainerSidFromAppContainerName failed (hr 0x{:08x})",
