@@ -713,36 +713,30 @@ mod imp {
 
     /// The AppContainer profile's own folder — `%LOCALAPPDATA%\Packages\OpenCapX.Sandbox`.
     ///
-    /// This is the only directory a lowbox token can both enter and write without any ACL
-    /// work of ours: `CreateAppContainerProfile` built it for the package SID, and the
-    /// profile path carries the traverse ACEs packaged apps depend on. Everything else under
-    /// the user profile — `%TEMP%` included — is unreachable for a token with no user SID,
-    /// which is why the scratch dir is rooted here rather than in the temp dir.
+    /// This is the only directory a lowbox token can both enter and write without any ACL work
+    /// of ours: `CreateAppContainerProfile` builds it for the package SID, and the profile path
+    /// carries the traverse ACEs packaged apps depend on. Everything else under the user
+    /// profile — `%TEMP%` included — is unreachable for a token with no user SID, which is why
+    /// the scratch dir is rooted here rather than in the temp dir.
+    ///
+    /// The path is composed rather than asked for. `GetAppContainerFolderPath` is the API that
+    /// returns it, but the `windows-sys` 0.60 binding declares a two-argument form against
+    /// today's four-argument export, so calling it returned a failing HRESULT on CI — which
+    /// silently sent every run back to the temp dir. The documented location is stable, and
+    /// `CreateAppContainerProfile` (on the cold path in [`profile_sid`]) has already created
+    /// the folder by the time anything asks for it.
     pub(crate) fn package_folder() -> std::io::Result<PathBuf> {
-        use windows_sys::Win32::Security::Isolation::GetAppContainerFolderPath;
-        use windows_sys::Win32::System::Com::CoTaskMemFree;
-
-        let sid = sid_to_string(profile_sid()?)?;
-        let w = wide(&sid);
-        let mut raw: *mut u16 = std::ptr::null_mut();
-        // SAFETY: `w` is a NUL-terminated SID string and `raw` is a valid out-slot for the
-        // CoTaskMem-allocated path the call hands back.
-        let hr = unsafe { GetAppContainerFolderPath(w.as_ptr(), &mut raw) };
-        if hr < 0 || raw.is_null() {
+        let local = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .ok_or_else(|| std::io::Error::other("LOCALAPPDATA is not set"))?;
+        let folder = local.join("Packages").join(PROFILE_NAME);
+        if !folder.is_dir() {
             return Err(std::io::Error::other(format!(
-                "GetAppContainerFolderPath failed (hr 0x{:08x})",
-                hr as u32
+                "AppContainer package folder missing at {}",
+                folder.display()
             )));
         }
-        let mut len = 0usize;
-        while unsafe { *raw.add(len) } != 0 {
-            len += 1;
-        }
-        // SAFETY: `len` counted the NUL-terminated UTF-16 run starting at `raw`.
-        let path = unsafe { OsString::from_wide(std::slice::from_raw_parts(raw, len)) };
-        // SAFETY: the docs release this buffer with CoTaskMemFree, exactly once.
-        unsafe { CoTaskMemFree(raw.cast()) };
-        Ok(PathBuf::from(path))
+        Ok(folder)
     }
 
     /// The sandbox profile SID in string form, for the ACL tests.
@@ -946,11 +940,8 @@ mod imp {
         let mut cmdline = command_line(&parsed.command);
         let env = env_block(parsed.policy.env, scratch);
         let cwd = wide_path(scratch);
-        let mut pi = PROCESS_INFORMATION::default();
-        // SAFETY: mutable NUL-terminated command line, inherited stdio handles, a live
-        // environment block, a live cwd, a STARTUPINFOEXW whose first field is the
-        // STARTUPINFOW CreateProcessW reads, and a valid PROCESS_INFORMATION out-slot.
-        let started = unsafe {
+        eprintln!("ocx:ac:cp:begin cwd={}", scratch.display());
+        let mut spawn = |dir: *const u16, pi: &mut PROCESS_INFORMATION| unsafe {
             CreateProcessW(
                 std::ptr::null(),
                 cmdline.as_mut_ptr(),
@@ -959,11 +950,27 @@ mod imp {
                 1,
                 EXTENDED_STARTUPINFO_PRESENT | CREATE_SUSPENDED,
                 env.as_ptr() as *const c_void,
-                cwd.as_ptr(),
+                dir,
                 &si.StartupInfo,
-                &mut pi,
+                pi,
             )
         };
+        let mut pi = PROCESS_INFORMATION::default();
+        // SAFETY: mutable NUL-terminated command line, inherited stdio handles, a live
+        // environment block, a live cwd, a STARTUPINFOEXW whose first field is the
+        // STARTUPINFOW CreateProcessW reads, and a valid PROCESS_INFORMATION out-slot.
+        let started = spawn(cwd.as_ptr(), &mut pi);
+        if started == 0 {
+            // TEMP (PR #32 diagnosis): ERROR_FILE_NOT_FOUND came back for every program, which
+            // points at the working directory rather than the image. Retry once without it, so
+            // the log says which of the two calls is the one refusing.
+            let first = unsafe { GetLastError() };
+            eprintln!("ocx:ac:cp:cwd-failed err={first}; retrying without a cwd");
+            let started = spawn(std::ptr::null(), &mut pi);
+            eprintln!("ocx:ac:cp:retry started={started} err={}", unsafe {
+                GetLastError()
+            });
+        }
         // The list and the buffer behind it are ours again the moment CreateProcessW returns.
         unsafe { DeleteProcThreadAttributeList(attr_list) };
         if started == 0 {
