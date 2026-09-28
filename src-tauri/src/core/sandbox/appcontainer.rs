@@ -516,12 +516,11 @@ mod imp {
     /// A path's current DACL. The ACL pointer comes out of the same `GetNamedSecurityInfoW`
     /// call that returns the descriptor, which is the shape Microsoft's own ACL-edit sample
     /// uses: the DACL is part of the descriptor buffer, so there is no second call to make and
-    /// nothing to get wrong between the two. (TEMP: the Windows CI's ACCESS_VIOLATION landed
-    /// inside a separate `GetSecurityDescriptorDacl` walk of a descriptor that
-    /// `GetNamedSecurityInfoW` had just returned with code 0 — a breadcrumb on each side of it
-    /// pins the fault there and nowhere else.)
+    /// nothing to get wrong between the two. Reading it out with a separate
+    /// `GetSecurityDescriptorDacl` walk instead is what the Windows CI was dying on — the
+    /// ACCESS_VIOLATION landed inside that call, on a descriptor `GetNamedSecurityInfoW` had
+    /// returned one line earlier with code 0.
     fn read_dacl(path: &Path) -> std::io::Result<PathAcl> {
-        eprintln!("ocx:ac:gsi:begin {}", path.display());
         let w = wide_path(path);
         let mut dacl: *mut ACL = std::ptr::null_mut();
         let mut sd: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
@@ -539,7 +538,6 @@ mod imp {
                 &mut sd,
             )
         };
-        eprintln!("ocx:ac:gsi:done code={code} sd={:p} dacl={:p}", sd, dacl);
         if code != 0 {
             return Err(std::io::Error::other(format!(
                 "GetNamedSecurityInfoW failed ({code}) on {}",
@@ -556,9 +554,7 @@ mod imp {
     ) -> std::io::Result<()> {
         let mut new_acl: *mut ACL = std::ptr::null_mut();
         // SAFETY: one valid entry; `current` is a live ACL or null (meaning "no DACL yet").
-        eprintln!("ocx:ac:sea:begin current={current:p}");
         let code = unsafe { SetEntriesInAclW(1, entry, current, &mut new_acl) };
-        eprintln!("ocx:ac:sea:done code={code} acl={:p}", new_acl);
         if code != 0 {
             return Err(std::io::Error::other(format!(
                 "SetEntriesInAclW failed ({code}) for {}",
@@ -566,7 +562,6 @@ mod imp {
             )));
         }
         let w = wide_path(path);
-        eprintln!("ocx:ac:sni:begin");
         // SAFETY: NUL-terminated path; owner/group/SACL null (leave them alone); `new_acl` was
         // allocated for us and is freed right after, including on the error path.
         let code = unsafe {
@@ -580,7 +575,6 @@ mod imp {
                 std::ptr::null_mut(),
             )
         };
-        eprintln!("ocx:ac:sni:done code={code}");
         unsafe { LocalFree(new_acl.cast()) };
         if code != 0 {
             return Err(std::io::Error::other(format!(
@@ -982,7 +976,6 @@ mod imp {
         let mut cmdline = command_line(&parsed.command);
         let env = env_block(parsed.policy.env, scratch);
         let cwd = wide_path(scratch);
-        eprintln!("ocx:ac:cp:begin cwd={}", scratch.display());
         let program = wide_path(&resolve_program(&parsed.command[0])?);
         let mut spawn = |dir: *const u16, pi: &mut PROCESS_INFORMATION| unsafe {
             CreateProcessW(
@@ -1003,68 +996,6 @@ mod imp {
         // environment block, a live cwd, a STARTUPINFOEXW whose first field is the
         // STARTUPINFOW CreateProcessW reads, and a valid PROCESS_INFORMATION out-slot.
         let started = spawn(cwd.as_ptr(), &mut pi);
-        if started == 0 {
-            // TEMP (PR #32 diagnosis): ERROR_FILE_NOT_FOUND for every program, with and without
-            // a working directory, so the cwd is not it. Bisect what is left — first the lowbox
-            // attribute, then (if that launches) the environment block. Each probe is a normal
-            // call; only the diagnostics around them are temporary.
-            let first = unsafe { GetLastError() };
-            eprintln!("ocx:ac:cp:failed err={first}; probing without the lowbox attribute");
-            let mut plain = PROCESS_INFORMATION::default();
-            // SAFETY: as above, minus EXTENDED_STARTUPINFO_PRESENT: a plain STARTUPINFOW run of
-            // the same command line, environment and stdio.
-            let plain_ok = unsafe {
-                CreateProcessW(
-                    program.as_ptr(),
-                    cmdline.as_mut_ptr(),
-                    std::ptr::null(),
-                    std::ptr::null(),
-                    1,
-                    CREATE_SUSPENDED,
-                    env.as_ptr() as *const c_void,
-                    cwd.as_ptr(),
-                    &si.StartupInfo,
-                    &mut plain,
-                )
-            };
-            eprintln!("ocx:ac:cp:no-lowbox started={plain_ok} err={}", unsafe {
-                GetLastError()
-            });
-            if plain_ok != 0 {
-                // Terminate the probe child; it is suspended and exists only to answer the
-                // question.
-                unsafe { TerminateProcess(plain.hProcess, 1) };
-                unsafe { CloseHandle(plain.hThread) };
-                unsafe { CloseHandle(plain.hProcess) };
-            }
-            // Third probe: same command line, no environment block, no cwd, no lowbox — the
-            // floor. If this launches, the env block is what CreateProcessW is choking on.
-            let mut bare = PROCESS_INFORMATION::default();
-            // SAFETY: the minimum a CreateProcessW needs; the child inherits this process's
-            // environment and directory.
-            let bare_ok = unsafe {
-                CreateProcessW(
-                    program.as_ptr(),
-                    cmdline.as_mut_ptr(),
-                    std::ptr::null(),
-                    std::ptr::null(),
-                    1,
-                    CREATE_SUSPENDED,
-                    std::ptr::null(),
-                    std::ptr::null(),
-                    &si.StartupInfo,
-                    &mut bare,
-                )
-            };
-            eprintln!("ocx:ac:cp:bare started={bare_ok} err={}", unsafe {
-                GetLastError()
-            });
-            if bare_ok != 0 {
-                unsafe { TerminateProcess(bare.hProcess, 1) };
-                unsafe { CloseHandle(bare.hThread) };
-                unsafe { CloseHandle(bare.hProcess) };
-            }
-        }
         // The list and the buffer behind it are ours again the moment CreateProcessW returns.
         unsafe { DeleteProcThreadAttributeList(attr_list) };
         if started == 0 {

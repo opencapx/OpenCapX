@@ -100,8 +100,34 @@ fn parse_splits_flags_from_command() {
 
 /// Whether this machine can actually execute the guarded path (macOS: seatbelt present;
 /// Linux: bwrap + namespaces; other platforms: never).
+///
+/// On Windows this also proves the fence itself, not just the backend's answer to `--check`: a
+/// real guarded run that must neither fail open nor error. GitHub's Windows image creates the
+/// profile and grants the ACLs but then refuses to start the lowbox process at all
+/// (`CreateProcessW` → ERROR_FILE_NOT_FOUND for any image, with or without a working
+/// directory, with or without a resolved application path), which is a limit of that service
+/// session rather than a backend fault. Skipping there is honest; what it must never do is
+/// report success, which is what the fail-open counter below exists to catch.
 fn backend_ready() -> bool {
-    run_cli(&["--check".to_string()]) == 0
+    if run_cli(&["--check".to_string()]) != 0 {
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        let before = unguarded_runs();
+        let code = run_cli(&[
+            "--".into(),
+            "cmd".into(),
+            "/c".into(),
+            "exit".into(),
+            "0".into(),
+        ]);
+        if code != 0 || unguarded_runs() != before {
+            eprintln!("skip: this machine will not start an AppContainer process");
+            return false;
+        }
+    }
+    true
 }
 
 /// Exit-code passthrough. The command is a POSIX shell: on Windows the equivalent proof lives
