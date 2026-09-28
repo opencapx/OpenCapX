@@ -241,9 +241,14 @@ mod imp {
         PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES, STARTF_USESTDHANDLES, STARTUPINFOEXW,
     };
 
-    /// `HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS)` — what `CreateAppContainerProfile` returns for
-    /// a profile the registry already knows. The normal case after the first run.
-    const HRESULT_ALREADY_EXISTS: i32 = -2147024895; // 0x800700DF
+    /// `HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS)` (0x800700B7) and its ERROR_FILE_EXISTS cousin
+    /// (0x800700DF) — what `CreateAppContainerProfile` returns for a profile the registry
+    /// already knows. The normal case after the first run, and **the SID out-slot stays null on
+    /// this path** (nothing was created), so the null-SID check must not run before this
+    /// acceptance: the CI run proved that ordering turns every run after the first into an
+    /// "unavailable backend" — the fence only ever worked on first use.
+    const HRESULT_ALREADY_EXISTS: i32 = -2147024713; // 0x800700B7
+    const HRESULT_FILE_EXISTS: i32 = -2147024895; // 0x800700DF
 
     /// A SID out of a buffer the OS expects us to `FreeSid`.
     struct Sid(PSID);
@@ -293,11 +298,13 @@ mod imp {
                 &mut sid,
             )
         };
-        if sid.is_null() {
-            return Err(win_err("CreateAppContainerProfile"));
+        // Free a returned SID when there is one (the created-this-call path); the
+        // already-exists path hands back null, which is not an error — DeriveAppContainerSid
+        // below fetches the SID for the existing profile.
+        if !sid.is_null() {
+            unsafe { FreeSid(sid) };
         }
-        unsafe { FreeSid(sid) };
-        if hr < 0 && hr != HRESULT_ALREADY_EXISTS {
+        if hr < 0 && hr != HRESULT_ALREADY_EXISTS && hr != HRESULT_FILE_EXISTS {
             return Err(std::io::Error::other(format!(
                 "CreateAppContainerProfile failed (hr 0x{:08x})",
                 hr as u32
