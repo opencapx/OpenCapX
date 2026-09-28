@@ -36,12 +36,16 @@ jobs:
         run: |
           set -o pipefail
           cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx 2>&1 | tee /tmp/rust-test.log
-          node scripts/assert-test-count.mjs /tmp/rust-test.log rust 1090
+          node scripts/assert-test-count.mjs /tmp/rust-test.log rust 1095
       - name: node plugin e2e (ts-sdk fixture)
         run: cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx install_grant_execute_ts_e2e -- --ignored --test-threads=1
 
   # The core's tests on Windows: path-separator, registry, and filesystem assumptions
   # are now clean (the first green run was 2026-09-24 on PR #7). This job is blocking.
+  # The Windows floor is deliberately NOT raised by the AppContainer work (W1): that job now
+  # discovers 7 more tests than before, but the exact count is only observable here, and a
+  # floor guessed upward would fail CI on a measurement, not on a regression. Raise it from
+  # this job's own log once it reports its number.
   rust-windows:
     runs-on: windows-latest
     steps:

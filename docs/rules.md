@@ -8,9 +8,9 @@ proxy, container) is the executor's responsibility. OpenCapX does not judge "sho
 [permissions.md](permissions.md)'s capability gate, which governs another pipeline (`/rpc` capability calls)
 and cannot see the agent's own shell commands.
 
-**Platform note — the bundled `sandbox` executor.** `opencapx sandbox` has a real backend on
-macOS (seatbelt) and Linux (bubblewrap); on Windows there is no backend yet (a microVM tier is
-planned). Its contract is fail-open: with no backend available it warns, emits a
+**Platform note — the bundled `sandbox` executor.** `opencapx sandbox` has a real backend on all
+three desktop platforms: macOS (seatbelt), Linux (bubblewrap) and Windows (AppContainer). Its
+contract is fail-open: with no backend available it warns, emits a
 `sandbox.unguarded` audit event, and runs the command as-is. If your stance is "rather refuse
 than run unguarded", pass `--require` (exit code 99 + a `sandbox.blocked` audit instead of the
 passthrough) — e.g. `"prepend": "~/.opencapx/bin/opencapx sandbox --require"`, or
@@ -209,16 +209,43 @@ opencapx sandbox [--profile strict|installer] [--allow-net] [--rw <dir>]... [--e
   `/dev/null` bind over file targets (reads empty, writes denied; a tmpfs is a directory and
   mounting one over a file would error the whole bwrap run into the unguarded fallback). Only
   paths that exist are shadowed, so **creating** a previously absent `~/.zshrc` stays possible
-  on Linux (seatbelt denies creation too; known divergence). **Other platforms** (incl.
-  Windows, W1): warn once and run unguarded — a microVM tier via microsandbox (requires WHP)
-  is the planned strong option.
+  on Linux (seatbelt denies creation too; known divergence). **Windows**: AppContainer — the
+  same kernel primitive Edge/Chrome use, no admin rights and no virtualization. A run creates
+  (once, then reuses) the `OpenCapX.Sandbox` AppContainer profile, grants its SID `GENERIC_ALL`
+  on the scratch dir and the `--rw` dirs, and launches through `CreateProcessW` with a
+  `SECURITY_CAPABILITIES` attribute. The network fence is the capability list: a token with no
+  capabilities cannot open a socket at all, and installer mode (or `--allow-net`) adds the
+  well-known `internetClient` capability. Timeouts kill a Job Object, so the whole tree goes
+  with it. **Other platforms**: warn once and run unguarded.
+- **Windows deviations from the macOS/Linux calibration** — known, not bugs:
+  - **Reads are fenced too.** A lowbox token carries no user SID, so the whole user profile is
+    unreadable unless granted. That is *stricter* than the "reads globally allowed" header
+    seatbelt is calibrated to; a strict-mode command that reads its own config will fail.
+  - **A second writable area always exists** — the profile's own package folder under
+    `%LOCALAPPDATA%\Packages\OpenCapX.Sandbox`.
+  - **The installer deny list is enforced wholesale.** A lowbox grant is all-or-nothing, so
+    there is no way to take away only the reads on `~/.ssh`; both halves of the list become a
+    `GENERIC_ALL` deny. It is also mapped to Windows locations — the shared entries plus
+    `%APPDATA%\gh`, `Microsoft\Credentials`, the Chrome/Edge/Firefox profile folders, and the
+    per-user Startup folder (the Windows LaunchAgent). The `%APPDATA%`-based entries are there
+    because the shared list's `~/.config/...` paths do not exist on Windows.
+  - **Grants are taken back, but inherited ACEs on new files are not swept.** The run removes
+    every ACE it added from every path it granted, so a `--rw` directory does not stay writable
+    by the sandbox afterwards. A file the sandbox *created* inside a granted tree keeps the
+    sandbox SID on its own DACL; sweeping that would mean walking the tree after every run.
+  - `TEMP`/`TMP` are redirected into the scratch dir — the lowbox cannot write the user's
+    `%TEMP%`, and a tool with nowhere to put its temp files is broken. This mirrors the
+    `TMPDIR` write the seatbelt profile grants.
+  - No LSASS or kernel isolation — same tier as seatbelt and bubblewrap. A microVM tier via
+    microsandbox (requires WHP) remains the optional stronger stance.
 - **Fail-open by design**: a missing or broken backend never blocks the command (warn + run
   as-is); exit code, stdout and stderr pass through untouched. When that happens the run is
   audited as `rule.applied` with rule id `sandbox.unguarded` (payload carries the reason), so
   the Activity Timeline shows the fence was absent — a stderr warning alone gets lost in agent
   transcripts.
 - `--check` prints backend availability (exit 0 = available); `--print-profile` prints the
-  generated seatbelt profile for review (the deny list lives there).
+  generated profile for review — the seatbelt SBPL text on macOS, the grant/deny plan (with
+  the Windows path mapping) on Windows.
 
 ## Coverage Matrix (P0)
 

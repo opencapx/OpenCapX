@@ -1,5 +1,5 @@
-//! execution backends: scratch dirs, plain-run fallback, group kill, macOS seatbelt, Linux bubblewrap, installer overlays.
-//! Mechanical move from core/sandbox.rs.
+//! execution backends: scratch dirs, plain-run fallback, group kill, macOS seatbelt, Linux
+//! bubblewrap, Windows AppContainer, installer overlays. Mechanical move from core/sandbox.rs.
 
 use super::*;
 
@@ -23,9 +23,14 @@ pub(crate) fn backend() -> Backend {
     };
     #[cfg(target_os = "linux")]
     return backend_linux();
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "windows")]
+    return match appcontainer::probe_backend() {
+        Ok(()) => Backend::AppContainer,
+        Err(_) => Backend::Unavailable(appcontainer::UNAVAILABLE),
+    };
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     return Backend::Unavailable(
-        "no backend on this platform in v1 (Windows: microVM tier planned, requires WHP)",
+        "no backend on this platform (Windows uses AppContainer, macOS seatbelt, Linux bubblewrap)",
     );
 }
 
