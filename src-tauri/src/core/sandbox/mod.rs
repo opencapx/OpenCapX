@@ -34,6 +34,11 @@ mod guard;
 mod profile;
 mod runner;
 
+// Windows-only re-export: the Win32 half (`run_appcontainer`, `probe_backend`) is what the
+// runner and backends consume through it. On macOS/Linux the pure half is reached directly
+// (`super::appcontainer::…`, tests included), and a glob here is an unused-import warning on
+// every non-Windows build.
+#[cfg(target_os = "windows")]
 pub use appcontainer::*;
 pub use backends::*;
 pub use guard::*;

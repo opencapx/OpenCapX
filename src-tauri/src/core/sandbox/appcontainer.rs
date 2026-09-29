@@ -1049,7 +1049,11 @@ mod imp {
         let mut attr_bytes: usize = 0;
         // SAFETY: a null list is the documented size query; `attr_bytes` is a valid out-slot.
         unsafe { InitializeProcThreadAttributeList(std::ptr::null_mut(), 1, 0, &mut attr_bytes) };
-        let mut attr_buf = vec![0u8; attr_bytes];
+        // The attribute list stores pointers, so the buffer must be pointer-aligned — a
+        // `Vec<u8>` only guarantees alignment 1 (HeapAlloc's 16 happens to be enough on every
+        // allocator MSVC ships, but the language owes us nothing there).
+        let words = attr_bytes.div_ceil(size_of::<usize>());
+        let mut attr_buf = vec![0usize; words];
         let attr_list = attr_buf.as_mut_ptr() as LPPROC_THREAD_ATTRIBUTE_LIST;
         // SAFETY: `attr_buf` is at least the size just reported, for the one attribute below.
         if unsafe { InitializeProcThreadAttributeList(attr_list, 1, 0, &mut attr_bytes) } == 0 {
@@ -1123,8 +1127,10 @@ mod imp {
             return Err(win_err("CreateProcessW"));
         }
 
-        // From here the child exists, so nothing may return Err — the caller treats that as
-        // "backend failed to start" and would run the command again, unguarded.
+        // From here the child exists, so Err would make the caller re-run the command
+        // unguarded. That stays safe on the paths below only because each one kills the
+        // child first: it is still suspended (or freshly dead), so it has never executed a
+        // line of the command, and the unguarded re-run is the single execution.
         let job = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
         if job.is_null() {
             let err = win_err("CreateJobObjectW");

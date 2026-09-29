@@ -352,7 +352,12 @@ fn print_profile(parsed: &Parsed) -> i32 {
     #[cfg(target_os = "windows")]
     {
         let home = crate::core::home_dir().map(|h| canonicalize_lossy(&h));
-        let scratch = std::env::temp_dir().join("opencapx-sandbox-preview");
+        // The run itself roots its scratch in the profile's package folder (a lowbox cannot
+        // traverse a scratch under the user's %TEMP%), so the plan should say the same thing —
+        // falling back to %TEMP% only before the profile exists, where the run would fail open.
+        let scratch = appcontainer::package_folder()
+            .map(|f| f.join("opencapx-sandbox-preview"))
+            .unwrap_or_else(|_| std::env::temp_dir().join("opencapx-sandbox-preview"));
         println!(
             "{}",
             appcontainer::profile_plan(
