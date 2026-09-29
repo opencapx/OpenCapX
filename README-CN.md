@@ -110,7 +110,7 @@ OpenCapX 也挡在智能体自身 shell 命令的前面。`PreToolUse` 钩子会
 
 ### 安装
 
-从[发布页面](https://github.com/opencapx/OpenCapX/releases/latest)下载最新构建：macOS（Apple Silicon）使用 `.dmg`，Windows 使用 `x64-setup.exe` 或 `.msi`，Linux 使用 `.deb` / `.rpm` / `.AppImage`。macOS 构建未做代码签名，也未经过公证；如果 Gatekeeper 阻止首次启动，请右键点击应用并选择「打开」。
+从[发布页面](https://github.com/opencapx/OpenCapX/releases/latest)下载最新构建：macOS（Apple Silicon）使用 `.dmg`，Windows 使用 `x64-setup.exe` 或 `.msi`，Linux 使用 `.deb` / `.rpm` / `.AppImage`。macOS 构建未做代码签名、也未经过公证，首次打开时 Gatekeeper 会弹出「Apple 无法验证是否包含恶意软件」的提示——这是预期行为，并非木马（在出现商业需求前暂不购买 Apple Developer 会员）。打开方法：把应用拷入「应用程序」后在终端执行 `/usr/bin/xattr -cr /Applications/OpenCapX.app`；或进入「系统设置 → 隐私与安全性」，滚动到页面底部，点击**仍要打开**。详见 [INSTALL.md](INSTALL.md#macos-first-launch)。
 
 从源码构建的方法、所需前置依赖以及实时开发窗口，参见 [INSTALL.md](INSTALL.md)。
 

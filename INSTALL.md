@@ -2,7 +2,12 @@
 
 Download the latest build from the [releases page](https://github.com/opencapx/OpenCapX/releases/latest): a `.dmg` for macOS (Apple Silicon), an `x64-setup.exe` or `.msi` for Windows, and `.deb` / `.rpm` / `.AppImage` for Linux. Each asset carries a `sha256` digest on its details page, and the release includes a signed `latest.json` updater manifest.
 
-The macOS builds are not code-signed or notarized, and will stay that way until there is a commercial reason to buy an Apple Developer membership. If Gatekeeper blocks the first launch, right-click the app and choose Open, or run `xattr -dr com.apple.quarantine /Applications/OpenCapX.app` after copying it to Applications.
+## macOS first launch
+
+The macOS builds are not code-signed or notarized, and will stay that way until there is a commercial reason to buy an Apple Developer membership. Gatekeeper will therefore show a "Apple cannot check it for malicious software" dialog on the first launch. **This is expected, not malware.** On recent macOS versions the old right-click → Open bypass no longer works; do one of these instead:
+
+1. **Terminal** (after copying the app to `/Applications`): `/usr/bin/xattr -cr /Applications/OpenCapX.app` — the full path matters, some setups have a different `xattr` in `PATH` that lacks `-r`.
+2. **System Settings** → Privacy & Security → scroll to the bottom → an "OpenCapX was blocked" row → **Open Anyway**.
 
 ## The `opencapx` command
 

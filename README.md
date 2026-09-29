@@ -111,7 +111,7 @@ Rules are layered — built-in (empty by default), global (`~/.opencapx/rules.js
 
 ### Install
 
-Download the latest build from the [releases page](https://github.com/opencapx/OpenCapX/releases/latest): a `.dmg` for macOS (Apple Silicon), an `x64-setup.exe` or `.msi` for Windows, and `.deb` / `.rpm` / `.AppImage` for Linux. The macOS builds are not code-signed or notarized; if Gatekeeper blocks the first launch, right-click the app and choose Open.
+Download the latest build from the [releases page](https://github.com/opencapx/OpenCapX/releases/latest): a `.dmg` for macOS (Apple Silicon), an `x64-setup.exe` or `.msi` for Windows, and `.deb` / `.rpm` / `.AppImage` for Linux. The macOS builds are not code-signed or notarized, so Gatekeeper shows a "cannot be checked for malicious software" dialog on the first launch — this is expected, not malware (buying an Apple Developer membership is deferred until there is a commercial reason). To open: run `/usr/bin/xattr -cr /Applications/OpenCapX.app` in a terminal after copying the app to Applications, or System Settings → Privacy & Security → scroll down → **Open Anyway**. See [INSTALL.md](INSTALL.md#macos-first-launch).
 
 Build from source, the prerequisites, and the live development window are in [INSTALL.md](INSTALL.md).
 

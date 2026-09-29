@@ -110,7 +110,7 @@ Các quy tắc được xếp lớp, gồm built-in (mặc định rỗng), glob
 
 ### Cài đặt
 
-Tải bản dựng mới nhất từ [trang releases](https://github.com/opencapx/OpenCapX/releases/latest): `.dmg` cho macOS (Apple Silicon), `x64-setup.exe` hoặc `.msi` cho Windows, và `.deb` / `.rpm` / `.AppImage` cho Linux. Các bản dựng macOS chưa được ký code hay notarize; nếu Gatekeeper chặn lần khởi chạy đầu tiên, hãy nhấp chuột phải vào ứng dụng và chọn Open.
+Tải bản dựng mới nhất từ [trang releases](https://github.com/opencapx/OpenCapX/releases/latest): `.dmg` cho macOS (Apple Silicon), `x64-setup.exe` hoặc `.msi` cho Windows, và `.deb` / `.rpm` / `.AppImage` cho Linux. Các bản dựng macOS chưa được ký code hay notarize, nên lần đầu mở ứng dụng Gatekeeper sẽ hiện cảnh báo "không thể kiểm tra phần mềm độc hại" — đây là hành vi dự kiến, không phải virus (chưa mua Apple Developer membership vì chưa có nhu cầu thương mại). Cách mở: chạy `/usr/bin/xattr -cr /Applications/OpenCapX.app` trong terminal sau khi sao chép ứng dụng vào Applications, hoặc vào Cài đặt hệ thống → Quyền riêng tư & Bảo mật → cuộn xuống dưới → nhấn **Open Anyway**. Xem thêm [INSTALL.md](INSTALL.md#macos-first-launch).
 
 Cách build từ mã nguồn, các yêu cầu tiên quyết, và cửa sổ phát triển trực tiếp nằm trong [INSTALL.md](INSTALL.md).
 
