@@ -17,7 +17,7 @@ pub const EVENT_RETENTION_DAYS: u64 = 14;
 pub fn with_store<R>(f: impl FnOnce(&mut StoreEnum) -> R) -> Option<R> {
     let store = crate::core::shared_store()?;
     let mut guard = store.lock().ok()?;
-    Some(f(&mut *guard))
+    Some(f(&mut guard))
 }
 
 pub fn open_default() -> StoreEnum {

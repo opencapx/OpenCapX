@@ -515,7 +515,7 @@ fn validate(value: Value, schema: &Value) -> Result<(), String> {
     }
     if let Some(enum_) = schema.get("enum").and_then(|e| e.as_array()) {
         let allowed: Vec<&Value> = enum_.iter().collect();
-        if !allowed.iter().any(|v| *v == &value) {
+        if !allowed.contains(&&value) {
             return Err(format!("value not in enum {:?}", allowed));
         }
     }

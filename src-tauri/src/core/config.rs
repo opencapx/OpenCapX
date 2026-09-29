@@ -5,7 +5,7 @@
 //! without fighting SQLite over shared storage; the reverse RPC `config.get/set` lets plugins read their own,
 //! and tauri commands let the frontend settings page edit them.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -132,7 +132,7 @@ pub fn reset(plugin_id: &str) -> std::io::Result<()> {
 /// List all plugin ids that have config (by looking at `~/.opencapx/config/*.json`).
 pub fn list_plugins() -> Vec<String> {
     let dir = config_dir();
-    let Ok(mut read_dir) = fs::read_dir(&dir) else {
+    let Ok(read_dir) = fs::read_dir(&dir) else {
         return Vec::new();
     };
     let mut out: Vec<String> = read_dir
@@ -388,6 +388,7 @@ pub struct PluginConfigEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     static COUNTER: AtomicUsize = AtomicUsize::new(0);

@@ -80,7 +80,7 @@ pub fn compute_backoff_ms(attempt: u32, initial_ms: u32) -> u64 {
     if attempt == 0 {
         return 0;
     }
-    let shift = (attempt - 1).min(10) as u32;
+    let shift = (attempt - 1).min(10);
     let factor = 1u64 << shift;
     let raw = (initial_ms as u64).saturating_mul(factor);
     raw.min(30_000)

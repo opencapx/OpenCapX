@@ -97,7 +97,10 @@ pub(crate) fn log_line(plugin_id: &str, line: &str) {
     {
         let _ = writeln!(f, "{}", line);
     }
-    if LOG_LINES.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % LOG_ROTATE_EVERY == 0 {
+    if LOG_LINES
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        .is_multiple_of(LOG_ROTATE_EVERY)
+    {
         let _ = crate::core::retention::rotate_logs();
     }
 }

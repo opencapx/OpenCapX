@@ -114,7 +114,7 @@ impl SubscriptionRegistry {
 /// `core.event` JSON-RPC notifications to subscriber plugins' stdin. It only pushes, never parses responses.
 pub fn spawn_fanout(bus: Arc<super::event::EventBus>, mgr: Arc<super::plugin::PluginManager>) {
     std::thread::spawn(move || {
-        let mut rx = bus.subscribe();
+        let rx = bus.subscribe();
         loop {
             match rx.recv() {
                 Ok(ev) => {

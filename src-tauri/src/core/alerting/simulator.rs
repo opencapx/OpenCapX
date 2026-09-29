@@ -173,7 +173,7 @@ pub fn simulate_ack(source: &str, now_ts: u64) -> Option<AckHitDto> {
 pub fn simulate_dedup(
     source: &str,
     payload: &serde_json::Value,
-    now_secs: u64,
+    _now_secs: u64,
 ) -> Option<DedupHitDto> {
     let cfg = load_config();
     let min_interval = cfg.min_interval_secs as u64;

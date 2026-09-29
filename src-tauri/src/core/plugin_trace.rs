@@ -175,7 +175,7 @@ pub fn list_sessions(plugin_id: &str) -> Vec<TraceSummary> {
                     f.seek(SeekFrom::Start(off)).ok()?;
                     f.read_to_end(&mut buf).ok()?;
                     let txt = String::from_utf8_lossy(&buf);
-                    let last = txt.lines().filter(|s| !s.is_empty()).last()?;
+                    let last = txt.lines().rfind(|s| !s.is_empty())?;
                     serde_json::from_str::<TraceLine>(last).ok().map(|l| l.ts)
                 })
         } else {

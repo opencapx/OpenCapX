@@ -97,7 +97,7 @@ pub fn lock(_input: &Value) -> Result<Value, String> {
         }
         let src = r#"tell application "System Events" to keystroke "q" using {command down, control down}"#;
         let _ = super::appctl::osascript_ok(src, POWER_TIMEOUT, "lock")?;
-        return Ok(json!({ "ok": true }));
+        Ok(json!({ "ok": true }))
     }
     #[cfg(target_os = "linux")]
     return run(

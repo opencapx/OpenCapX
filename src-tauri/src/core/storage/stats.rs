@@ -92,7 +92,7 @@ impl Storage {
         }
         let mut out: Vec<CapabilityStat> = groups
             .into_iter()
-            .map(|((capability, plugin_id), mut samples)| {
+            .map(|((capability, plugin_id), samples)| {
                 let last_used_at = last_used
                     .remove(&(capability.clone(), plugin_id.clone()))
                     .unwrap_or(0);

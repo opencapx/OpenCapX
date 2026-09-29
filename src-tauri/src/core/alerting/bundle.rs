@@ -232,7 +232,7 @@ pub fn import_alerting_bundle(
     }
     // acks: reuse the save_ack helper (already exists, written in Phase 50; check the name)
     for a in doc.acks {
-        let _ = save_ack(a).map_err(|e| format!("bundle ack: {}", e))?;
+        save_ack(a).map_err(|e| format!("bundle ack: {}", e))?;
         summary.acks += 1;
     }
     // Phase 67 — the recipients section is truly persisted (upserted one by one; kind must pass the whitelist)
@@ -441,7 +441,7 @@ pub fn verify_bundle(signed_yaml: &str) -> Result<(), String> {
 /// Decode a hex string of the form "xx xx xx" back to bytes (supports plain hex and space-separated formats).
 fn decode_hex(s: &str) -> Result<Vec<u8>, String> {
     let s = s.trim();
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err(format!("hex string odd length: {}", s.len()));
     }
     let mut out = Vec::with_capacity(s.len() / 2);
@@ -480,9 +480,7 @@ pub(crate) fn split_signature(signed_yaml: &str) -> Result<(&str, String), Strin
     } else {
         rest
     };
-    let end = rest
-        .find(|c: char| c == '"' || c == '\n' || c == ' ')
-        .unwrap_or(rest.len());
+    let end = rest.find(['"', '\n', ' ']).unwrap_or(rest.len());
     let sig = rest[..end].to_string();
     Ok((body, sig))
 }

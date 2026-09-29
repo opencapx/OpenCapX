@@ -12,7 +12,6 @@
 //! - EventBus / kill_switch / settings.json are all process-level shared and do not switch with the profile.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -392,7 +391,7 @@ fn quarantine_db(path: &Path, reason: &str) -> Option<Quarantine> {
 pub fn open_profile_store(name: &str) -> (super::storage::StoreEnum, Option<Quarantine>) {
     let path = db_path_for(name);
     match try_open_checked(&path) {
-        Ok(store) => return (super::storage::StoreEnum::Db(store), None),
+        Ok(store) => (super::storage::StoreEnum::Db(store), None),
         Err(reason) => {
             let q = quarantine_db(&path, &reason);
             match try_open_checked(&path) {
@@ -453,6 +452,7 @@ pub fn write_db_recovery_notice(q: &Quarantine) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
 

@@ -80,8 +80,11 @@ pub mod verify;
 pub mod vision;
 pub mod windowctl;
 
-use std::sync::{Mutex, OnceLock, RwLock};
+use std::sync::{OnceLock, RwLock};
 use storage::SharedStore;
+
+#[cfg(test)]
+use std::sync::Mutex;
 
 pub use config::PluginConfigEntry;
 

@@ -104,7 +104,7 @@ pub(crate) fn spawn_pet_hover_tracker(app: tauri::AppHandle) {
             // re-assert "visible on all Spaces" every ~2s: once the window lands on another Space,
             // the current desktop cannot see the pet, and win.show() cannot bring it back.
             tick = tick.wrapping_add(1);
-            if tick % 30 == 0 {
+            if tick.is_multiple_of(30) {
                 let _ = w.set_visible_on_all_workspaces(true);
             }
             let (Ok(cursor), Ok(pos)) = (app.cursor_position(), w.outer_position()) else {

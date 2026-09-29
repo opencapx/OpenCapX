@@ -19,7 +19,7 @@ pub(crate) fn resolve_market_target(
     // M3: if registry has it → registry is authoritative (version selection includes publisher/revocation filtering);
     // not listed or registry unavailable → marketplace (legacy channel).
     if let Some(idx) = crate::core::registry::load_offline() {
-        if idx.entries.iter().any(|e| &e.id == id) {
+        if idx.entries.iter().any(|e| e.id == id) {
             return crate::core::registry::select_version(
                 &idx,
                 id,

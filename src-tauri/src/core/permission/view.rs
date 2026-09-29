@@ -54,7 +54,6 @@ pub fn view(
                         Ok(())
                     })
                     .map(|_| ())
-                    .map_err(|e| e)
                 });
             0
         })

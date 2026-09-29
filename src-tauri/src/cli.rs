@@ -194,14 +194,14 @@ pub(crate) fn run_pack(dir: &std::path::Path, key_arg: &str, key_id: &str, out: 
         .map(str::to_string)
         .unwrap_or_else(|| format!("{}-{}.ocplugin", id, version));
 
-    let seed = match read_seed_arg(&key_arg) {
+    let seed = match read_seed_arg(key_arg) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("pack: {}", e);
             std::process::exit(1);
         }
     };
-    match crate::core::pack::pack_dir(dir, &seed, &key_id, std::path::Path::new(&out)) {
+    match crate::core::pack::pack_dir(dir, &seed, key_id, std::path::Path::new(&out)) {
         Ok(digest) => {
             println!(
                 "{}",
@@ -274,7 +274,7 @@ pub(crate) fn run_verify(file: &str, trusted_keys: Option<&str>) -> ! {
 /// M3 — sign the registry index with the official signer: inject/overwrite `indexSignature`.
 /// Default output = index.json in the same directory as the input (hosting convention).
 pub(crate) fn run_sign_index(input: &str, key_arg: &str, key_id: &str, out: Option<&str>) -> ! {
-    let seed = match read_seed_arg(&key_arg) {
+    let seed = match read_seed_arg(key_arg) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("sign-index: {}", e);
@@ -288,7 +288,7 @@ pub(crate) fn run_sign_index(input: &str, key_arg: &str, key_id: &str, out: Opti
             std::process::exit(1);
         }
     };
-    let signed = match crate::core::registry::sign_index(&raw, &seed, &key_id) {
+    let signed = match crate::core::registry::sign_index(&raw, &seed, key_id) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("sign-index: {}", e);
@@ -324,7 +324,7 @@ pub(crate) fn run_verify_package(file: &str, keys: Option<&str>, index: Option<&
     }
     let index = match index {
         Some(p) => {
-            let raw = match std::fs::read(&p) {
+            let raw = match std::fs::read(p) {
                 Ok(b) => b,
                 Err(e) => {
                     eprintln!("verify-package: failed to read index {}: {}", p, e);

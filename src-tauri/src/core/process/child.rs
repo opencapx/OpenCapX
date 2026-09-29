@@ -135,11 +135,11 @@ impl PluginProcess {
         let stdin = child
             .stdin
             .take()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no stdin"))?;
+            .ok_or_else(|| std::io::Error::other("no stdin"))?;
         let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no stdout"))?;
+            .ok_or_else(|| std::io::Error::other("no stdout"))?;
         let stdin: Arc<Mutex<ChildStdin>> = Arc::new(Mutex::new(stdin));
 
         // stderr → plugin log file + EventBus (consumed live by SSE/admin/settings audit)
@@ -154,7 +154,7 @@ impl PluginProcess {
                             let n = DROPPED_FRAMES
                                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                                 + 1;
-                            if n == 1 || n % 100 == 0 {
+                            if n == 1 || n.is_multiple_of(100) {
                                 log_line(
                                     &pid,
                                     &format!("[core] dropped oversized stderr line (#{})", n),
@@ -193,7 +193,7 @@ impl PluginProcess {
                     LineOutcome::Dropped => {
                         let n =
                             DROPPED_FRAMES.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-                        if n == 1 || n % 100 == 0 {
+                        if n == 1 || n.is_multiple_of(100) {
                             log_line(
                                 &trace_pid,
                                 &format!("[core] dropped oversized plugin frame (#{})", n),

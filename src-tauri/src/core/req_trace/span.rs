@@ -4,7 +4,7 @@
 use super::*;
 
 thread_local! {
-    static CTX: RefCell<Option<Ctx>> = RefCell::new(None);
+    static CTX: RefCell<Option<Ctx>> = const { RefCell::new(None) };
 }
 
 /// thread-local trace context. stack[0] is always the root span ("s0"); child spans are pushed,

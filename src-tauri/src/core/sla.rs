@@ -96,7 +96,7 @@ pub fn load_config(store: &SharedStore) -> SlaConfig {
     let raw: Option<String> = store
         .lock()
         .ok()
-        .and_then(|mut s| {
+        .and_then(|s| {
             s.with_conn_ref(|c| {
                 c.query_row(
                     "SELECT value FROM sla_config WHERE sk = ?1",

@@ -146,7 +146,7 @@ fn main() {
                     if event.state != ShortcutState::Pressed {
                         return;
                     }
-                    let combo = shortcut.clone().into_string();
+                    let combo = (*shortcut).into_string();
                     // file is the source of truth; disabled bindings are already unregistered at the OS layer, with an extra enabled guard here as a fallback.
                     // read the file once per keypress — a low-frequency operation, accept this cost (see the task header comment).
                     let actions: Vec<core::hotkey::HotkeyAction> = core::hotkey::store()
@@ -260,7 +260,7 @@ fn main() {
                 let tray_app = handle.clone();
                 let tray_bus = bus.clone();
                 std::thread::spawn(move || {
-                    let mut rx = tray_bus.subscribe();
+                    let rx = tray_bus.subscribe();
                     while let Ok(e) = rx.recv() {
                         if !(e.kind.starts_with("agent.")
                             || e.kind.starts_with("pet.")

@@ -6,7 +6,7 @@
 
 use arboard::Clipboard;
 use serde_json::{json, Value};
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 /// Process-level clipboard lock: concurrent access to arboard's macOS backend (NSPasteboard) crashes
 /// (ObjC runtime abort). Multi-threaded /rpc calls and parallel tests must all serialize through here.

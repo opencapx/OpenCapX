@@ -11,26 +11,15 @@ pub(crate) const POLL_RETRY_SECS: u64 = 30;
 
 pub(crate) const MAX_FETCH_PER_SCAN: usize = 50;
 
-/// One toggle for each of the four alert sources.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// One toggle for each of the four alert sources. The derived `Default` is all-false:
+/// the user ticks each one after enabling the webhook.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WebhookSources {
     pub metrics_exceeded: bool,
     pub sla_violated: bool,
     pub kill_switch_engaged: bool,
     pub plugin_crashed: bool,
-}
-
-impl Default for WebhookSources {
-    fn default() -> Self {
-        // all false — the user ticks each one after enabling the webhook
-        Self {
-            metrics_exceeded: false,
-            sla_violated: false,
-            kill_switch_engaged: false,
-            plugin_crashed: false,
-        }
-    }
 }
 
 /// Webhook config. When `enabled = false` all fields are advisory and no request is sent.

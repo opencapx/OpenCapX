@@ -442,7 +442,7 @@ pub fn spawn_monitor() {
     if ONCE.set(()).is_err() {
         return;
     }
-    std::thread::spawn(|| monitor_loop());
+    std::thread::spawn(monitor_loop);
 }
 
 fn monitor_loop() {

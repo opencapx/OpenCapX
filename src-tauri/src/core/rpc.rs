@@ -619,7 +619,7 @@ fn execute(input: &Value, agent_id: &str) -> String {
         json!({ "capability": capability }),
     );
     let started = std::time::Instant::now();
-    let out = match super::capability::execute(capability, &input_obj, Some(agent_id)) {
+    match super::capability::execute(capability, &input_obj, Some(agent_id)) {
         Ok(out) => {
             sp.end(
                 true,
@@ -636,8 +636,7 @@ fn execute(input: &Value, agent_id: &str) -> String {
             );
             capability_error_body(&e)
         }
-    };
-    out
+    }
 }
 
 #[cfg(test)]
