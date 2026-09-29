@@ -132,7 +132,7 @@ pub fn list_failed_deliveries(state: Option<&str>, limit: usize) -> Vec<FailedDe
         return Vec::new();
     };
     if let StoreEnum::Db(db) = &*s {
-        db.list_failed_deliveries(state, limit.max(1).min(1000))
+        db.list_failed_deliveries(state, limit.clamp(1, 1000))
     } else {
         Vec::new()
     }

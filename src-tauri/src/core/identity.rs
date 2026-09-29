@@ -349,6 +349,7 @@ pub fn list(store: &SharedStore) -> Vec<AgentDto> {
 ///   2. agent_permissions override → that decision (per-agent still beats global granted/ask)
 ///   3. global granted / ask     → that decision (acts only as the new default)
 ///   4. otherwise                → built-in default table
+///
 /// Lock discipline: take the lock, read the row, release the guard as the `let` ends,
 /// then call global_override / default_decision_for which lock on their own
 /// (re-entering on the same thread would deadlock).

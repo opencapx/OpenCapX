@@ -208,7 +208,7 @@ pub(crate) fn list_plugin_ratings(
     store
         .lock()
         .ok()
-        .map(|s| s.list_ratings(&id, limit.max(1).min(500)))
+        .map(|s| s.list_ratings(&id, limit.clamp(1, 500)))
         .unwrap_or_default()
 }
 
@@ -268,7 +268,7 @@ pub(crate) fn list_sla_violations(limit: usize) -> Vec<crate::core::sla::SlaViol
     let Some(store) = crate::core::shared_store() else {
         return Vec::new();
     };
-    crate::core::sla::list_violations(&store, limit.max(1).min(1000))
+    crate::core::sla::list_violations(&store, limit.clamp(1, 1000))
 }
 
 /// Phase 37 — manually run a probe once (retry for a plugin that already `probe_failed`).

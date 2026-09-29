@@ -811,8 +811,7 @@ fn safe_mode_blocks_start_before_manifest_lookup() {
     crate::core::safe_mode::set_active(true);
     let err = PluginManager::shared()
         .start("com.example.safe-mode-probe")
-        .err()
-        .expect("start must be rejected in safe mode");
+        .expect_err("start must be rejected in safe mode");
     assert!(err.contains("safe mode"), "unexpected error: {err}");
     crate::core::safe_mode::set_active(false);
 }
@@ -5446,7 +5445,8 @@ fn core_log_reverse_publishes_plugin_log_event() {
     std::fs::write(
         plugin_dir.join("opencapx-plugin.json"),
         r#"{"id":"com.opencapx.clog","name":"CL","version":"0.1.0","apiVersion":"1","type":"pet","runtime":{"type":"process","command":"python3","args":["clog.py"]}}"#,
-    );
+    )
+    .unwrap();
     std::fs::write(
             plugin_dir.join("clog.py"),
             r#"import json, sys
@@ -5592,7 +5592,8 @@ fn uninstall_cleans_config_and_emits_event() {
     std::fs::write(
         plugin_dir.join("opencapx-plugin.json"),
         r#"{"id":"com.opencapx.echo-uninst","name":"EchoU","description":"echo for uninstall test","version":"0.1.0","apiVersion":"1","type":"pet","runtime":{"type":"process","command":"python3","args":["echo.py"]}}"#,
-    );
+    )
+    .unwrap();
     std::fs::write(
             plugin_dir.join("echo.py"),
             r#"import json, sys

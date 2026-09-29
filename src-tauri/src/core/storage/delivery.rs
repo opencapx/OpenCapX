@@ -43,7 +43,7 @@ impl Storage {
         state: Option<&str>,
         limit: usize,
     ) -> Vec<FailedDeliveryRow> {
-        let limit = limit.max(1).min(2000);
+        let limit = limit.clamp(1, 2000);
         let (sql, use_state): (&str, bool) = match state {
             Some(s) if !s.is_empty() => (
                 "SELECT id, source, url, payload, first_attempt_ts, last_attempt_ts,

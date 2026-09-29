@@ -9,6 +9,7 @@
 //! - Only normal messages with text (tapbacks/stickers etc. with associated_message_type ≠ 0
 //!   are skipped); attachment content is not read in v1
 //! - The `date` column is Apple epoch (2001-01-01) nanoseconds, converted to Unix seconds when returned
+//!
 //! macOS-only; non-macOS reports an honest error, plugins can override.
 
 use serde_json::{json, Value};

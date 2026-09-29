@@ -24,10 +24,10 @@ impl TemplateContentType {
 ///   - `{{path}}` — top-level fields (source / severity / timestamp / event_id / schema_version / tags)
 ///   - `{{payload.x.y.z}}` — dot-path JSON field access (numbers / bool / null go through JSON serialization)
 ///   - `{{#if EXPR}}BODY{{/if}}` — conditional block
-///       EXPR forms:
-///         `severity == "critical"` / `payload.code == 500` — equality comparison (supports string / numeric literals)
-///         `payload.x` / `severity` — truthiness check (non-empty string / non-zero number / true / non-empty array / non-empty object)
-///         `!EXPR` — negation
+///     - EXPR forms:
+///     - `severity == "critical"` / `payload.code == 500` — equality comparison (supports string / numeric literals)
+///     - `payload.x` / `severity` — truthiness check (non-empty string / non-zero number / true / non-empty array / non-empty object)
+///     - `!EXPR` — negation
 ///   - `{{#if EXPR}}A{{else}}B{{/if}}` — if / else
 ///   - `{{#each path}}BODY{{/each}}` — iterate an array; inside the block `{{this}}` yields the element and `{{this.x}}` a field
 ///

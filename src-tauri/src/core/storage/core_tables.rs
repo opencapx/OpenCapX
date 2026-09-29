@@ -283,7 +283,7 @@ impl Storage {
                 publisher_id TEXT,
                 source       TEXT NOT NULL
             );",
-        );
+        )?;
         // Phase 31: silent migration of old tables (ALTER on an existing column fails and is ignored).
         let _ = self.conn.execute_batch(
             "ALTER TABLE capability_stats ADD COLUMN result TEXT NOT NULL DEFAULT 'ok';
@@ -578,7 +578,7 @@ impl Storage {
                 decision TEXT NOT NULL,
                 updated_at INTEGER NOT NULL
              )",
-        );
+        )?;
         Ok(())
     }
 

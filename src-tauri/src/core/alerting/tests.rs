@@ -3530,7 +3530,7 @@ fn validate_route_rejects_recipients_count_over_limit() {
     };
     let res = validate_route(&rule);
     assert!(res.is_err(), "33 recipients should be rejected");
-    let msg = res.err().expect("error");
+    let msg = res.expect_err("error");
     assert!(msg.contains("too many") || msg.contains("32"), "got: {msg}");
 }
 
@@ -3569,7 +3569,7 @@ fn recipient_kind_whitelist_accepts_known_kinds() {
 fn recipient_kind_whitelist_rejects_unknown_kind() {
     let res = validate_recipient_kind("cmd:rce");
     assert!(res.is_err(), "cmd:rce must be rejected");
-    let msg = res.err().expect("error");
+    let msg = res.expect_err("error");
     assert!(
         msg.contains("not in whitelist") || msg.contains("whitelist"),
         "got: {msg}"
@@ -3594,7 +3594,7 @@ fn save_recipient_persists_to_storage_and_round_trips() {
 fn save_recipient_rejects_empty_name() {
     let res = save_recipient(make_recipient("", "  ", "log:stderr"));
     assert!(res.is_err(), "empty name must be rejected");
-    assert!(res.err().expect("e").contains("name"));
+    assert!(res.expect_err("e").contains("name"));
 }
 
 #[test]
@@ -3606,7 +3606,7 @@ fn save_recipient_rejects_duplicate_name() {
     save_recipient(make_recipient("", "uniq", "log:stderr")).expect("save 1");
     let res = save_recipient(make_recipient("", "uniq", "log:file"));
     assert!(res.is_err(), "duplicate name must be rejected");
-    let msg = res.err().expect("e");
+    let msg = res.expect_err("e");
     assert!(
         msg.contains("already exists") || msg.contains("UNIQUE"),
         "got: {msg}"
@@ -3708,7 +3708,7 @@ recipients:
     let signed = sign_bundle(yaml).expect("sign");
     let res = import_alerting_bundle(&signed, None);
     assert!(res.is_err(), "malicious recipient must be rejected");
-    let msg = res.err().expect("e");
+    let msg = res.expect_err("e");
     assert!(
         msg.contains("whitelist") || msg.contains("cmd:rce"),
         "got: {msg}"

@@ -9,6 +9,7 @@
 //!   (the title may contain any characters; splitn(7) keeps it intact): proc|front|x|y|w|h|title
 //! - focus: `set frontmost of process "P" to true` + optionally, for a named window,
 //!   `perform action "AXRaise"` (a failed raise does not fail the whole call — frontmost is enough)
+//!
 //! Linux/Windows are not done in v1 (honest error, plugins can override).
 
 use serde_json::{json, Value};

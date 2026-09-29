@@ -157,9 +157,9 @@ mod tests {
         let tag = std::process::id();
         let (k1, k2) = (format!("k1-{tag}"), format!("k2-{tag}"));
         let r = SubscriptionRegistry::shared();
-        r.subscribe("a", &k1);
-        r.subscribe("b", &k1);
-        r.subscribe("a", &k2);
+        r.subscribe("a", &k1).expect("subscribe a to k1");
+        r.subscribe("b", &k1).expect("subscribe b to k1");
+        r.subscribe("a", &k2).expect("subscribe a to k2");
         let mut s1 = r.subscribers(&k1);
         s1.sort();
         assert_eq!(s1, vec!["a".to_string(), "b".to_string()]);

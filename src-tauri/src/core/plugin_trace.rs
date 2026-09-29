@@ -189,7 +189,7 @@ pub fn list_sessions(plugin_id: &str) -> Vec<TraceSummary> {
             line_count,
         });
     }
-    out.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+    out.sort_by_key(|s| std::cmp::Reverse(s.started_at));
     out
 }
 

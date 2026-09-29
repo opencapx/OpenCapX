@@ -136,7 +136,7 @@ pub fn list_sessions() -> Vec<ReplaySession> {
             })
         })
         .collect();
-    out.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+    out.sort_by_key(|e| std::cmp::Reverse(e.started_at));
     out
 }
 

@@ -97,6 +97,7 @@ pub fn validate_endpoint(ep: &WebhookEndpoint) -> Result<(), String> {
 ///   - `*` or `""` → matches all sources
 ///   - `prefix.*` → matches a prefix start + at least one character after `.`
 ///   - `exact` → exact match
+///
 /// Order: iterate in Vec order, **first-match wins** (consistent with the Phase 51 route DSL).
 pub fn endpoint_severity_override_for(
     source: &str,
