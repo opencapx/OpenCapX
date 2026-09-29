@@ -720,3 +720,23 @@ fn order_key_matches_sort_sessions() {
     let ids = |rows: &Vec<Session>| rows.iter().map(|s| s.id.clone()).collect::<Vec<_>>();
     assert_eq!(ids(&by_key), ids(&v));
 }
+
+/// payload_names_session gates the session-row write: it must honor each agent's field
+/// conventions (claude's session_id, cursor's conversation_id) and reject bodies that
+/// name no session at all.
+#[test]
+fn payload_names_session_honors_per_agent_keys() {
+    assert!(payload_names_session(
+        r#"{"session_id":"abc","hook_event_name":"PreToolUse"}"#,
+        "claude"
+    ));
+    assert!(payload_names_session(
+        r#"{"conversation_id":"c1","hookEventName":"preToolUse"}"#,
+        "cursor"
+    ));
+    assert!(!payload_names_session(
+        r#"{"hook_event_name":"PreToolUse","cwd":"/tmp","tool_input":{"command":"ls"}}"#,
+        "omp"
+    ));
+    assert!(!payload_names_session("not json", "claude"));
+}

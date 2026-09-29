@@ -116,6 +116,17 @@ pub(crate) fn parse_hook_fields(v: &serde_json::Value, agent: &str) -> HookField
     }
 }
 
+/// Whether the payload names a session under the agent's field conventions. Id-less
+/// payloads (a host's pre-execution rewrite probe, e.g. omp's tool_call check) must not
+/// become session rows: the fallback id is unique per event, so such a row can never
+/// transition to done and only piles up as a phantom "working" session until its TTL.
+pub(crate) fn payload_names_session(body: &str, agent: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| parse_hook_fields(&v, agent).session_id)
+        .is_some()
+}
+
 /// Inject the agent and send time into the hook payload and hand it to Core for parsing as-is.
 ///
 /// Why send the **raw payload** instead of a parsed DTO: the Core-side enrich needs
