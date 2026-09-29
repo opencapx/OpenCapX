@@ -175,7 +175,14 @@ pub fn ingest(
         "[ingest] id={} agent={} state={}",
         dto.id, dto.agent, dto.state
     );
-    let prev_session = store.lock().ok().and_then(|s| s.get(&dto.id));
+    // An id-less payload names no session (a rewrite probe — omp's tool_call check is the
+    // known one): skip the session-table interpretation entirely. The fallback id is unique
+    // per event, so a row could never transition to done and would only surface as a
+    // phantom "working" session until its TTL (16 "in progress" from one omp run, once).
+    let named_session = super::agent::payload_names_session(body, &dto.agent);
+    let prev_session = named_session
+        .then(|| store.lock().ok().and_then(|s| s.get(&dto.id)))
+        .flatten();
     let prev: Option<String> = prev_session
         .as_ref()
         .map(|old| super::agent::state_str(old.state).to_string());
@@ -198,8 +205,10 @@ pub fn ingest(
     }
     // The sort key travels with the event to the frontend: the frontend only compares keys, it does not reimplement the sort policy.
     dto.order = super::agent::order_key_for_dto(&dto);
-    if let Ok(mut s) = store.lock() {
-        s.upsert(dto_to_session(&dto));
+    if named_session {
+        if let Ok(mut s) = store.lock() {
+            s.upsert(dto_to_session(&dto));
+        }
     }
     // trace: hook events land in per-session trace files (alongside /rpc traces, aligned in time for the viewer).
     // Archive key = authenticated agent_id (the viewer queries by agent_id); anonymous falls back to kind — both keys
@@ -222,7 +231,7 @@ pub fn ingest(
     ));
     if let Some(h) = handle {
         let transitioned = prev.as_deref() != Some(dto.state.as_str());
-        if transitioned && (dto.state == "waiting" || dto.state == "done") {
+        if named_session && transitioned && (dto.state == "waiting" || dto.state == "done") {
             use tauri_plugin_notification::NotificationExt;
             // Notification copy follows the user language (the native copy tables live in core::i18n); the title uses the display name
             let locale = crate::read_settings_file()
@@ -313,6 +322,42 @@ mod tests {
         assert_eq!(agent_event_type("idle"), "agent.started");
     }
 
+    /// An id-less payload (a rewrite probe — omp's tool_call check is the shape) must not
+    /// mint a session row: the fallback id is unique per event, so the row can never reach
+    /// done and only accumulates as phantom "working" sessions until the TTL sweeps them.
+    /// The same body with a session_id lands normally.
+    #[test]
+    fn ingest_idless_payload_creates_no_session_row() {
+        let store: SharedStore = Arc::new(Mutex::new(crate::core::storage::StoreEnum::Mem(
+            crate::core::agent::SessionStore::new(),
+        )));
+        let bus = EventBus::new();
+        let _rx = bus.subscribe();
+        ingest(
+            None,
+            &store,
+            &bus,
+            r#"{"agent":"omp","hook_event_name":"PreToolUse","cwd":"/tmp/p","tool_name":"bash","tool_input":{"command":"ls"}}"#,
+            "omp",
+            None,
+        );
+        assert!(
+            store.lock().unwrap().all().is_empty(),
+            "an id-less payload must not create a session row"
+        );
+        ingest(
+            None,
+            &store,
+            &bus,
+            r#"{"agent":"omp","session_id":"omp:/tmp/p/s.jsonl","hook_event_name":"PreToolUse","cwd":"/tmp/p","tool_name":"bash","tool_input":{"command":"ls"}}"#,
+            "omp",
+            None,
+        );
+        let rows = store.lock().unwrap().all();
+        assert_eq!(rows.len(), 1, "the named variant lands as one row");
+        assert_eq!(rows[0].id, "omp:/tmp/p/s.jsonl");
+    }
+
     #[test]
     fn ingest_stores_without_handle() {
         let store: SharedStore = Arc::new(Mutex::new(crate::core::storage::StoreEnum::Mem(
@@ -324,7 +369,7 @@ mod tests {
             None,
             &store,
             &bus,
-            r#"{"agent":"codex","text":"running tool"}"#,
+            r#"{"agent":"codex","session_id":"s1","text":"running tool"}"#,
             "unknown",
             None,
         );
@@ -358,7 +403,7 @@ mod tests {
             None,
             &store,
             &bus,
-            r#"{"agent":"claude","event":"stop","text":"All set."}"#,
+            r#"{"agent":"claude","session_id":"s-done","event":"stop","text":"All set."}"#,
             "unknown",
             None,
         );

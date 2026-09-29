@@ -33,9 +33,14 @@ export default function (pi: any) {
       const input = event.input
       if (!input || typeof input.command !== "string" || !input.command) return
       const cwd = (ctx && ctx.cwd) || process.cwd()
+      // session_id must ride along: without it every tool_call check would mint a phantom
+      // "working" session (the core refuses id-less session rows, but then this event would
+      // not refresh the real session's state either — with it, the check updates it).
+      const file = ctx && ctx.sessionManager && ctx.sessionManager.getSessionFile ? ctx.sessionManager.getSessionFile() : null
       const p = spawnSync(BIN, ["hook", "--agent", AGENT], {
         input: JSON.stringify({
           hook_event_name: "PreToolUse",
+          session_id: "omp:" + (file || cwd),
           cwd: cwd,
           tool_name: "bash",
           tool_input: { command: input.command },
