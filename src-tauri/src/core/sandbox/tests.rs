@@ -217,6 +217,12 @@ fn unguarded_exit_maps_require_to_99() {
 /// and the rewrite side by the guard tests.
 #[test]
 fn cli_require_runs_when_the_backend_is_usable() {
+    // Easy to miss: on Windows this is a real strict-mode run, so it writes and revokes the
+    // `$HOME` read ACE like every other live proof.
+    #[cfg(windows)]
+    let _g = APPCONTAINER_LIVE_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     if !backend_ready() {
         eprintln!("skip: no sandbox backend on this machine");
         return;
@@ -991,7 +997,8 @@ fn installer_overlays_cover_existing_paths_only() {
 // ---------------------------------------------------------------------------
 
 use super::appcontainer::{
-    capabilities_for, deny_paths, grant_paths, profile_plan, DenyKind, INTERNET_CLIENT_SID,
+    capabilities_for, deny_paths, grant_paths, profile_plan, read_paths, DenyKind,
+    INTERNET_CLIENT_SID,
 };
 
 /// A throwaway home path. The mapping is asserted on the tail of each mapped path, so the test
@@ -1039,6 +1046,55 @@ fn appcontainer_grants_scratch_rw_and_installer_home_without_duplicates() {
         grant_paths(Mode::Installer, &scratch, &[], None),
         vec![scratch],
         "no resolvable home means no $HOME grant"
+    );
+}
+
+/// The read grant is strict-mode only, and only ever `$HOME` — the one place the lowbox cannot
+/// read without it. A `--rw` that already names the home suppresses it, because `SetEntriesInAclW`
+/// folds both entries for the same trustee into the single `GENERIC_ALL` ACE: writing a second
+/// entry would not add a second ACE to take back, and the read revoke strips by trustee, so it
+/// would remove the write grant that is still supposed to be standing.
+#[test]
+fn appcontainer_read_paths_grants_home_only_in_strict_mode() {
+    let scratch = PathBuf::from("/tmp/scratch");
+    let home = PathBuf::from("/tmp/home");
+    let other = PathBuf::from("/tmp/rw1");
+    assert_eq!(
+        read_paths(Mode::Strict, &scratch, &[], Some(&home)),
+        vec![home.clone()],
+        "strict mode must be able to read $HOME — that is the calibration the other two \
+         backends already meet"
+    );
+    assert_eq!(
+        read_paths(Mode::Strict, &scratch, &[], None),
+        Vec::<PathBuf>::new(),
+        "no resolvable home means nothing to grant reads on"
+    );
+    assert_eq!(
+        read_paths(Mode::Installer, &scratch, &[], Some(&home)),
+        Vec::<PathBuf>::new(),
+        "installer mode already holds GENERIC_ALL on $HOME; a second entry would not survive \
+         the merge"
+    );
+    assert_eq!(
+        read_paths(
+            Mode::Strict,
+            &scratch,
+            std::slice::from_ref(&home),
+            Some(&home)
+        ),
+        Vec::<PathBuf>::new(),
+        "a --rw naming $HOME is already a superset of the read grant"
+    );
+    assert_eq!(
+        read_paths(
+            Mode::Strict,
+            &scratch,
+            std::slice::from_ref(&other),
+            Some(&home)
+        ),
+        vec![home],
+        "an unrelated --rw does not cover $HOME"
     );
 }
 
@@ -1109,6 +1165,16 @@ fn appcontainer_plan_lists_grants_and_installer_denies() {
         "{strict}"
     );
     assert!(!strict.contains("deny GENERIC_ALL"), "{strict}");
+    // The strict read grant is part of what the run does, so it has to be reviewable.
+    assert!(
+        strict.contains("grant read+traverse"),
+        "strict mode must show the $HOME read grant:\n{strict}"
+    );
+    assert!(
+        strict.contains(&format!("+ {}", home.display())),
+        "{strict}"
+    );
+    assert!(strict.contains("unreachable:"), "{strict}");
 
     let installer = profile_plan(Mode::Installer, true, &scratch, &[], Some(&home));
     assert!(installer.contains(INTERNET_CLIENT_SID), "{installer}");
@@ -1119,6 +1185,10 @@ fn appcontainer_plan_lists_grants_and_installer_denies() {
     assert!(installer.contains("deny GENERIC_ALL"), "{installer}");
     assert!(installer.contains("secret"), "{installer}");
     assert!(installer.contains("persist"), "{installer}");
+    // Installer mode's $HOME grant is already a superset — a second read entry would merge into
+    // the same GENERIC_ALL ACE, so the plan must not promise one.
+    assert!(!installer.contains("grant read+traverse"), "{installer}");
+    assert!(installer.contains("unreachable:"), "{installer}");
 }
 
 /// The env policy now has a seam the Windows backend consumes directly (it hands
@@ -1146,6 +1216,18 @@ fn env_policy_filter_shapes_the_variable_list() {
 }
 
 // --- live AppContainer proofs (Windows only; the profile needs a real user session) ---
+
+/// Serializes every test that *runs* a guarded command, not just the ones that assert on ACLs.
+///
+/// Strict mode now writes and removes a read ACE on `$HOME` itself, and `SetEntriesInAclW`'s
+/// removal idiom strips by trustee: the revoke takes out every ACE for that SID, whatever mask it
+/// was. So two live tests running side by side would have test A's `Drop` delete the ACE test B's
+/// child is relying on, and `appcontainer_revokes_the_grant_on_rw_dirs` would see a `$HOME` that
+/// momentarily carries the SID even though it never ran installer mode. The same class of race
+/// already exists in production (two concurrent runs share one profile SID and one `$HOME`), which
+/// docs/rules.md documents; in the suite it is only a nuisance, so a lock is the right answer.
+#[cfg(windows)]
+static APPCONTAINER_LIVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// The profile is created once and reused; deriving its SID again must give the same answer, or
 /// every ACL written by a previous run would be pointing at a principal that no longer exists.
@@ -1177,6 +1259,9 @@ fn appcontainer_profile_sid_is_stable_across_runs() {
 #[cfg(windows)]
 #[test]
 fn appcontainer_forwards_exit_code() {
+    let _g = APPCONTAINER_LIVE_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     if !backend_ready() {
         eprintln!("skip: no sandbox backend on this machine");
         return;
@@ -1205,6 +1290,9 @@ fn appcontainer_forwards_exit_code() {
 #[cfg(windows)]
 #[test]
 fn appcontainer_blocks_writes_outside_scratch() {
+    let _g = APPCONTAINER_LIVE_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     if !backend_ready() {
         eprintln!("skip: no sandbox backend on this machine");
         return;
@@ -1233,6 +1321,9 @@ fn appcontainer_blocks_writes_outside_scratch() {
 #[cfg(windows)]
 #[test]
 fn appcontainer_blocks_network() {
+    let _g = APPCONTAINER_LIVE_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     if !backend_ready() {
         eprintln!("skip: no sandbox backend on this machine");
         return;
@@ -1269,6 +1360,9 @@ fn appcontainer_blocks_network() {
 #[cfg(windows)]
 #[test]
 fn appcontainer_revokes_the_grant_on_rw_dirs() {
+    let _g = APPCONTAINER_LIVE_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     if !backend_ready() {
         eprintln!("skip: no sandbox backend on this machine");
         return;
@@ -1304,4 +1398,87 @@ fn appcontainer_revokes_the_grant_on_rw_dirs() {
         rw.display()
     );
     let _ = std::fs::remove_dir_all(&rw);
+}
+
+/// The calibration, proved on the backend that used to be the exception: a strict command reads
+/// its own `$HOME` — the file is created *before* the run, so auto-inheritance has to carry the
+/// read ACE onto it — and still cannot write there. Before the read grant the first half of this
+/// failed, which is the whole point: reads are globally allowed on seatbelt and bwrap, and the
+/// plan is for all three backends to say the same thing.
+#[cfg(windows)]
+#[test]
+fn appcontainer_strict_reads_home_but_cannot_write_it() {
+    let _g = APPCONTAINER_LIVE_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if !backend_ready() {
+        eprintln!("skip: no sandbox backend on this machine");
+        return;
+    }
+    let sid = match appcontainer::profile_sid_string() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("skip: no usable AppContainer profile on this machine ({e})");
+            return;
+        }
+    };
+    // The very path `run` grants on, down to the canonicalization — a probe written under a
+    // different spelling of the same directory would not sit under the ACE.
+    let home = match crate::core::home_dir().map(|h| canonicalize_lossy(&h)) {
+        Some(h) => h,
+        None => {
+            eprintln!("skip: no home directory on this machine");
+            return;
+        }
+    };
+    let pid = std::process::id();
+    let probe = home.join(format!(".ocx-ro-read-probe-{pid}"));
+    let write_probe = home.join(format!(".ocx-ro-write-probe-{pid}"));
+    let _ = std::fs::remove_file(&probe);
+    let _ = std::fs::remove_file(&write_probe);
+    std::fs::write(&probe, b"hello\n").expect("probe file on the host, before the run");
+    assert!(
+        !appcontainer::acl_has_sid(&home, &sid),
+        "precondition: $HOME starts without the sandbox SID"
+    );
+
+    let before = unguarded_runs();
+    let read_code = run_cli(&[
+        "--".into(),
+        "cmd".into(),
+        "/c".into(),
+        format!("type \"{}\"", probe.display()),
+    ]);
+    assert_eq!(
+        unguarded_runs(),
+        before,
+        "the read run must not have degraded to the unguarded fallback"
+    );
+    assert_eq!(
+        read_code, 0,
+        "a strict command must be able to read its own $HOME"
+    );
+    assert!(
+        !appcontainer::acl_has_sid(&home, &sid),
+        "the read grant ACE must be gone from $HOME once the run ends"
+    );
+
+    let code = run_cli(&[
+        "--".into(),
+        "cmd".into(),
+        "/c".into(),
+        format!("echo pwn>\"{}\"", write_probe.display()),
+    ]);
+    assert_eq!(
+        unguarded_runs(),
+        before,
+        "the write run must not have degraded"
+    );
+    assert_ne!(code, 0, "a write into $HOME must fail");
+    assert!(
+        !write_probe.exists(),
+        "the read grant must not have turned $HOME writable"
+    );
+    let _ = std::fs::remove_file(&probe);
+    let _ = std::fs::remove_file(&write_probe);
 }

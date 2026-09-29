@@ -212,15 +212,23 @@ opencapx sandbox [--profile strict|installer] [--allow-net] [--rw <dir>]... [--e
   on Linux (seatbelt denies creation too; known divergence). **Windows**: AppContainer — the
   same kernel primitive Edge/Chrome use, no admin rights and no virtualization. A run creates
   (once, then reuses) the `OpenCapX.Sandbox` AppContainer profile, grants its SID `GENERIC_ALL`
-  on the scratch dir and the `--rw` dirs, and launches through `CreateProcessW` with a
-  `SECURITY_CAPABILITIES` attribute. The network fence is the capability list: a token with no
-  capabilities cannot open a socket at all, and installer mode (or `--allow-net`) adds the
-  well-known `internetClient` capability. Timeouts kill a Job Object, so the whole tree goes
-  with it. **Other platforms**: warn once and run unguarded.
+  on the scratch dir and the `--rw` dirs — plus, in strict mode, a read+traverse grant on
+  `$HOME` — and launches through `CreateProcessW` with a `SECURITY_CAPABILITIES` attribute. The
+  network fence is the capability list: a token with no capabilities cannot open a socket at all,
+  and installer mode (or `--allow-net`) adds the well-known `internetClient` capability. Timeouts
+  kill a Job Object, so the whole tree goes with it. **Other platforms**: warn once and run
+  unguarded.
 - **Windows deviations from the macOS/Linux calibration** — known, not bugs:
-  - **Reads are fenced too.** A lowbox token carries no user SID, so the whole user profile is
-    unreadable unless granted. That is *stricter* than the "reads globally allowed" header
-    seatbelt is calibrated to; a strict-mode command that reads its own config will fail.
+  - **Reads stop at the user profile.** Strict mode grants read+traverse on `$HOME` (the mask is
+    `FILE_GENERIC_READ | FILE_TRAVERSE`, not `GENERIC_READ`: a lowbox token has no
+    `SeChangeNotifyPrivilege` to bypass the traverse check, so without that bit every open under
+    the granted tree still fails on the directory). Everything outside `$HOME` — another user's
+    tree, the volume root, removable media — stays unreadable, where seatbelt's
+    `(allow file-read*)` allows all of it. System directories are *not* part of the gap: the
+    token carries the well-known `ALL APPLICATION PACKAGES` SID, and the standard ACLs already
+    grant it read + execute. The read grant is **best-effort**: if the ACL write fails the run
+    warns and continues with the write fence fully intact, because the calibration treats reads
+    as outside what this layer guards.
   - **A second writable area always exists** — the profile's own package folder under
     `%LOCALAPPDATA%\Packages\OpenCapX.Sandbox`.
   - **The installer deny list is enforced wholesale.** A lowbox grant is all-or-nothing, so
@@ -233,6 +241,14 @@ opencapx sandbox [--profile strict|installer] [--allow-net] [--rw <dir>]... [--e
     every ACE it added from every path it granted, so a `--rw` directory does not stay writable
     by the sandbox afterwards. A file the sandbox *created* inside a granted tree keeps the
     sandbox SID on its own DACL; sweeping that would mean walking the tree after every run.
+  - **Concurrent runs share one set of grants, and the revoke strips by trustee.** The profile
+    SID is machine-wide and the ACLs live on the real paths, so two overlapping runs grant and
+    revoke the same ACEs: the first one to finish takes the grant the other is still relying on
+    (strict mode's `$HOME` read grant, installer mode's `$HOME` grant, a shared `--rw` dir).
+    The effect is a run that loses read access to the user profile mid-flight, or a write denied
+    while a sibling run is still going — never a grant that outlives both runs. Serializing runs
+    would need a machine-wide lock the runner does not have; the test suite serializes its live
+    proofs instead.
   - `TEMP`/`TMP` are redirected into the scratch dir — the lowbox cannot write the user's
     `%TEMP%`, and a tool with nowhere to put its temp files is broken. This mirrors the
     `TMPDIR` write the seatbelt profile grants.

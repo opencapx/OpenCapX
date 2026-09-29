@@ -22,11 +22,14 @@
 //!
 //! ## Known deviations from the seatbelt / bwrap calibration
 //!
-//! - **Reads are fenced too, not just writes.** A lowbox token has no user SID, so anything
-//!   under the user profile is unreadable unless it is granted. That is *stricter* than the
-//!   "reads globally allowed" header the macOS profile is calibrated to; a strict-mode command
-//!   that needs to read its own config will fail. If that shows up in practice, v1.1 adds a
-//!   read-only grant.
+//! - **Reads are fenced outside the granted profile.** A lowbox token has no user SID, so
+//!   anything under the user profile is unreadable unless an ACE says otherwise — strict mode
+//!   therefore grants `$HOME` read + traverse per run ([`read_paths`]) and revokes it with the
+//!   rest. That is the calibration the other two backends are tuned to, but it stops at the
+//!   profile: paths outside `$HOME` (another user's tree, `C:\` as a whole, removable media)
+//!   stay unreadable, where seatbelt's `(allow file-read*)` allows all of them. System
+//!   directories are *not* part of the gap — the token carries the well-known
+//!   `ALL APPLICATION PACKAGES` SID and the standard ACLs already grant it read + execute.
 //! - **A second writable area always exists**: the profile's own package folder under
 //!   `%LOCALAPPDATA%\Packages\OpenCapX.Sandbox`, which the lowbox can always write.
 //! - **Inherited ACEs outlive the run on fresh artifacts.** Grants inherit, so a file the
@@ -102,6 +105,36 @@ pub(crate) fn grant_paths(
         }
     }
     seen
+}
+
+/// Paths the sandbox SID gets a **read-only** grant on: strict mode reads `$HOME` so the
+/// calibration "reads are globally allowed, write and network are the boundary" survives the
+/// lowbox — without it a strict command cannot even read its own config, which the other two
+/// backends allow. Installer mode needs nothing here: its `$HOME` grant is already
+/// `GENERIC_ALL`, a superset.
+///
+/// Paths already covered by [`grant_paths`] are subtracted: `SetEntriesInAclW` merges the two
+/// entries into a single `GENERIC_ALL` ACE for the same trustee, so writing both would not
+/// produce two ACEs to take back — and worse, the read revoke strips by trustee, so it would
+/// remove the write grant that is still supposed to be standing. A NULL DACL is a third skip,
+/// handled where the ACE is written (there is nothing to grant and nothing to remove).
+pub(crate) fn read_paths(
+    mode: Mode,
+    scratch: &Path,
+    rw: &[PathBuf],
+    home: Option<&Path>,
+) -> Vec<PathBuf> {
+    if mode != Mode::Strict {
+        return Vec::new();
+    }
+    let Some(h) = home else {
+        return Vec::new();
+    };
+    let write = grant_paths(mode, scratch, rw, home);
+    if write.contains(&h.to_path_buf()) {
+        return Vec::new();
+    }
+    vec![h.to_path_buf()]
 }
 
 /// The shared deny list is written with `/` separators against a macOS home. Join it to a
@@ -185,6 +218,13 @@ pub(crate) fn profile_plan(
     for p in grant_paths(mode, scratch, rw, home) {
         s.push_str(&format!("  + {}\n", p.display()));
     }
+    let reads = read_paths(mode, scratch, rw, home);
+    if !reads.is_empty() {
+        s.push_str("grant read+traverse (strict-mode reads of $HOME, revoked with the rest):\n");
+        for p in reads {
+            s.push_str(&format!("  + {}\n", p.display()));
+        }
+    }
     if mode == Mode::Installer {
         if let Some(h) = home {
             s.push_str("deny GENERIC_ALL:\n");
@@ -198,8 +238,9 @@ pub(crate) fn profile_plan(
         }
     }
     s.push_str(
-        "unreachable either way: everything else under the user profile (the lowbox carries no\n\
-         user SID) — except %LOCALAPPDATA%\\Packages\\OpenCapX.Sandbox, the profile's own\n\
+        "unreachable: everything not granted above — outside the user profile the lowbox carries\n\
+         no user SID, and inside it only what these ACEs name — except\n\
+         %LOCALAPPDATA%\\Packages\\OpenCapX.Sandbox, the profile's own\n\
          package folder, which the lowbox can always write.\n",
     );
     s
@@ -227,6 +268,7 @@ mod imp {
         CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION, OBJECT_INHERIT_ACE, PSECURITY_DESCRIPTOR,
         PSID, SECURITY_CAPABILITIES, SID_AND_ATTRIBUTES,
     };
+    use windows_sys::Win32::Storage::FileSystem::{FILE_GENERIC_READ, FILE_TRAVERSE};
     use windows_sys::Win32::System::Console::{
         GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
     };
@@ -417,6 +459,8 @@ mod imp {
         sid: PSID,
         /// Paths granted GENERIC_ALL.
         granted: Vec<PathBuf>,
+        /// Paths granted read + traverse only (strict mode's `$HOME`).
+        read_granted: Vec<PathBuf>,
         /// Paths denied GENERIC_ALL.
         denied: Vec<PathBuf>,
     }
@@ -433,6 +477,7 @@ mod imp {
             let mut g = Grants {
                 sid,
                 granted: Vec::new(),
+                read_granted: Vec::new(),
                 denied: Vec::new(),
             };
             for p in grant_paths(mode, scratch, rw, home) {
@@ -445,6 +490,38 @@ mod imp {
                 }
                 write_dacl(&p, current.dacl(), &allow_entry(g.sid))?;
                 g.granted.push(p);
+            }
+            // The read grant is best-effort, unlike the write grant above. The calibration says
+            // reads are not what this layer guards — write and network are the boundary — so a
+            // failed *read* grant must not drag the write fence down with it: propagating the
+            // error would fail the run open (runner.rs re-runs the command unguarded) with
+            // nothing gained. What it costs instead is the documented residual: a strict command
+            // that reads its own config gets "access denied" for that file, while every write is
+            // still fenced exactly as before.
+            for p in read_paths(mode, scratch, rw, home) {
+                let current = match read_dacl(&p) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!(
+                            "opencapx sandbox: WARNING: could not read the DACL of {} to grant reads: {e}",
+                            p.display()
+                        );
+                        continue;
+                    }
+                };
+                if current.dacl().is_null() {
+                    // Same reasoning as the grant loop: a NULL DACL already grants the read, and
+                    // writing a DACL where there was none would take access away from the owner.
+                    continue;
+                }
+                if let Err(e) = write_dacl(&p, current.dacl(), &read_entry(g.sid)) {
+                    eprintln!(
+                        "opencapx sandbox: WARNING: could not grant read+traverse on {}: {e}",
+                        p.display()
+                    );
+                    continue;
+                }
+                g.read_granted.push(p);
             }
             if mode == Mode::Installer {
                 if let Some(h) = home {
@@ -485,6 +562,17 @@ mod imp {
                 if let Err(e) = revoke(&p, &un_allow_entry(self.sid)) {
                     eprintln!(
                         "opencapx sandbox: WARNING: could not remove the grant ACE from {}: {e}",
+                        p.display()
+                    );
+                }
+            }
+            // Reads last: a read grant is the least-privilege intermediate state, and dropping
+            // it before the write grants would be a needless ordering to get wrong. Installer
+            // runs never reach this loop at all — they have no read grant.
+            for p in self.read_granted.drain(..) {
+                if let Err(e) = revoke(&p, &un_allow_entry(self.sid)) {
+                    eprintln!(
+                        "opencapx sandbox: WARNING: could not remove the read grant ACE from {}: {e}",
                         p.display()
                     );
                 }
@@ -608,6 +696,39 @@ mod imp {
     fn allow_entry(sid: PSID) -> EXPLICIT_ACCESS_W {
         EXPLICIT_ACCESS_W {
             grfAccessPermissions: GENERIC_ALL,
+            grfAccessMode: GRANT_ACCESS,
+            grfInheritance: inherit(),
+            Trustee: trustee(sid),
+        }
+    }
+
+    /// The strict-mode read grant: `FILE_GENERIC_READ | FILE_TRAVERSE`, not `GENERIC_READ`.
+    ///
+    /// `GENERIC_READ` maps to `FILE_GENERIC_READ` (0x120089) which is *read + synchronize* and
+    /// no `FILE_TRAVERSE` — and traverse is the bit that matters here. A lowbox token holds no
+    /// `SeChangeNotifyPrivilege`, so the "bypass traverse checking" privilege is not there to
+    /// carry it: with reads but no traverse, every open under the granted tree still fails on
+    /// the directory itself, one level down from the file. `FILE_GENERIC_READ | FILE_TRAVERSE`
+    /// (0x1200A9) is the mask that actually opens a file under `$HOME`.
+    ///
+    /// Inheritance puts the same 0x20 bit (`FILE_EXECUTE`) on files — inside the calibration,
+    /// since the seatbelt profile allows `process*` and so running what it read was always
+    /// permitted; the read grant must not become a way to *restrict* what the other two backends
+    /// let a run do.
+    ///
+    /// The grant is inheritable, so the cost of it is propagation: writing the ACE on `$HOME`
+    /// walks the whole existing profile tree, and the revoke walks it back. That is the same
+    /// mechanism installer mode already uses for its `$HOME` `GENERIC_ALL` grant — except that
+    /// strict mode is the *default*, so this is now paid on every run rather than only on
+    /// installs. Files another process creates under `$HOME` during the run inherit the ACE at
+    /// creation time, and the revoke's propagation takes it back off them too.
+    ///
+    /// The grant covers `$HOME` and nothing above it: an inheritable ACE on `C:\` would stamp
+    /// every file created on the volume during the run, and `$HOME`'s subtree is the only part
+    /// of the read surface the calibration actually needs.
+    fn read_entry(sid: PSID) -> EXPLICIT_ACCESS_W {
+        EXPLICIT_ACCESS_W {
+            grfAccessPermissions: FILE_GENERIC_READ | FILE_TRAVERSE,
             grfAccessMode: GRANT_ACCESS,
             grfInheritance: inherit(),
             Trustee: trustee(sid),
