@@ -36,12 +36,15 @@ jobs:
         run: |
           set -o pipefail
           cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx 2>&1 | tee /tmp/rust-test.log
-          node scripts/assert-test-count.mjs /tmp/rust-test.log rust 1090
+          node scripts/assert-test-count.mjs /tmp/rust-test.log rust 1095
       - name: node plugin e2e (ts-sdk fixture)
         run: cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx install_grant_execute_ts_e2e -- --ignored --test-threads=1
 
   # The core's tests on Windows: path-separator, registry, and filesystem assumptions
   # are now clean (the first green run was 2026-09-24 on PR #7). This job is blocking.
+  # The floor accounts for the AppContainer work (W1), which added Windows-only tests;
+  # 1096 tests ran here on the run that first got the whole suite executing (PR #32, run
+  # #73), so 1090 leaves headroom and still catches a suite that lost tests.
   rust-windows:
     runs-on: windows-latest
     steps:
@@ -49,10 +52,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: test
         shell: bash
+        env:
+          RUST_BACKTRACE: full
         run: |
           set -o pipefail
-          cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx 2>&1 | tee rust-test.log
-          node scripts/assert-test-count.mjs rust-test.log rust 1080
+          cargo test --manifest-path src-tauri/Cargo.toml --bin opencapx 2>&1 | tee /tmp/rust-test.log
+          node scripts/assert-test-count.mjs /tmp/rust-test.log rust 1090
   frontend:
     runs-on: ubuntu-22.04
     steps:

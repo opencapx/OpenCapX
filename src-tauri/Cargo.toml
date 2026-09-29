@@ -51,6 +51,23 @@ scraper = "0.27"
 # v1.2 screen.capture built into Windows (compiled on Windows only; macOS/Linux keep the platform command path)
 xcap = "0.9"
 
+# W1 Windows sandbox: the AppContainer backend creates a lowbox profile, grants the
+# container SID access by SID (SetEntriesInAclW), and launches with a
+# SECURITY_CAPABILITIES proc attribute. Pinned to 0.60 — already in the graph via
+# xcap/keyring, so this adds no new crate to the tree. Note the feature is
+# `Win32_Security_Isolation`, not `..._AppContainer`: that is where userenv's
+# CreateAppContainerProfile / DeriveAppContainerSidFromAppContainerName live.
+windows-sys = { version = "0.60", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_Security_Isolation",
+  "Win32_System_Com",
+  "Win32_System_Console",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }
+
 [target.'cfg(unix)'.dependencies]
 # S1 process group: on shutdown timeout, kill the whole group (kill(-pgid, SIGKILL)), sweeping up grandchildren too
 libc = "0.2"

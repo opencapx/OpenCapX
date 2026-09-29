@@ -3,6 +3,7 @@
 
 use super::*;
 use clap::Parser;
+use std::ffi::OsString;
 
 /// Environment hand-over policy for the sandboxed child. The runner spawns the child itself,
 /// so the environment is the one boundary seatbelt/bwrap cannot express — it is filtered here.
@@ -50,26 +51,29 @@ const CLEAR_ENV_KEEP: &[&str] = &[
     "PATH", "HOME", "TMPDIR", "USER", "SHELL", "LANG", "LC_ALL", "TERM",
 ];
 
-pub(crate) fn apply_env_policy(cmd: &mut std::process::Command, policy: EnvPolicy) {
+/// The variable list a run hands to its child, after the policy is applied. Split out of
+/// [`apply_env_policy`] so the Windows backend — which hands `CreateProcessW` a raw
+/// environment block rather than a `Command` — enforces the same policy.
+pub(crate) fn filter_env(policy: EnvPolicy) -> Vec<(OsString, OsString)> {
     match policy {
-        EnvPolicy::Keep => {}
-        EnvPolicy::Strip => {
-            let drop: Vec<std::ffi::OsString> = std::env::vars_os()
-                .map(|(k, _)| k)
-                .filter(|k| env_is_secret(&k.to_string_lossy()))
-                .collect();
-            for k in drop {
-                cmd.env_remove(&k);
-            }
-        }
+        EnvPolicy::Keep => std::env::vars_os().collect(),
+        EnvPolicy::Strip => std::env::vars_os()
+            .filter(|(k, _)| !env_is_secret(&k.to_string_lossy()))
+            .collect(),
         EnvPolicy::Clear => {
-            cmd.env_clear();
-            for k in CLEAR_ENV_KEEP {
-                if let Some(v) = std::env::var_os(k) {
-                    cmd.env(k, v);
-                }
-            }
+            let mut kept: Vec<(OsString, OsString)> = CLEAR_ENV_KEEP
+                .iter()
+                .filter_map(|k| std::env::var_os(k).map(|v| (OsString::from(*k), v)))
+                .collect();
+            kept.sort();
+            kept
         }
+    }
+}
+
+pub(crate) fn apply_env_policy(cmd: &mut std::process::Command, policy: EnvPolicy) {
+    for (k, v) in filter_env(policy) {
+        cmd.env(k, v);
     }
 }
 
@@ -139,6 +143,8 @@ pub(crate) enum Backend {
     Seatbelt,
     #[cfg(target_os = "linux")]
     Bwrap,
+    #[cfg(target_os = "windows")]
+    AppContainer,
     Unavailable(&'static str),
 }
 
@@ -215,6 +221,11 @@ pub fn run_cli(args: &[String]) -> i32 {
                 println!("backend: bwrap");
                 0
             }
+            #[cfg(target_os = "windows")]
+            Backend::AppContainer => {
+                println!("backend: appcontainer");
+                0
+            }
             Backend::Unavailable(r) => {
                 println!("backend: none ({r})");
                 1
@@ -253,6 +264,15 @@ pub fn run_cli(args: &[String]) -> i32 {
                 &format!("bwrap failed to start ({e})"),
             ),
         },
+        #[cfg(target_os = "windows")]
+        Backend::AppContainer => match run_appcontainer(&parsed, &scratch) {
+            Ok(c) => c,
+            Err(e) => run_unguarded(
+                &parsed,
+                Some(&scratch),
+                &format!("appcontainer failed to start ({e})"),
+            ),
+        },
         Backend::Unavailable(reason) => {
             return run_unguarded(
                 &parsed,
@@ -274,6 +294,18 @@ pub(crate) fn unguarded_exit(require: bool) -> Option<i32> {
     require.then_some(EXIT_UNGUARDED)
 }
 
+/// How many runs in this process fell back to running the command unguarded. The default
+/// contract is fail-open, which is right in production and useless in a test: a guarded run
+/// that silently never started still returns the command's own exit code, so "the sandbox
+/// blocked it" and "the sandbox never ran" look identical. The live backend tests watch this
+/// to assert the fence was actually up.
+static UNGUARDED_RUNS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Cumulative count of fail-open downgrades since process start.
+pub(crate) fn unguarded_runs() -> u64 {
+    UNGUARDED_RUNS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Shared fallback for every unguardable run (no backend, backend failed to start, unusable
 /// scratch). Default contract is fail-open: warn + `sandbox.unguarded` audit + run as-is.
 /// `--require` flips it: refuse with exit 99 and a `sandbox.blocked` audit.
@@ -286,12 +318,15 @@ fn run_unguarded(parsed: &Parsed, scratch: Option<&Path>, reason: &str) -> i32 {
         }
         return code;
     }
+    UNGUARDED_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     eprintln!("opencapx sandbox: WARNING: {reason}; running WITHOUT sandbox");
     audit_unguarded(&parsed.command, reason);
     run_plain(&parsed.command, parsed.timeout_secs, parsed.policy.env)
 }
 
-/// `--print-profile`: show the generated seatbelt profile (diagnostics + review of the deny list).
+/// `--print-profile`: show the generated profile (diagnostics + review of the deny list). The
+/// seatbelt arm emits the SBPL text; the AppContainer arm emits the grant/deny plan, since
+/// there is no equivalent single profile string to print.
 fn print_profile(parsed: &Parsed) -> i32 {
     #[cfg(target_os = "macos")]
     {
@@ -314,10 +349,26 @@ fn print_profile(parsed: &Parsed) -> i32 {
         );
         0
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let home = crate::core::home_dir().map(|h| canonicalize_lossy(&h));
+        let scratch = std::env::temp_dir().join("opencapx-sandbox-preview");
+        println!(
+            "{}",
+            appcontainer::profile_plan(
+                parsed.profile,
+                parsed.policy.allow_net,
+                &scratch,
+                &parsed.policy.rw,
+                home.as_deref(),
+            )
+        );
+        0
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = parsed;
-        eprintln!("opencapx sandbox: no seatbelt profile on this platform");
+        eprintln!("opencapx sandbox: no sandbox profile on this platform");
         1
     }
 }

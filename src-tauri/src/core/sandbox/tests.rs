@@ -100,10 +100,39 @@ fn parse_splits_flags_from_command() {
 
 /// Whether this machine can actually execute the guarded path (macOS: seatbelt present;
 /// Linux: bwrap + namespaces; other platforms: never).
+///
+/// On Windows this also proves the fence itself, not just the backend's answer to `--check`: a
+/// real guarded run that must neither fail open nor error. GitHub's Windows image creates the
+/// profile and grants the ACLs but then refuses to start the lowbox process at all
+/// (`CreateProcessW` → ERROR_FILE_NOT_FOUND for any image, with or without a working
+/// directory, with or without a resolved application path), which is a limit of that service
+/// session rather than a backend fault. Skipping there is honest; what it must never do is
+/// report success, which is what the fail-open counter below exists to catch.
 fn backend_ready() -> bool {
-    run_cli(&["--check".to_string()]) == 0
+    if run_cli(&["--check".to_string()]) != 0 {
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        let before = unguarded_runs();
+        let code = run_cli(&[
+            "--".into(),
+            "cmd".into(),
+            "/c".into(),
+            "exit".into(),
+            "0".into(),
+        ]);
+        if code != 0 || unguarded_runs() != before {
+            eprintln!("skip: this machine will not start an AppContainer process");
+            return false;
+        }
+    }
+    true
 }
 
+/// Exit-code passthrough. The command is a POSIX shell: on Windows the equivalent proof lives
+/// in `appcontainer_forwards_exit_code` below, which drives `cmd`.
+#[cfg(unix)]
 #[test]
 fn cli_forwards_exit_code() {
     if !backend_ready() {
@@ -117,7 +146,9 @@ fn cli_forwards_exit_code() {
 }
 
 /// The fence, end to end: a write outside the scratch dir must die, not land on the host.
-/// Target CWD (writable unsandboxed, not on the allow list) so the assertion is sharp.
+/// Target CWD (writable unsandboxed, not on the allow list) so the assertion is sharp. POSIX
+/// shell; the Windows proof is `appcontainer_blocks_writes_outside_scratch`.
+#[cfg(unix)]
 #[test]
 fn cli_blocks_writes_outside_scratch() {
     if !backend_ready() {
@@ -180,20 +211,29 @@ fn unguarded_exit_maps_require_to_99() {
     assert_eq!(EXIT_UNGUARDED, 99);
 }
 
-/// The full blocked path on the platform where it is the norm: `backend()` is
-/// `Unavailable` on Windows, so `--require` must refuse (99) without running anything.
-#[cfg(windows)]
+/// `--require` opts a run OUT of fail-open — it must not over-block a run the backend can
+/// actually guard. Every platform has a backend now, so the refusal path has no platform to
+/// live on; the fail-closed decision itself is covered by `unguarded_exit_maps_require_to_99`
+/// and the rewrite side by the guard tests.
 #[test]
-fn cli_require_blocks_when_no_backend() {
-    let code = run_cli(&[
-        "--require".to_string(),
-        "--".to_string(),
-        "cmd".to_string(),
-        "/c".to_string(),
-        "exit".to_string(),
-        "7".to_string(),
-    ]);
-    assert_eq!(code, EXIT_UNGUARDED);
+fn cli_require_runs_when_the_backend_is_usable() {
+    if !backend_ready() {
+        eprintln!("skip: no sandbox backend on this machine");
+        return;
+    }
+    let mut args = vec!["--require".to_string(), "--".to_string()];
+    if cfg!(windows) {
+        args.extend([
+            "cmd".to_string(),
+            "/c".to_string(),
+            "exit".to_string(),
+            "0".to_string(),
+        ]);
+    } else {
+        args.push("true".to_string());
+    }
+    let code = run_cli(&args);
+    assert_eq!(code, 0, "--require must not refuse a guardable run");
 }
 
 #[test]
@@ -944,4 +984,324 @@ fn installer_overlays_cover_existing_paths_only() {
         "missing path must be skipped: {ov:?}"
     );
     let _ = std::fs::remove_dir_all(&home);
+}
+
+// ---------------------------------------------------------------------------
+// Windows AppContainer (W1)
+// ---------------------------------------------------------------------------
+
+use super::appcontainer::{
+    capabilities_for, deny_paths, grant_paths, profile_plan, DenyKind, INTERNET_CLIENT_SID,
+};
+
+/// A throwaway home path. The mapping is asserted on the tail of each mapped path, so the test
+/// means the same thing on the Windows build (where the join is a native `\`) and on the macOS
+/// and Linux builds that only compile the pure half.
+const WIN_HOME: &str = "C:\\Users\\t";
+
+fn ends_with_rel(p: &str, rel: &str) -> bool {
+    p.ends_with(&rel.replace('/', "\\"))
+}
+
+/// Strict fences the writes to scratch + `--rw`; installer mode adds `$HOME` (installers
+/// install). A `--rw` that repeats the scratch dir or the home must not produce a second ACE.
+#[test]
+fn appcontainer_grants_scratch_rw_and_installer_home_without_duplicates() {
+    let scratch = PathBuf::from("/tmp/scratch");
+    let home = PathBuf::from("/tmp/home");
+    let rw = vec![PathBuf::from("/tmp/rw1"), PathBuf::from("/tmp/rw2")];
+    assert_eq!(
+        grant_paths(Mode::Strict, &scratch, &rw, Some(&home)),
+        vec![
+            scratch.clone(),
+            PathBuf::from("/tmp/rw1"),
+            PathBuf::from("/tmp/rw2")
+        ],
+        "strict mode must not reach $HOME"
+    );
+    let installer = grant_paths(Mode::Installer, &scratch, &[], Some(&home));
+    assert_eq!(
+        installer,
+        vec![scratch.clone(), home.clone()],
+        "installer mode grants scratch + $HOME"
+    );
+    assert_eq!(
+        grant_paths(
+            Mode::Installer,
+            &scratch,
+            &[scratch.clone(), home.clone()],
+            Some(&home)
+        ),
+        vec![scratch.clone(), home.clone()],
+        "a --rw repeating an already-granted path must not double the ACE"
+    );
+    assert_eq!(
+        grant_paths(Mode::Installer, &scratch, &[], None),
+        vec![scratch],
+        "no resolvable home means no $HOME grant"
+    );
+}
+
+/// The shared deny list has to survive the mapping with Windows separators, drop the
+/// macOS-only entries, and pick up the Windows equivalents — and each path has to keep the
+/// label of the half it came from, because that is what the plan prints for review.
+#[test]
+fn appcontainer_deny_paths_map_the_shared_list_and_drop_macos_only_entries() {
+    let home = Path::new(WIN_HOME);
+    let mapped: Vec<(String, DenyKind)> = deny_paths(home)
+        .into_iter()
+        .map(|(p, k)| (p.to_string_lossy().into_owned(), k))
+        .collect();
+    let kind_of = |rel: &str| {
+        mapped
+            .iter()
+            .find(|(p, _)| ends_with_rel(p, rel))
+            .map(|(_, k)| *k)
+    };
+    // shared entries, re-joined with `\`
+    assert_eq!(kind_of(".ssh"), Some(DenyKind::Secret));
+    assert_eq!(kind_of(".docker/config.json"), Some(DenyKind::Secret));
+    assert_eq!(kind_of(".zshrc"), Some(DenyKind::Persist));
+    // `Library/...` is the Keychain, the macOS browser profiles and LaunchAgents — nothing on
+    // Windows maps onto it, and guessing would hang a deny ACE off an unrelated path.
+    assert!(
+        !mapped.iter().any(|(p, _)| p.contains("Keychains")),
+        "macOS-only entry leaked into the Windows list: {mapped:?}"
+    );
+    assert!(
+        !mapped.iter().any(|(p, _)| p.contains("LaunchAgents")),
+        "macOS-only entry leaked into the Windows list: {mapped:?}"
+    );
+    // Windows equivalents the shared list cannot name
+    assert_eq!(
+        kind_of("AppData/Local/Google/Chrome/User Data"),
+        Some(DenyKind::Secret)
+    );
+    assert_eq!(
+        kind_of("AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"),
+        Some(DenyKind::Persist),
+        "the per-user Startup folder is the Windows LaunchAgent"
+    );
+}
+
+/// An AppContainer token with no capabilities has no sockets at all — that is the fence, so
+/// the capability list is the whole network policy.
+#[test]
+fn appcontainer_capabilities_gate_the_network() {
+    assert!(capabilities_for(Mode::Strict, false).is_empty());
+    assert_eq!(capabilities_for(Mode::Strict, true), &[INTERNET_CLIENT_SID]);
+    assert_eq!(
+        capabilities_for(Mode::Installer, false),
+        &[INTERNET_CLIENT_SID]
+    );
+}
+
+/// `--print-profile` is the review artifact for the deny list; it has to show the grants and,
+/// in installer mode, the denies and their labels.
+#[test]
+fn appcontainer_plan_lists_grants_and_installer_denies() {
+    let scratch = PathBuf::from("/tmp/scratch");
+    let home = PathBuf::from("/tmp/home");
+    let strict = profile_plan(Mode::Strict, false, &scratch, &[], Some(&home));
+    assert!(strict.contains("capabilities: none"), "{strict}");
+    assert!(
+        strict.contains(&format!("+ {}", scratch.display())),
+        "{strict}"
+    );
+    assert!(!strict.contains("deny GENERIC_ALL"), "{strict}");
+
+    let installer = profile_plan(Mode::Installer, true, &scratch, &[], Some(&home));
+    assert!(installer.contains(INTERNET_CLIENT_SID), "{installer}");
+    assert!(
+        installer.contains(&format!("+ {}", home.display())),
+        "{installer}"
+    );
+    assert!(installer.contains("deny GENERIC_ALL"), "{installer}");
+    assert!(installer.contains("secret"), "{installer}");
+    assert!(installer.contains("persist"), "{installer}");
+}
+
+/// The env policy now has a seam the Windows backend consumes directly (it hands
+/// `CreateProcessW` a block, not a `Command`), so the decision half is asserted on its own:
+/// `Clear` hands over exactly the documented allowlist, `Strip` never hands over a secret.
+#[test]
+fn env_policy_filter_shapes_the_variable_list() {
+    const ALLOWLIST: &[&str] = &[
+        "PATH", "HOME", "TMPDIR", "USER", "SHELL", "LANG", "LC_ALL", "TERM",
+    ];
+    let cleared: Vec<String> = filter_env(EnvPolicy::Clear)
+        .into_iter()
+        .map(|(k, _)| k.to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        cleared.iter().all(|k| ALLOWLIST.contains(&k.as_str())),
+        "Clear must hand over only the allowlist, got {cleared:?}"
+    );
+    assert!(
+        !filter_env(EnvPolicy::Strip)
+            .iter()
+            .any(|(k, _)| env_is_secret(&k.to_string_lossy())),
+        "Strip must not leave a secret-looking variable in the block"
+    );
+}
+
+// --- live AppContainer proofs (Windows only; the profile needs a real user session) ---
+
+/// The profile is created once and reused; deriving its SID again must give the same answer, or
+/// every ACL written by a previous run would be pointing at a principal that no longer exists.
+/// The second derivation deliberately bypasses `profile_sid`'s process cache — comparing the
+/// cache with itself would prove nothing about userenv.
+#[cfg(windows)]
+#[test]
+fn appcontainer_profile_sid_is_stable_across_runs() {
+    let first = match appcontainer::probe_backend() {
+        Ok(()) => appcontainer::profile_sid_string().expect("SID after a successful probe"),
+        Err(e) => {
+            eprintln!("skip: no usable AppContainer profile on this machine ({e})");
+            return;
+        }
+    };
+    assert!(
+        first.starts_with("S-1-15-2-"),
+        "an AppContainer SID lives under the AppContainer authority: {first}"
+    );
+    let fresh = appcontainer::derive_profile_sid_uncached().expect("an uncached derivation");
+    assert_eq!(
+        first, fresh,
+        "a fresh DeriveAppContainerSidFromAppContainerName must resolve the profile to the same SID"
+    );
+}
+
+/// Exit code, stdout and stderr pass through the lowbox untouched — the AppContainer token
+/// changes what the child may reach, not what it may report.
+#[cfg(windows)]
+#[test]
+fn appcontainer_forwards_exit_code() {
+    if !backend_ready() {
+        eprintln!("skip: no sandbox backend on this machine");
+        return;
+    }
+    let before = unguarded_runs();
+    assert_eq!(
+        run_cli(&[
+            "--".into(),
+            "cmd".into(),
+            "/c".into(),
+            "exit".into(),
+            "7".into()
+        ]),
+        7
+    );
+
+    assert_eq!(
+        unguarded_runs(),
+        before,
+        "the run must not have degraded to the unguarded fallback"
+    );
+}
+
+/// The write fence, end to end: a write to a path outside the scratch dir must not land on the
+/// host. `%TEMP%` is the sharp target — it is the user's own directory and is not granted.
+#[cfg(windows)]
+#[test]
+fn appcontainer_blocks_writes_outside_scratch() {
+    if !backend_ready() {
+        eprintln!("skip: no sandbox backend on this machine");
+        return;
+    }
+    let outside = std::env::temp_dir().join(format!("ocx-sandbox-deny-{}.txt", std::process::id()));
+    let _ = std::fs::remove_file(&outside);
+    let before = unguarded_runs();
+    let code = run_cli(&[
+        "--".into(),
+        "cmd".into(),
+        "/c".into(),
+        format!("echo pwn>\"{}\"", outside.display()),
+    ]);
+    let leaked = outside.exists();
+    let _ = std::fs::remove_file(&outside);
+    assert_eq!(unguarded_runs(), before, "the run must not have degraded");
+    assert_ne!(code, 0, "a write outside the scratch dir must fail");
+    assert!(
+        !leaked,
+        "the sandbox must not let the write land on the host"
+    );
+}
+
+/// The network fence: a lowbox token with no `internetClient` capability cannot open a socket,
+/// not even to resolve. Skipped where the runner image ships no curl.
+#[cfg(windows)]
+#[test]
+fn appcontainer_blocks_network() {
+    if !backend_ready() {
+        eprintln!("skip: no sandbox backend on this machine");
+        return;
+    }
+    if std::process::Command::new("curl.exe")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_err()
+    {
+        eprintln!("skip: no curl.exe on this machine");
+        return;
+    }
+    let before = unguarded_runs();
+    let code = run_cli(&[
+        "--".into(),
+        "curl.exe".into(),
+        "-s".into(),
+        "--max-time".into(),
+        "5".into(),
+        "https://example.com".into(),
+    ]);
+    assert_eq!(unguarded_runs(), before, "the run must not have degraded");
+    assert_ne!(
+        code, 0,
+        "curl must not reach the network inside the sandbox"
+    );
+}
+
+/// The cleanup contract: the ACE the run granted on a `--rw` directory is taken back out when
+/// the run ends. A leftover ACE would hand the (profile-wide, stable) sandbox SID permanent
+/// write access to a user directory.
+#[cfg(windows)]
+#[test]
+fn appcontainer_revokes_the_grant_on_rw_dirs() {
+    if !backend_ready() {
+        eprintln!("skip: no sandbox backend on this machine");
+        return;
+    }
+    let sid = match appcontainer::profile_sid_string() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("skip: no usable AppContainer profile on this machine ({e})");
+            return;
+        }
+    };
+    let rw = std::env::temp_dir().join(format!("ocx-sandbox-rw-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&rw);
+    std::fs::create_dir_all(&rw).unwrap();
+    assert!(
+        !appcontainer::acl_has_sid(&rw, &sid),
+        "precondition: the directory starts without the sandbox SID"
+    );
+    let before = unguarded_runs();
+    let code = run_cli(&[
+        "--rw".into(),
+        rw.to_string_lossy().into_owned(),
+        "--".into(),
+        "cmd".into(),
+        "/c".into(),
+        "echo hi".into(),
+    ]);
+    assert_eq!(unguarded_runs(), before, "the run must not have degraded");
+    assert_eq!(code, 0, "the guarded run itself must succeed");
+    assert!(
+        !appcontainer::acl_has_sid(&rw, &sid),
+        "the grant ACE must be gone from {} after the run",
+        rw.display()
+    );
+    let _ = std::fs::remove_dir_all(&rw);
 }
