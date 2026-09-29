@@ -41,8 +41,10 @@ fn session_model_roundtrips_and_migrates_old_db() {
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO sessions VALUES ('old','claude','p','m','working',1)",
-            [],
+            // fresh updated_at: open() now sweeps at startup, and a TTL-dead seed row would be
+            // archived away before the migration readback these tests exist for
+            "INSERT INTO sessions VALUES ('old','claude','p','m','working',?1)",
+            [crate::core::agent::now_secs()],
         )
         .unwrap();
     }
@@ -75,8 +77,10 @@ fn session_speech_roundtrips_and_migrates_old_db() {
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO sessions VALUES ('old','claude','p','m','working',1)",
-            [],
+            // fresh updated_at: open() now sweeps at startup, and a TTL-dead seed row would be
+            // archived away before the migration readback these tests exist for
+            "INSERT INTO sessions VALUES ('old','claude','p','m','working',?1)",
+            [crate::core::agent::now_secs()],
         )
         .unwrap();
     }
@@ -242,8 +246,10 @@ fn session_cwd_roundtrips_and_migrates_old_db() {
         )
         .unwrap();
         conn.execute(
-            "INSERT INTO sessions VALUES ('old','claude','p','m','working',1)",
-            [],
+            // fresh updated_at: open() now sweeps at startup, and a TTL-dead seed row would be
+            // archived away before the migration readback these tests exist for
+            "INSERT INTO sessions VALUES ('old','claude','p','m','working',?1)",
+            [crate::core::agent::now_secs()],
         )
         .unwrap();
     }
@@ -760,5 +766,28 @@ fn health_config_round_trips_and_falls_back_to_default() {
     assert!(ids.contains(&"plug-x"));
     assert!(ids.contains(&"plug-y"));
 
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Startup sweep: an expired row found at open() is archived and removed without waiting
+/// for the 60s background thread — an app that opens and quits inside a minute (or crashes)
+/// must not leave the active table littered with sessions whose TTL passed earlier.
+#[test]
+fn open_sweeps_expired_sessions() {
+    let dir = std::env::temp_dir().join(format!("opencapx-db-opensweep-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("t.db");
+    {
+        let mut db = Storage::open(&path).unwrap();
+        let mut stale = sess("ghost", AgentState::Working);
+        stale.updated_at = crate::core::agent::now_secs() - 4000; // past the 900s working TTL
+        db.upsert(stale);
+    }
+    let db = Storage::open(&path).unwrap();
+    assert!(db.get("ghost").is_none(), "expired row swept at open");
+    let hist = db.list_session_archive(10);
+    assert_eq!(hist.len(), 1, "the swept row landed in the archive");
+    assert_eq!(hist[0].id, "ghost");
     let _ = std::fs::remove_dir_all(&dir);
 }

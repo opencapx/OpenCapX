@@ -178,8 +178,15 @@ impl Storage {
         let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
         let mut s = Self { conn };
         s.migrate()?;
-        s.prune_events(crate::core::agent::now_secs())?;
-        let _ = s.prune_session_archive(crate::core::agent::now_secs());
+        let now = crate::core::agent::now_secs();
+        s.prune_events(now)?;
+        // Sweep at open, not only on the 60s background thread: an app that opens and
+        // quits inside a minute (or crashes) would otherwise leave expired rows in the
+        // active table until some later run stays up long enough. Before the archive
+        // prune, so anything the sweep archives past the retention window is dropped in
+        // the same open.
+        let _ = s.sweep(now);
+        let _ = s.prune_session_archive(now);
         Ok(s)
     }
 
