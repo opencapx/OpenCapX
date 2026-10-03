@@ -19,6 +19,8 @@ pub struct PluginProcess {
 /// running any Python. Plugin manifests declare `"command": "python3"` (the portable unix
 /// name), so when the literal command cannot actually run, fall back to `python` before
 /// giving up. Unix keeps the exact command the manifest declared.
+// The only caller is the `not(target_os = "macos")` spawn arm; macOS spawns the declared command directly.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn resolve_command(cmd: &str) -> String {
     if cmd != "python3" || cfg!(not(target_os = "windows")) {
         return cmd.to_string();

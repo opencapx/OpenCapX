@@ -64,14 +64,6 @@ pub fn db_path_for(name: &str) -> PathBuf {
     workspace_dir(name).join("store.sqlite")
 }
 
-/// `~/.opencapx/workspaces/`.
-pub fn profiles_root() -> PathBuf {
-    if let Some(home) = crate::core::home_dir() {
-        return home.join(".opencapx").join("workspaces");
-    }
-    std::env::temp_dir().join("opencapx-workspaces")
-}
-
 /// Current ~/.opencapx/data/opencapx.db (the old flat path, migration source).
 fn legacy_db_path() -> PathBuf {
     super::storage::data_dir().join("opencapx.db")
@@ -167,6 +159,7 @@ fn read_profiles_file() -> ProfilesFile {
     }
 }
 
+#[cfg(test)]
 pub fn set_active_profile(name: &str) -> Result<(), String> {
     let mut pf = read_profiles_file();
     if !pf.profiles.iter().any(|p| p.name == name) {
@@ -313,7 +306,7 @@ pub fn list_profiles() -> Vec<ProfileInfo> {
 }
 
 /// For main.rs startup: open a profile's store (using Storage::open's default behavior).
-/// On failure, fall back to an in-memory store, the same policy as open_default().
+/// On failure, fall back to an in-memory store (the same policy the startup path uses).
 /// Corrupt-db quarantine record: original file → quarantined file + reason (for logs and the Settings page notice).
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -4,6 +4,7 @@
 use super::*;
 use serde::{Deserialize, Serialize};
 
+#[cfg(test)]
 /// viewer summary: one line per trace file (shown in the settings agents tab).
 #[derive(Debug, Clone, Serialize)]
 pub struct RpcTraceSummary {
@@ -40,6 +41,7 @@ pub(crate) fn project_from_line(line: &RpcTraceLine) -> String {
         .to_string()
 }
 
+#[cfg(test)]
 /// List all traces of an agent, started_at descending (newest first).
 /// Same as plugin_trace::list_sessions: scan the directory + read the first line for started_at.
 /// ended_at exists only when the last line is the **root span's end** (spanId=="s0") — otherwise the request
@@ -48,6 +50,7 @@ pub fn list_traces(agent_id: &str) -> Vec<RpcTraceSummary> {
     list_traces_at(&rpc_traces_root(), agent_id)
 }
 
+#[cfg(test)]
 /// Shared body with hook trace: the hook side has a different root directory, everything else is identical.
 fn list_traces_at(root: &Path, agent_id: &str) -> Vec<RpcTraceSummary> {
     let dir = root.join(crate::core::plugin_trace::sanitize(agent_id));
@@ -164,6 +167,7 @@ pub fn hook_event(agent_id: &str, session_id: &str, name: &str, attrs: Value) {
     );
 }
 
+#[cfg(test)]
 pub fn list_hook_traces(agent_id: &str) -> Vec<RpcTraceSummary> {
     list_traces_at(&hook_traces_root(), agent_id)
 }

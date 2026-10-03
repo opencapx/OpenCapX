@@ -50,12 +50,6 @@ pub fn check_updates(
     out
 }
 
-/// Backward-compat: degrades to the old signature when channels is absent (all plugins default to stable).
-#[cfg(test)]
-pub fn check_updates_default(installed: &[(String, String)]) -> Vec<PluginUpdateInfo> {
-    check_updates(installed, &[])
-}
-
 /// Lenient parsing: strict semver first; on failure, pad the numeric core ("1.2"→"1.2.0", "1"→"1.0.0"),
 /// allowing a `v` prefix and prerelease (`-rc.1`); build metadata (`+xxx`) does not participate in comparison.
 /// Parse failure → None (callers treat it as "undecidable" and do not upgrade).

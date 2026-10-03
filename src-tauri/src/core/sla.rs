@@ -462,7 +462,7 @@ mod tests {
             kinds
         );
         assert!(
-            !kinds.iter().any(|(p, _, k)| *p == "plug-c"),
+            !kinds.iter().any(|(p, _, _)| *p == "plug-c"),
             "plug-c is healthy and should not trigger; actual: {:?}",
             kinds
         );

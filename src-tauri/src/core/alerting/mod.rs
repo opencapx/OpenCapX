@@ -29,7 +29,7 @@ use super::event::{EventBus, OpencapxEvent};
 use super::marketplace::hmac_sha256_hex;
 use super::storage::{
     AckRuleRow, AggregationRuleRow, AlertingEndpointRow, CorrelationRuleRow, EscalationRuleRow,
-    FailedDeliveryRow, RouteRuleRow, SilenceRuleRow, StoreEnum,
+    FailedDeliveryRow, NewFailedDelivery, RouteRuleRow, SilenceRuleRow, StoreEnum,
 };
 
 mod aggregations;

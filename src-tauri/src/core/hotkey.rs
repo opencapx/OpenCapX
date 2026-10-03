@@ -376,35 +376,36 @@ pub fn validate_combo(combo: &str) -> Result<(), String> {
 
 /// List all palette candidates (builtin + every capability of every running plugin).
 pub fn palette_entries() -> Vec<PaletteEntry> {
-    let mut out = Vec::new();
-    out.push(PaletteEntry {
-        id: "builtin:toggle-pet".into(),
-        title: "Toggle pet visibility".into(),
-        kind: "builtin".into(),
-        plugin_id: None,
-        capability: None,
-    });
-    out.push(PaletteEntry {
-        id: "builtin:open-settings".into(),
-        title: "Open settings".into(),
-        kind: "builtin".into(),
-        plugin_id: None,
-        capability: None,
-    });
-    out.push(PaletteEntry {
-        id: "builtin:open-palette".into(),
-        title: "Open command palette".into(),
-        kind: "builtin".into(),
-        plugin_id: None,
-        capability: None,
-    });
-    out.push(PaletteEntry {
-        id: "builtin:quit".into(),
-        title: "Quit OpenCapX".into(),
-        kind: "builtin".into(),
-        plugin_id: None,
-        capability: None,
-    });
+    let mut out = vec![
+        PaletteEntry {
+            id: "builtin:toggle-pet".into(),
+            title: "Toggle pet visibility".into(),
+            kind: "builtin".into(),
+            plugin_id: None,
+            capability: None,
+        },
+        PaletteEntry {
+            id: "builtin:open-settings".into(),
+            title: "Open settings".into(),
+            kind: "builtin".into(),
+            plugin_id: None,
+            capability: None,
+        },
+        PaletteEntry {
+            id: "builtin:open-palette".into(),
+            title: "Open command palette".into(),
+            kind: "builtin".into(),
+            plugin_id: None,
+            capability: None,
+        },
+        PaletteEntry {
+            id: "builtin:quit".into(),
+            title: "Quit OpenCapX".into(),
+            kind: "builtin".into(),
+            plugin_id: None,
+            capability: None,
+        },
+    ];
     for p in super::plugin::PluginManager::shared().list() {
         for cap in &p.capabilities {
             out.push(PaletteEntry {
@@ -494,7 +495,6 @@ mod tests {
         assert_eq!(normalize_combo("Ctrl+Command+K"), "CmdOrCtrl+K");
     }
 
-    #[test]
     #[test]
     fn action_roundtrip_json() {
         let a = HotkeyAction::Plugin {

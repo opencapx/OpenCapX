@@ -321,6 +321,39 @@ fn prune_session_archive_drops_only_old_records() {
     assert!(db.list_session_archive(10).is_empty());
 }
 
+/// The dead-letter insert maps every column by position; a round trip through `list_failed_deliveries`
+/// pins the mapping (the retry queue is user-visible through the Activity Timeline).
+#[test]
+fn failed_delivery_insert_round_trips_all_columns() {
+    let mut db = tmpdb("dl-smoke");
+    let rec = NewFailedDelivery {
+        source: "plugin.metrics.exceeded",
+        url: "https://example.test/hook",
+        payload_json: r#"{"a":1}"#,
+        now_ts: 1700,
+        max_attempts: 5,
+        next_retry_ts: 1730,
+        last_error: "connect refused",
+        endpoint_id: Some("ep-7"),
+    };
+    db.insert_failed_delivery("dl-1", &rec);
+    let rows = db.list_failed_deliveries(None, 10);
+    assert_eq!(rows.len(), 1);
+    let r = &rows[0];
+    assert_eq!(r.id, "dl-1");
+    assert_eq!(r.source, rec.source);
+    assert_eq!(r.url, rec.url);
+    assert_eq!(r.payload, rec.payload_json);
+    assert_eq!(r.first_attempt_ts, 1700);
+    assert_eq!(r.last_attempt_ts, 1700);
+    assert_eq!(r.attempts, 1);
+    assert_eq!(r.max_attempts, 5);
+    assert_eq!(r.last_error, "connect refused");
+    assert_eq!(r.next_retry_ts, 1730);
+    assert_eq!(r.state, "pending");
+    assert_eq!(r.endpoint_id.as_deref(), Some("ep-7"));
+}
+
 #[test]
 fn sqlite_logs_and_prunes_events() {
     let dir = std::env::temp_dir().join(format!("opencapx-db-{}-prune", std::process::id()));
@@ -618,13 +651,10 @@ fn capability_stats_summary_aggregates_percentiles() {
     assert!(rows.iter().all(|r| r.last_used_at > 0));
 
     // returns [] when empty
-    assert!(
-        Storage::open(&dir.join("t.db"))
-            .unwrap()
-            .capability_stats_summary(50)
-            .is_empty()
-            == false
-    ); // the same file has data; just verify the call does not crash
+    assert!(!Storage::open(&dir.join("t.db"))
+        .unwrap()
+        .capability_stats_summary(50)
+        .is_empty()); // the same file has data; just verify the call does not crash
 
     let _ = std::fs::remove_dir_all(&dir);
 }

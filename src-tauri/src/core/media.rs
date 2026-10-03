@@ -58,6 +58,8 @@ fn as_verb(action: &str) -> &'static str {
 }
 
 /// playerctl subcommand (pure function).
+// Read only in the Linux build; macOS/Windows use their own media backends.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn playerctl_verb(action: &str) -> &'static str {
     match action {
         "play" => "play",

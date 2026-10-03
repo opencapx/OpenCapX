@@ -87,9 +87,11 @@ fn validate_rejects_control_chars() {
 
 #[test]
 fn validate_skips_url_when_disabled() {
-    let mut cfg = WebhookConfig::default();
-    cfg.enabled = false;
-    cfg.url = String::new();
+    let cfg = WebhookConfig {
+        enabled: false,
+        url: String::new(),
+        ..Default::default()
+    };
     assert!(validate(&cfg).is_ok()); // disabled + empty url = OK
 }
 
@@ -216,8 +218,10 @@ fn retry_config_round_trips_through_json() {
 
 #[test]
 fn validate_retry_rejects_zero_attempts() {
-    let mut cfg = RetryConfig::default();
-    cfg.max_attempts = 0;
+    let mut cfg = RetryConfig {
+        max_attempts: 0,
+        ..Default::default()
+    };
     assert!(validate_retry(&cfg).is_err());
     cfg.max_attempts = 101;
     assert!(validate_retry(&cfg).is_err());
@@ -227,16 +231,20 @@ fn validate_retry_rejects_zero_attempts() {
 
 #[test]
 fn validate_retry_rejects_zero_backoff() {
-    let mut cfg = RetryConfig::default();
-    cfg.initial_backoff_secs = 0;
+    let cfg = RetryConfig {
+        initial_backoff_secs: 0,
+        ..Default::default()
+    };
     assert!(validate_retry(&cfg).is_err());
 }
 
 #[test]
 fn validate_retry_rejects_max_less_than_initial() {
-    let mut cfg = RetryConfig::default();
-    cfg.initial_backoff_secs = 600;
-    cfg.max_backoff_secs = 30; // < initial
+    let cfg = RetryConfig {
+        initial_backoff_secs: 600,
+        max_backoff_secs: 30, // < initial
+        ..Default::default()
+    };
     assert!(validate_retry(&cfg).is_err());
 }
 
@@ -587,8 +595,7 @@ fn silence_db_round_trips_through_save_list_delete() {
                 .unwrap()
                 .as_nanos()
         ));
-        let db = Storage::open(&tmp).expect("open temp sqlite");
-        db
+        Storage::open(&tmp).expect("open temp sqlite")
     }
 
     // this test only exercises the store layer and does not depend on the global shared_store hook;
@@ -772,7 +779,7 @@ fn validate_route_rejects_bad_kind_pattern() {
         seen_in_last: None,
     };
     assert!(validate_route(&r).is_err());
-    r.kind_pattern = "a".repeat(300).into();
+    r.kind_pattern = "a".repeat(300);
     assert!(validate_route(&r).is_err());
 }
 
@@ -943,7 +950,7 @@ fn payload_path_get_nested() {
 fn route_priority_overrides_fanout_fallback() {
     // when no route hits, it should use the endpoint source_filter fanout (backward compatible).
     // here we only verify the helper semantics: the None path + the Some path.
-    // dispatch() is already tested above; this test covers route_target_ids boundaries.
+    // dispatch() is already tested above; this test covers the route_matches boundaries.
 
     // case 1: kind does not match → None
     // call the low-level route_matches directly to verify consistent behavior:
@@ -1749,7 +1756,7 @@ fn evaluate_correlations_records_last_a_without_suppressing() {
 }
 
 #[test]
-fn evaluate_correlations_suppress_B_within_window() {
+fn evaluate_correlations_suppress_b_within_window() {
     let _g = crate::core::TEST_STORE_LOCK
         .lock()
         .unwrap_or_else(|e| e.into_inner());
@@ -1779,7 +1786,7 @@ fn evaluate_correlations_suppress_B_within_window() {
 }
 
 #[test]
-fn evaluate_correlations_pass_for_B_outside_window() {
+fn evaluate_correlations_pass_for_b_outside_window() {
     let _g = crate::core::TEST_STORE_LOCK
         .lock()
         .unwrap_or_else(|e| e.into_inner());
@@ -1802,7 +1809,7 @@ fn evaluate_correlations_pass_for_B_outside_window() {
 }
 
 #[test]
-fn evaluate_correlations_pass_for_B_without_matching_A() {
+fn evaluate_correlations_pass_for_b_without_matching_a() {
     let _g = crate::core::TEST_STORE_LOCK
         .lock()
         .unwrap_or_else(|e| e.into_inner());
@@ -1823,7 +1830,7 @@ fn evaluate_correlations_pass_for_B_without_matching_A() {
 }
 
 #[test]
-fn evaluate_correlations_re_suppress_after_subsequent_A() {
+fn evaluate_correlations_re_suppress_after_subsequent_a() {
     let _g = crate::core::TEST_STORE_LOCK
         .lock()
         .unwrap_or_else(|e| e.into_inner());

@@ -4983,10 +4983,10 @@ fn preview_ocplugin_returns_manifest_with_high_risk() {
         .iter()
         .map(|x| (x.name.as_str(), x.high_risk))
         .collect();
-    assert_eq!(by_name["image.read"], false);
-    assert_eq!(by_name["camera"], true);
-    assert_eq!(by_name["filesystem.write"], true);
-    assert_eq!(by_name["process.execute"], true);
+    assert!(!by_name["image.read"]);
+    assert!(by_name["camera"]);
+    assert!(by_name["filesystem.write"]);
+    assert!(by_name["process.execute"]);
 
     // a zip missing the manifest must also be explicitly rejected, not returned as an empty object.
     make_zip(
@@ -5053,7 +5053,7 @@ fn set_auto_reload_round_trips_through_storage() {
             .unwrap()
         })
         .unwrap();
-    assert_eq!(listed != 0, true, "DTO field = true when auto_reload=1");
+    assert!(listed != 0, "DTO field = true when auto_reload=1");
 
     // flip off → SQL column = 0
     s.with_conn(|c| {
@@ -5190,25 +5190,22 @@ sys.exit(1)
     let mut saw_restart = false;
     let mut saw_disabled = false;
     let mut retry_count = 0u32;
-    let mut sub = bus.subscribe();
+    let sub = bus.subscribe();
     while start.elapsed() < std::time::Duration::from_secs(20) {
-        match sub.recv_timeout(std::time::Duration::from_millis(200)) {
-            Ok(ev) => {
-                if ev.kind == "plugin.restarting" {
-                    saw_restart = true;
-                    retry_count = retry_count.max(
-                        ev.payload
-                            .get("retry")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0) as u32,
-                    );
-                }
-                if ev.kind == "plugin.watchdog_disabled" {
-                    saw_disabled = true;
-                    break;
-                }
+        if let Ok(ev) = sub.recv_timeout(std::time::Duration::from_millis(200)) {
+            if ev.kind == "plugin.restarting" {
+                saw_restart = true;
+                retry_count = retry_count.max(
+                    ev.payload
+                        .get("retry")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as u32,
+                );
             }
-            Err(_) => {}
+            if ev.kind == "plugin.watchdog_disabled" {
+                saw_disabled = true;
+                break;
+            }
         }
     }
     mgr.stop(&id);
@@ -5397,26 +5394,23 @@ for line in sys.stdin:
     mgr.set_auto_reload(&id, true).expect("set auto_reload");
     std::thread::sleep(Duration::from_millis(1100));
     std::fs::write(
-            &plugin_dir.join("opencapx-plugin.json"),
+        plugin_dir.join("opencapx-plugin.json"),
             r#"{"id":"com.opencapx.autoreload","name":"AR","version":"0.2.0","apiVersion":"1","type":"pet","runtime":{"type":"process","command":"python3","args":["bin/pet.py"]}}"#,
         )
         .unwrap();
 
     // subscribe to the event and wait for plugin.auto_reloaded
-    let mut rx = bus.subscribe();
+    let rx = bus.subscribe();
     let start = std::time::Instant::now();
     let mut saw = false;
     while start.elapsed() < std::time::Duration::from_secs(10) {
-        match rx.recv_timeout(std::time::Duration::from_millis(500)) {
-            Ok(ev) => {
-                if ev.kind == "plugin.auto_reloaded"
-                    && ev.payload.get("pluginId").and_then(|v| v.as_str()) == Some(id.as_str())
-                {
-                    saw = true;
-                    break;
-                }
+        if let Ok(ev) = rx.recv_timeout(std::time::Duration::from_millis(500)) {
+            if ev.kind == "plugin.auto_reloaded"
+                && ev.payload.get("pluginId").and_then(|v| v.as_str()) == Some(id.as_str())
+            {
+                saw = true;
+                break;
             }
-            Err(_) => {}
         }
     }
     mgr.stop(&id);
@@ -5473,7 +5467,7 @@ for line in sys.stdin:
     crate::core::set_shared_store(store.clone());
     let bus = crate::core::event::EventBus::shared();
     let mgr = PluginManager::shared();
-    let mut sub = bus.subscribe();
+    let sub = bus.subscribe();
     let id = mgr.install_from_dir(&plugin_dir).expect("install");
     mgr.start(&id).expect("start");
 
@@ -5481,20 +5475,16 @@ for line in sys.stdin:
     let start = std::time::Instant::now();
     let mut got = false;
     while start.elapsed() < std::time::Duration::from_secs(5) {
-        match sub.recv_timeout(std::time::Duration::from_millis(200)) {
-            Ok(ev) => {
-                if ev.kind == "plugin.log"
-                    && ev.payload.get("pluginId").and_then(|v| v.as_str()) == Some(id.as_str())
-                    && ev.payload.get("source").and_then(|v| v.as_str()) == Some("reverse")
-                    && ev.payload.get("level").and_then(|v| v.as_str()) == Some("warn")
-                    && ev.payload.get("message").and_then(|v| v.as_str())
-                        == Some("hello-from-reverse")
-                {
-                    got = true;
-                    break;
-                }
+        if let Ok(ev) = sub.recv_timeout(std::time::Duration::from_millis(200)) {
+            if ev.kind == "plugin.log"
+                && ev.payload.get("pluginId").and_then(|v| v.as_str()) == Some(id.as_str())
+                && ev.payload.get("source").and_then(|v| v.as_str()) == Some("reverse")
+                && ev.payload.get("level").and_then(|v| v.as_str()) == Some("warn")
+                && ev.payload.get("message").and_then(|v| v.as_str()) == Some("hello-from-reverse")
+            {
+                got = true;
+                break;
             }
-            Err(_) => {}
         }
     }
     mgr.stop(&id);
@@ -5624,7 +5614,7 @@ for line in sys.stdin:
     crate::core::config::set(&id, "testKey", &serde_json::json!("to-be-deleted")).unwrap();
     assert!(crate::core::config::config_path(&id).exists());
 
-    let mut sub = bus.subscribe();
+    let sub = bus.subscribe();
     mgr.uninstall(&id).expect("uninstall");
 
     // the config file should be deleted
@@ -5736,9 +5726,9 @@ fn uninstall_preview_reports_state_and_dependents() {
     assert_eq!(preview.id, me_id);
     assert_eq!(preview.name, "Me");
     assert_eq!(preview.version, "0.1.0");
-    assert_eq!(preview.auto_reload, true, "auto_reload should be surfaced");
-    assert_eq!(
-        preview.config_exists, true,
+    assert!(preview.auto_reload, "auto_reload should be surfaced");
+    assert!(
+        preview.config_exists,
         "an existing config file should be detected"
     );
     assert_eq!(preview.permission_count, 2);
@@ -5838,13 +5828,13 @@ fn capability_dependency_graph_finds_shared_pairs() {
     let ab = graph
         .edges
         .iter()
-        .find(|e| (e.from == id_a && e.to == id_b))
+        .find(|e| e.from == id_a && e.to == id_b)
         .expect("a↔b");
     assert_eq!(ab.shared, vec!["image.analyze".to_string()]);
     let bc = graph
         .edges
         .iter()
-        .find(|e| (e.from == id_b && e.to == id_c))
+        .find(|e| e.from == id_b && e.to == id_c)
         .expect("b↔c");
     assert_eq!(bc.shared, vec!["camera".to_string()]);
 
@@ -5970,8 +5960,9 @@ fn sandbox_soak_real_plugins() {
     use std::collections::HashMap;
     let on_reverse: OnReverse = std::sync::Arc::new(|_v: serde_json::Value, _r: Reply| {});
 
-    // (directory, plugin id, [(method, params, assertion closure description)]) — a skeleton shared by the three plugins
-    let cases: &[(&str, &str, Vec<(String, serde_json::Value)>)] = &[
+    // (directory, plugin id, [(method, params)]) — a skeleton shared by the three plugins
+    type SkeletonCase = (&'static str, &'static str, Vec<(String, serde_json::Value)>);
+    let cases: &[SkeletonCase] = &[
         (
             "echo-vision",
             "com.opencapx.echo-vision",
@@ -6149,26 +6140,26 @@ fn settings_list_type_validation() {
     std::fs::create_dir_all(&dir).unwrap();
     let write = |body: &str| std::fs::write(dir.join("opencapx-plugin.json"), body).unwrap();
     // legal: label/section/aliases/visible are available consistently with other types
-    write(&format!(
-        r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
-            "runtime":{{"type":"process","command":"python3"}},"capabilities":["image.analyze"],
-            "settings":[{{"key":"tags","type":"list","label":"Tags"}}]}}"#
-    ));
+    write(
+        r#"{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
+            "runtime":{"type":"process","command":"python3"},"capabilities":["image.analyze"],
+            "settings":[{"key":"tags","type":"list","label":"Tags"}]}"#,
+    );
     assert!(PluginManager::read_manifest(&dir).is_ok());
     // default rejected
-    write(&format!(
-        r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
-            "runtime":{{"type":"process","command":"python3"}},"capabilities":["image.analyze"],
-            "settings":[{{"key":"tags","type":"list","default":[]}}]}}"#
-    ));
+    write(
+        r#"{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
+            "runtime":{"type":"process","command":"python3"},"capabilities":["image.analyze"],
+            "settings":[{"key":"tags","type":"list","default":[]}]}"#,
+    );
     let err = PluginManager::read_manifest(&dir).unwrap_err();
     assert!(err.contains("list setting tags"), "{err}");
     // options rejected
-    write(&format!(
-        r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
-            "runtime":{{"type":"process","command":"python3"}},"capabilities":["image.analyze"],
-            "settings":[{{"key":"tags","type":"list","options":["a"]}}]}}"#
-    ));
+    write(
+        r#"{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
+            "runtime":{"type":"process","command":"python3"},"capabilities":["image.analyze"],
+            "settings":[{"key":"tags","type":"list","options":["a"]}]}"#,
+    );
     assert!(PluginManager::read_manifest(&dir)
         .unwrap_err()
         .contains("list setting tags"));
@@ -6184,11 +6175,11 @@ fn settings_list_type_validation() {
     }
     // a predicate referencing a list key: rejected at install time — list values do not enter settings_view, so the predicate always reads undefined,
     // and allowing it would only give the author a row that never appears.
-    write(&format!(
-        r#"{{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
-            "runtime":{{"type":"process","command":"python3"}},"capabilities":["image.analyze"],
-            "settings":[{{"key":"tags","type":"list"}},{{"key":"plain","type":"text","visible":{{"op":"isSet","key":"tags","value":true}}}}]}}"#
-    ));
+    write(
+        r#"{"id":"com.x.list","name":"L","version":"1.0.0","apiVersion":"1","type":"capability",
+            "runtime":{"type":"process","command":"python3"},"capabilities":["image.analyze"],
+            "settings":[{"key":"tags","type":"list"},{"key":"plain","type":"text","visible":{"op":"isSet","key":"tags","value":true}}]}"#,
+    );
     let err = PluginManager::read_manifest(&dir).unwrap_err();
     assert!(
         err.contains("list setting \"tags\" cannot be referenced by a predicate"),

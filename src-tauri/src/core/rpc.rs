@@ -642,7 +642,7 @@ fn execute(input: &Value, agent_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     /// Test shim: these assertions only go through the built-in static mapping and do not need a declaration table (a Mem store suffices).
-    fn PERM(tool: &str, input: &Value) -> Option<String> {
+    fn perm(tool: &str, input: &Value) -> Option<String> {
         let s: SharedStore = std::sync::Arc::new(std::sync::Mutex::new(
             crate::core::storage::StoreEnum::Mem(crate::core::agent::SessionStore::new()),
         ));
@@ -888,35 +888,35 @@ mod tests {
     #[test]
     fn tool_permission_mapping_matches_docs() {
         assert_eq!(
-            PERM("opencapx.say", &json!({})),
+            perm("opencapx.say", &json!({})),
             Some("pet.animation".to_string())
         );
         assert_eq!(
-            PERM("opencapx.set_state", &json!({})),
+            perm("opencapx.set_state", &json!({})),
             Some("pet.animation".to_string())
         );
         assert_eq!(
-            PERM("opencapx.ask", &json!({})),
+            perm("opencapx.ask", &json!({})),
             Some("pet.animation".to_string())
         );
         assert_eq!(
-            PERM("opencapx.notify", &json!({})),
+            perm("opencapx.notify", &json!({})),
             Some("notification.post".to_string())
         );
         assert_eq!(
-            PERM("opencapx.execute", &json!({"capability": "image.analyze"})),
+            perm("opencapx.execute", &json!({"capability": "image.analyze"})),
             Some("image.read".to_string())
         );
         // B10: subscription setup goes through the same mapping (subscribe type); unsubscribe is a cleanup operation and opens no new permission surface
         assert_eq!(
-            PERM("opencapx.subscribe", &json!({"capability": "file.watch"})),
+            perm("opencapx.subscribe", &json!({"capability": "file.watch"})),
             Some("file.read".to_string())
         );
-        assert_eq!(PERM("opencapx.unsubscribe", &json!({})), None);
-        assert_eq!(PERM("opencapx.list_capabilities", &json!({})), None);
+        assert_eq!(perm("opencapx.unsubscribe", &json!({})), None);
+        assert_eq!(perm("opencapx.list_capabilities", &json!({})), None);
         // v1.2: system.permission_status is read-only metadata, exempt from the Agent gate (used for up-front routing)
         assert_eq!(
-            PERM(
+            perm(
                 "opencapx.execute",
                 &json!({"capability": "system.permission_status"})
             ),
@@ -924,29 +924,29 @@ mod tests {
         );
         // v1.3: high/medium value batch mapping
         assert_eq!(
-            PERM("opencapx.execute", &json!({"capability": "automation.run"})),
+            perm("opencapx.execute", &json!({"capability": "automation.run"})),
             Some("automation.control".to_string())
         );
         assert_eq!(
-            PERM("opencapx.execute", &json!({"capability": "input.send"})),
+            perm("opencapx.execute", &json!({"capability": "input.send"})),
             Some("input.control".to_string())
         );
         assert_eq!(
-            PERM("opencapx.execute", &json!({"capability": "photos.read"})),
+            perm("opencapx.execute", &json!({"capability": "photos.read"})),
             Some("photos.read".to_string())
         );
         assert_eq!(
-            PERM("opencapx.execute", &json!({"capability": "audio.play"})),
+            perm("opencapx.execute", &json!({"capability": "audio.play"})),
             Some("audio.output".to_string())
         );
         assert_eq!(
-            PERM(
+            perm(
                 "opencapx.execute",
                 &json!({"capability": "url.scheme.open"})
             ),
             Some("url.scheme.open".to_string())
         );
-        assert_eq!(PERM("opencapx.nothing", &json!({})), None);
+        assert_eq!(perm("opencapx.nothing", &json!({})), None);
     }
 
     /// Denial error surface: 40002 (plugin layer) / 40003 (scope) carry layer, permission, and remediation hint;
@@ -1007,7 +1007,6 @@ mod tests {
             crate::core::storage::Storage::open(&dir.join("t.db")).unwrap(),
         )));
         let (aid, _tok) = identity::register(&store, "claude", "test").unwrap();
-        let bus = Arc::new(EventBus::new());
         // No tauri AppHandle: handle needs &AppHandle — a test process cannot create one.
         // Instead test the gate function + mapping combination (equivalent to the internal order of handle).
         let d = gate_agent(&store, &aid, "notification.post", "mcp");

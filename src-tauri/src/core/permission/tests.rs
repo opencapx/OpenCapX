@@ -246,7 +246,6 @@ fn mem_store_falls_back_to_defaults() {
     );
 }
 
-#[test]
 // ===== v1.5 session tier =====
 #[test]
 fn session_tier_plugin_gate_lasts_for_process_and_db_beats_it() {
@@ -338,9 +337,11 @@ fn session_tier_declared_permission_downgrades_to_once() {
     session_revoke_all();
 }
 
+#[test]
 fn ask_registry_and_high_risk_set() {
     assert!(!resolve_ask("nope", "once"));
-    assert!(asks().lock().unwrap().is_empty());
+    // a failed resolve must not register a pending ask (only this key is asserted: other tests own the registry too)
+    assert!(!asks().lock().unwrap().contains_key("nope"));
     assert!(HIGH_RISK.contains(&"process.execute"));
     assert!(!HIGH_RISK.contains(&"image.read"));
     // a built-in write goes through filesystem.write: high-risk, denied by default, only allow-once at runtime
@@ -914,7 +915,7 @@ fn heatmap_reads_grid_and_aggregates_top_denied() {
 
     // mirror heatmap()'s read + aggregation path
     type TopRow = (String, i64, i64, i64, bool);
-    let (cells_count, mut top): (usize, Vec<TopRow>) = {
+    let (cells_count, top): (usize, Vec<TopRow>) = {
         let s = store.lock().unwrap();
         s.with_conn_ref(|c| {
             let mut stmt = c

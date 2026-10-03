@@ -117,7 +117,7 @@ fn stderr_publishes_plugin_log_event() {
         return;
     };
     let bus = crate::core::event::EventBus::shared();
-    let mut rx = bus.subscribe();
+    let rx = bus.subscribe();
     let spec = RuntimeSpec {
             command: py,
             args: vec![
@@ -140,20 +140,16 @@ fn stderr_publishes_plugin_log_event() {
     let mut got = false;
     let start = std::time::Instant::now();
     while start.elapsed() < std::time::Duration::from_secs(3) {
-        match rx.recv_timeout(std::time::Duration::from_millis(200)) {
-            Ok(ev) => {
-                if ev.kind == "plugin.log"
-                    && ev.payload.get("pluginId").and_then(|v| v.as_str())
-                        == Some("com.opencapx.stderr-test")
-                    && ev.payload.get("source").and_then(|v| v.as_str()) == Some("stderr")
-                    && ev.payload.get("message").and_then(|v| v.as_str())
-                        == Some("hello-from-stderr")
-                {
-                    got = true;
-                    break;
-                }
+        if let Ok(ev) = rx.recv_timeout(std::time::Duration::from_millis(200)) {
+            if ev.kind == "plugin.log"
+                && ev.payload.get("pluginId").and_then(|v| v.as_str())
+                    == Some("com.opencapx.stderr-test")
+                && ev.payload.get("source").and_then(|v| v.as_str()) == Some("stderr")
+                && ev.payload.get("message").and_then(|v| v.as_str()) == Some("hello-from-stderr")
+            {
+                got = true;
+                break;
             }
-            Err(_) => {}
         }
     }
     assert!(got, "stderr line should publish plugin.log event");

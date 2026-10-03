@@ -583,15 +583,10 @@ fn normalize_channel_canonical() {
 #[test]
 fn channel_filter_drops_higher_ranks_for_stable_user() {
     // Mirror check_updates' filter decision (without calling load_index, to avoid disk dependence):
-    let entries = vec![
+    let entries = [
         ("plug-a", "1.0.0", "stable"),
         ("plug-b", "1.0.0", "beta"),
         ("plug-c", "1.0.0", "dev"),
-    ];
-    let installed = vec![
-        ("plug-a".to_string(), "0.9.0".to_string()),
-        ("plug-b".to_string(), "0.9.0".to_string()),
-        ("plug-c".to_string(), "0.9.0".to_string()),
     ];
     // A stable user sees only stable
     let channels_stable: Vec<(String, String)> = vec![];

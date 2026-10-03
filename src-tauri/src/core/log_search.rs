@@ -126,6 +126,7 @@ pub fn search_logs(store: &SharedStore, filter: LogFilter) -> Vec<LogEntryDto> {
     out
 }
 
+#[cfg(test)]
 /// For the frontend tail mode: compute the max timestamp among search results (0 means empty).
 pub fn max_timestamp(entries: &[LogEntryDto]) -> u64 {
     entries.iter().map(|e| e.timestamp).max().unwrap_or(0)

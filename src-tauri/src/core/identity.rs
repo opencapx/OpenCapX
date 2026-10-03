@@ -591,7 +591,7 @@ pub fn ensure_registered(kind: &str, via: &str) -> Option<Credentials> {
             );
             None
         }
-        Err(crate::http::RegisterError::Rejected { code, .. }) if code == 40102 => {
+        Err(crate::http::RegisterError::Rejected { code: 40102, .. }) => {
             eprintln!(
                 "OpenCapX: this agent ({}) is revoked. To recover:\n  \
                  1. Open OpenCapX Settings -> Agents -> find this agent -> Reauthorize\n     \

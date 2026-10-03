@@ -76,8 +76,9 @@ impl Storage {
             .unwrap_or_default();
         // group by (cap, plugin)
         use std::collections::BTreeMap;
-        let mut groups: BTreeMap<(String, String), Vec<(i64, i64, String, Option<String>)>> =
-            BTreeMap::new();
+        type GroupKey = (String, String);
+        type GroupRow = (i64, i64, String, Option<String>);
+        let mut groups: BTreeMap<GroupKey, Vec<GroupRow>> = BTreeMap::new();
         let mut last_used: std::collections::HashMap<(String, String), u64> = Default::default();
         for (cap, plugin, elapsed, ts, result, error_kind) in rows {
             groups

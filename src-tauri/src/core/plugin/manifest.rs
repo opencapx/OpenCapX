@@ -134,11 +134,6 @@ impl CapabilityDecl {
             } => Some((permission, default.as_deref().unwrap_or("ask"))),
         }
     }
-
-    /// Whether this is a plugin-domain declaration (→ declaration table / once-only / "unverified domain" marker).
-    pub fn is_declared(&self) -> bool {
-        matches!(self, CapabilityDecl::Mapping { .. })
-    }
 }
 
 /// S5 — sandbox declaration (macOS execution layer in core::sandbox; the declaration itself is portable across platforms).

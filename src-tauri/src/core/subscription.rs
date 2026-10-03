@@ -182,12 +182,14 @@ pub fn subscribe(
         WatchSpec::File { path, recursive } => spawn_file_watcher(
             bus.clone(),
             stop,
-            id.clone(),
-            capability,
-            agent_id,
-            path,
-            recursive,
-            POLL_INTERVAL,
+            FileWatchSpec {
+                sub_id: id.clone(),
+                capability: capability.to_string(),
+                agent_id: agent_id.to_string(),
+                path,
+                recursive,
+                interval: POLL_INTERVAL,
+            },
         ),
         WatchSpec::Screen { interval, region } => spawn_screen_watcher(
             bus.clone(),
@@ -253,6 +255,7 @@ fn unsubscribe_with_reason(subscription_id: &str, bus: &EventBus, reason: &str) 
     }
 }
 
+#[cfg(test)]
 /// Subscription table snapshot (for tests / debugging).
 pub fn active() -> Vec<Value> {
     registry()
@@ -362,19 +365,26 @@ fn poll_file_watch(
     *prev = next;
 }
 
-/// file.watch watcher: polls and diffs, events go on the bus in the eventSchema shape ({event, path}).
-fn spawn_file_watcher(
-    bus: Arc<EventBus>,
-    stop: Arc<AtomicBool>,
+/// One file.watch subscription's watcher parameters (grouped so `spawn_file_watcher` stays under clippy's argument-count limit).
+struct FileWatchSpec {
     sub_id: String,
-    capability: &str,
-    agent_id: &str,
+    capability: String,
+    agent_id: String,
     path: PathBuf,
     recursive: bool,
     interval: Duration,
-) {
-    let capability = capability.to_string();
-    let agent_id = agent_id.to_string();
+}
+
+/// file.watch watcher: polls and diffs, events go on the bus in the eventSchema shape ({event, path}).
+fn spawn_file_watcher(bus: Arc<EventBus>, stop: Arc<AtomicBool>, spec: FileWatchSpec) {
+    let FileWatchSpec {
+        sub_id,
+        capability,
+        agent_id,
+        path,
+        recursive,
+        interval,
+    } = spec;
     std::thread::spawn(move || {
         // The first round only builds the baseline: files already present at subscription time do not count as created
         let mut prev = scan(&path, recursive);
@@ -729,7 +739,10 @@ mod tests {
         // Disconnect cleanup only touches this conn
         assert_eq!(cleanup_conn("conn-1", &bus), 1);
         assert_eq!(active().len(), 1);
-        assert!(active()[0]["subscriptionId"].as_str().unwrap_or("").len() > 0);
+        assert!(!active()[0]["subscriptionId"]
+            .as_str()
+            .unwrap_or("")
+            .is_empty());
         assert_eq!(cleanup_conn("conn-2", &bus), 1);
         assert_eq!(active().len(), 0);
         assert_eq!(cleanup_conn("conn-1", &bus), 0);
@@ -803,12 +816,14 @@ mod tests {
         spawn_file_watcher(
             bus.clone(),
             stop.clone(),
-            sub_id.clone(),
-            "file.watch",
-            "ag_w",
-            dir.clone(),
-            true,
-            Duration::from_millis(50),
+            FileWatchSpec {
+                sub_id: sub_id.clone(),
+                capability: "file.watch".to_string(),
+                agent_id: "ag_w".to_string(),
+                path: dir.clone(),
+                recursive: true,
+                interval: Duration::from_millis(50),
+            },
         );
 
         // Poll within a 60s overall deadline: under heavy CI load a single poll round may starve; the intent is

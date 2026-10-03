@@ -302,12 +302,12 @@ impl PluginManager {
                         s.key
                     ));
                 };
-                if !(num_f64(min) < num_f64(max)) {
+                if num_f64(min).partial_cmp(&num_f64(max)) != Some(std::cmp::Ordering::Less) {
                     return Err(format!("slider setting {} requires min < max", s.key));
                 }
             }
             if let Some(step) = &s.step {
-                if !(num_f64(step) > 0.0) {
+                if num_f64(step).partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
                     return Err(format!("setting {} step must be > 0", s.key));
                 }
             }

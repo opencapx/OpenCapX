@@ -323,10 +323,7 @@ fn auth_gateway_decisions() {
     // In dev mode authorize is always Ok — temporarily clear the env to test the strict path
     let had_dev = std::env::var("OPEN_CAPX_DEV").ok();
     std::env::remove_var("OPEN_CAPX_DEV");
-    assert!(matches!(
-        authorize(&store, &hdr(Some(&aid), Some(&tok))),
-        Ok(_)
-    ));
+    assert!(authorize(&store, &hdr(Some(&aid), Some(&tok))).is_ok());
     assert_eq!(
         authorize(&store, &hdr(None, None)),
         Err((401, 40101, "anonymous"))

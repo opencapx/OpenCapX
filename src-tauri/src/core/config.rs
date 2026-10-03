@@ -22,6 +22,7 @@ pub fn config_path(plugin_id: &str) -> PathBuf {
     config_dir().join(format!("{}.json", sanitize(plugin_id)))
 }
 
+#[cfg(test)]
 /// For reverse RPC + tests: redirect to a test tmp directory.
 pub fn config_path_in(plugin_id: &str, dir: &Path) -> PathBuf {
     dir.join(format!("{}.json", sanitize(plugin_id)))
@@ -65,6 +66,7 @@ pub fn all(plugin_id: &str) -> Map<String, Value> {
     read_from(&p).unwrap_or_default()
 }
 
+#[cfg(test)]
 /// Read all config for one plugin from a given directory (for tests).
 pub fn all_in(plugin_id: &str, dir: &Path) -> Map<String, Value> {
     let p = config_path_in(plugin_id, dir);
@@ -369,6 +371,7 @@ pub fn dispatch(plugin_id: &str, op: &str, params: &Value) -> Result<Value, Stri
     }
 }
 
+#[cfg(test)]
 /// Force-write a config to a given directory (for tests).
 pub fn force_write_in(plugin_id: &str, dir: &Path, value: &Value) -> std::io::Result<()> {
     let p = config_path_in(plugin_id, dir);

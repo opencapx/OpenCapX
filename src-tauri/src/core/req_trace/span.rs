@@ -116,9 +116,7 @@ fn end_span(id: &str, ok: bool, error: Option<&str>, attrs: Value) {
                     SpanStatus::Error
                 },
                 error: error.map(String::from),
-                attrs: if attrs.as_object().map(|o| o.is_empty()).unwrap_or(false) {
-                    None
-                } else if attrs.is_null() {
+                attrs: if attrs.is_null() || attrs.as_object().is_some_and(|o| o.is_empty()) {
                     None
                 } else {
                     Some(attrs)
@@ -177,9 +175,7 @@ pub fn finish(ok: bool, error: Option<&str>, attrs: Value) {
                     SpanStatus::Error
                 },
                 error: error.map(String::from),
-                attrs: if attrs.as_object().map(|o| o.is_empty()).unwrap_or(false) {
-                    None
-                } else if attrs.is_null() {
+                attrs: if attrs.is_null() || attrs.as_object().is_some_and(|o| o.is_empty()) {
                     None
                 } else {
                     Some(attrs)

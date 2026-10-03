@@ -52,6 +52,7 @@ pub(crate) fn rotate_alerting_bundle_secret() -> Result<(), String> {
     crate::core::alerting::rotate_bundle_secret()
 }
 
+#[cfg(test)]
 #[derive(serde::Serialize)]
 pub(crate) struct Stats {
     pub(crate) total: usize,
@@ -60,10 +61,12 @@ pub(crate) struct Stats {
     pub(crate) by_agent: std::collections::HashMap<String, usize>,
 }
 
+#[cfg(test)]
 pub(crate) fn day_start_secs(now: u64) -> u64 {
     (now / 86400) * 86400
 }
 
+#[cfg(test)]
 pub(crate) fn compute_stats(sessions: &[crate::core::agent::Session], now: u64) -> Stats {
     let start = day_start_secs(now);
     let mut by_agent = std::collections::HashMap::new();

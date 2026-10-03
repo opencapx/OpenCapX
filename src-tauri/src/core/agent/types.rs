@@ -68,6 +68,7 @@ pub struct SessionDto {
     pub answered: Option<String>,
 }
 
+#[cfg(test)]
 /// One entry in the session history: the archived copy after a session expires from the active list.
 #[derive(Debug, Clone, Serialize)]
 pub struct ArchivedSession {

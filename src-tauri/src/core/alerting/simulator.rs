@@ -102,17 +102,6 @@ pub struct DispatchGateSimulation {
     pub would_be_dropped: bool,
 }
 
-impl DispatchGateSimulation {
-    fn empty() -> Self {
-        DispatchGateSimulation {
-            silenced: None,
-            acked: None,
-            dedup_blocked: None,
-            would_be_dropped: false,
-        }
-    }
-}
-
 /// Phase 76 — Silence simulation: replicates the `is_silenced` decision and returns the first hit silence's details.
 pub fn simulate_silence(source: &str, now_ts: u64) -> Option<SilenceHitDto> {
     let store = crate::core::shared_store()?;

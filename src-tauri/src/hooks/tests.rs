@@ -132,7 +132,7 @@ fn connect_ensure_mcp_writes_each_shape_idempotently() {
         assert!(v["mcpServers"]["opencapx"]["command"].is_string());
         assert_eq!(v["mcpServers"]["opencapx"]["args"][0], "mcp");
         assert!(mcp_entry_is_ours("claude", &v));
-        assert_eq!(ensure_mcp("claude").unwrap().1, false);
+        assert!(!ensure_mcp("claude").unwrap().1);
 
         // codex: append [mcp_servers.opencapx] to config.toml
         let (p2, w2) = ensure_mcp("codex").unwrap();
@@ -144,7 +144,7 @@ fn connect_ensure_mcp_writes_each_shape_idempotently() {
                 t.contains("env = { OPEN_CAPX_AGENT = \"codex\" }"),
                 "the block must pin the host identity: codex exports no signature env var to MCP children"
             );
-        assert_eq!(ensure_mcp("codex").unwrap().1, false);
+        assert!(!ensure_mcp("codex").unwrap().1);
 
         // opencode: opencode.json mcp local command array
         let (p3, w3) = ensure_mcp("opencode").unwrap();
@@ -152,7 +152,7 @@ fn connect_ensure_mcp_writes_each_shape_idempotently() {
         let v3 = read_json(&std::path::PathBuf::from(&p3));
         assert_eq!(v3["mcp"]["opencapx"]["type"], "local");
         assert!(mcp_entry_is_ours("opencode", &v3));
-        assert_eq!(ensure_mcp("opencode").unwrap().1, false);
+        assert!(!ensure_mcp("opencode").unwrap().1);
 
         // omp: ~/.omp/agent/mcp.json stdio entry with the identity pin
         let (p4, w4) = ensure_mcp("omp").unwrap();
@@ -165,7 +165,7 @@ fn connect_ensure_mcp_writes_each_shape_idempotently() {
             "omp"
         );
         assert!(mcp_entry_is_ours("omp", &v4));
-        assert_eq!(ensure_mcp("omp").unwrap().1, false);
+        assert!(!ensure_mcp("omp").unwrap().1);
 
         assert!(ensure_mcp("nope").is_err());
     });
@@ -223,7 +223,7 @@ fn ensure_mcp_omp_backfills_the_identity_env() {
             v["mcpServers"]["opencapx"]["env"]["FOO"], "bar",
             "user env keys must survive"
         );
-        assert_eq!(ensure_mcp("omp").unwrap().1, false, "idempotent");
+        assert!(!ensure_mcp("omp").unwrap().1, "idempotent");
     });
 }
 

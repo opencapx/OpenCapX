@@ -20,20 +20,6 @@ pub fn with_store<R>(f: impl FnOnce(&mut StoreEnum) -> R) -> Option<R> {
     Some(f(&mut guard))
 }
 
-pub fn open_default() -> StoreEnum {
-    let path = data_dir().join("opencapx.db");
-    match Storage::open(&path) {
-        Ok(s) => StoreEnum::Db(s),
-        Err(e) => {
-            eprintln!(
-                "[storage] sqlite unavailable ({}), falling back to memory",
-                e
-            );
-            StoreEnum::Mem(crate::core::agent::SessionStore::new())
-        }
-    }
-}
-
 pub fn data_dir() -> std::path::PathBuf {
     if let Some(home) = crate::core::home_dir() {
         return home.join(".opencapx").join("data");

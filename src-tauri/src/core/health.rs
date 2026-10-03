@@ -146,8 +146,10 @@ mod tests {
 
     #[test]
     fn validate_rejects_out_of_range() {
-        let mut cfg = PluginHealthConfig::default();
-        cfg.heartbeat_sec = 3601;
+        let mut cfg = PluginHealthConfig {
+            heartbeat_sec: 3601,
+            ..Default::default()
+        };
         assert!(validate(&cfg).is_err());
         cfg.heartbeat_sec = 0;
         cfg.ping_timeout_ms = 50;

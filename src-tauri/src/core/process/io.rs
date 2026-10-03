@@ -46,7 +46,7 @@ pub(crate) fn read_line_capped<R: std::io::BufRead>(r: &mut R, cap: usize) -> Li
     let mut over = false;
     loop {
         let n = match r.fill_buf() {
-            Ok(chunk) if chunk.is_empty() => {
+            Ok([]) => {
                 return match (over, buf.is_empty()) {
                     (true, _) => LineOutcome::Dropped,
                     (false, true) => LineOutcome::Eof,

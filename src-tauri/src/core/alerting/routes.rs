@@ -366,10 +366,3 @@ pub fn dry_run_route(source: &str, payload_json: &str) -> Result<Option<RouteRul
         serde_json::from_str(payload_json).map_err(|e| format!("payload not valid json: {}", e))?;
     Ok(match_route(source, &payload))
 }
-
-/// Phase 51 dispatch integration hook: `route_targets` is the set of endpoint_ids of the hit routes.
-/// If Some → send only to those endpoints (ignoring endpoint.source_filter / compatibility fanout).
-/// If None → use the legacy fanout.
-pub fn route_target_ids(kind: &str, payload: &serde_json::Value) -> Option<Vec<String>> {
-    match_route(kind, payload).map(|r| r.target_endpoint_ids)
-}

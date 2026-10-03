@@ -197,10 +197,7 @@ fn count_lines(p: &Path) -> u64 {
     std::fs::File::open(p)
         .map(|f| {
             use std::io::BufRead;
-            std::io::BufReader::new(f)
-                .lines()
-                .filter_map(|l| l.ok())
-                .count() as u64
+            std::io::BufReader::new(f).lines().count() as u64
         })
         .unwrap_or(0)
 }

@@ -49,6 +49,7 @@ pub fn state() -> KillSwitchStateDto {
     }
 }
 
+#[cfg(test)]
 /// Whether the kill switch is enabled. Checked at the `PluginManager::start` entry; when active it returns Err directly.
 pub fn is_active() -> bool {
     let arc = shared();
