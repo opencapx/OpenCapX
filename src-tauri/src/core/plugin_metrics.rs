@@ -442,7 +442,7 @@ pub fn spawn_monitor() {
     if ONCE.set(()).is_err() {
         return;
     }
-    std::thread::spawn(|| monitor_loop());
+    std::thread::spawn(monitor_loop);
 }
 
 fn monitor_loop() {
@@ -512,8 +512,10 @@ mod tests {
 
     #[test]
     fn validate_rejects_out_of_range() {
-        let mut cfg = MetricsConfig::default();
-        cfg.poll_secs = 4000;
+        let mut cfg = MetricsConfig {
+            poll_secs: 4000,
+            ..Default::default()
+        };
         assert!(validate(&cfg).is_err());
         cfg.poll_secs = 0; // 0 is valid (monitoring off)
         cfg.cpu_pct_max = 101;

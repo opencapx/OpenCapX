@@ -228,6 +228,7 @@ pub(crate) fn confirm_install_noninteractive(
     Ok(decisions)
 }
 
+#[cfg(test)]
 /// Commit phase (§4.4 step 5): writes the confirmed decisions into `plugin_permissions` in a **single transaction**.
 /// Called only after the user confirms everything; any failure rolls back the whole batch (no half-applied decisions).
 /// Empty list = no-op.

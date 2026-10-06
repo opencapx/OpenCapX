@@ -163,7 +163,7 @@ fn list_and_read_traces_roundtrip() {
     let t1 = begin("ag_list", "", "");
     finish(true, None, serde_json::Value::Null);
     std::thread::sleep(std::time::Duration::from_millis(5));
-    let t2 = begin("ag_list", "", "");
+    let _t2 = begin("ag_list", "", "");
     finish(false, Some("boom"), serde_json::Value::Null);
     // Pending: only root start, no end — ended_at must be None (so the viewer can distinguish "in progress")
     let t3 = begin("ag_list", "", "");

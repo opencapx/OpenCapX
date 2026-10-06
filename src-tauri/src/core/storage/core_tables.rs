@@ -283,7 +283,7 @@ impl Storage {
                 publisher_id TEXT,
                 source       TEXT NOT NULL
             );",
-        );
+        )?;
         // Phase 31: silent migration of old tables (ALTER on an existing column fails and is ignored).
         let _ = self.conn.execute_batch(
             "ALTER TABLE capability_stats ADD COLUMN result TEXT NOT NULL DEFAULT 'ok';
@@ -553,7 +553,7 @@ impl Storage {
         );
         // Agent identity (per docs/permissions.md "Agent identity"): a security subject, ≠ the sessions observation table.
         // v1 one kind one identity (UNIQUE kind); token stores only a hash; revoked state is restored from the settings page.
-        let _ = self.conn.execute_batch(
+        self.conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS agents (
                 agent_id TEXT PRIMARY KEY,
                 kind TEXT NOT NULL,
@@ -578,7 +578,7 @@ impl Storage {
                 decision TEXT NOT NULL,
                 updated_at INTEGER NOT NULL
              )",
-        );
+        )?;
         Ok(())
     }
 
@@ -687,6 +687,7 @@ impl Storage {
         }
     }
 
+    #[cfg(test)]
     /// Session history (descending, most recently ended first).
     pub fn list_session_archive(&self, limit: usize) -> Vec<crate::core::agent::ArchivedSession> {
         let mut stmt = match self.conn.prepare(

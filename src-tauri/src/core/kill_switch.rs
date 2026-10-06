@@ -18,23 +18,12 @@ pub struct KillSwitchStateDto {
     pub set_by: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct Inner {
     enabled: bool,
     reason: String,
     set_at: u64,
     set_by: String,
-}
-
-impl Default for Inner {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            reason: String::new(),
-            set_at: 0,
-            set_by: String::new(),
-        }
-    }
 }
 
 static SHARED: OnceLock<Arc<Mutex<Inner>>> = OnceLock::new();
@@ -60,6 +49,7 @@ pub fn state() -> KillSwitchStateDto {
     }
 }
 
+#[cfg(test)]
 /// Whether the kill switch is enabled. Checked at the `PluginManager::start` entry; when active it returns Err directly.
 pub fn is_active() -> bool {
     let arc = shared();

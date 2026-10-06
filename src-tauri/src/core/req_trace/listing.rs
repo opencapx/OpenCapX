@@ -150,6 +150,7 @@ pub fn list_all_hook_sessions() -> Vec<TraceEntry> {
     pairs.into_iter().map(|(_, e)| e).collect()
 }
 
+#[cfg(test)]
 /// Overview of agents that have traces (the viewer's "Request Chains" tab uses it to list all agents).
 /// Does not read the agents table: traces should remain visible after revocation/deletion — the directory itself is the source of truth.
 #[derive(Debug, Clone, Serialize)]
@@ -162,6 +163,7 @@ pub struct TraceAgentSummary {
     pub last_ts: u64,
 }
 
+#[cfg(test)]
 /// Under one agent directory: (ndjson file count, newest mtime seconds).
 fn dir_stats(dir: &Path) -> (u64, u64) {
     let Ok(rd) = std::fs::read_dir(dir) else {
@@ -186,6 +188,7 @@ fn dir_stats(dir: &Path) -> (u64, u64) {
     (n, last)
 }
 
+#[cfg(test)]
 fn collect_agents_at(
     root: &Path,
     into: &mut std::collections::BTreeMap<String, (u64, u64, u64)>,
@@ -216,6 +219,7 @@ fn collect_agents_at(
     }
 }
 
+#[cfg(test)]
 pub fn list_trace_agents() -> Vec<TraceAgentSummary> {
     let mut map: std::collections::BTreeMap<String, (u64, u64, u64)> =
         std::collections::BTreeMap::new();

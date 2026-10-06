@@ -165,16 +165,16 @@ pub fn dispatch(source: &str, payload: serde_json::Value) {
                 let retry_cfg = load_retry_config();
                 let now = crate::core::agent::now_secs();
                 let next_retry = now.saturating_add(retry_cfg.initial_backoff_secs as u64);
-                enqueue_failed_delivery(
-                    &source_owned,
-                    &url,
-                    &body_str,
-                    now,
-                    retry_cfg.max_attempts,
-                    next_retry,
-                    &err_msg,
-                    None,
-                );
+                enqueue_failed_delivery(&NewFailedDelivery {
+                    source: &source_owned,
+                    url: &url,
+                    payload_json: &body_str,
+                    now_ts: now,
+                    max_attempts: retry_cfg.max_attempts,
+                    next_retry_ts: next_retry,
+                    last_error: &err_msg,
+                    endpoint_id: None,
+                });
                 eprintln!("[alerting] {} queued for retry: {}", source_owned, err_msg);
             }
         });
@@ -276,16 +276,16 @@ pub fn dispatch(source: &str, payload: serde_json::Value) {
                 let retry_cfg = load_retry_config();
                 let now = crate::core::agent::now_secs();
                 let next_retry = now.saturating_add(retry_cfg.initial_backoff_secs as u64);
-                enqueue_failed_delivery(
-                    &source_owned,
-                    &ep.url,
-                    &body_str,
-                    now,
-                    retry_cfg.max_attempts,
-                    next_retry,
-                    &err_msg,
-                    Some(&ep.id),
-                );
+                enqueue_failed_delivery(&NewFailedDelivery {
+                    source: &source_owned,
+                    url: &ep.url,
+                    payload_json: &body_str,
+                    now_ts: now,
+                    max_attempts: retry_cfg.max_attempts,
+                    next_retry_ts: next_retry,
+                    last_error: &err_msg,
+                    endpoint_id: Some(&ep.id),
+                });
                 eprintln!(
                     "[alerting] {} → endpoint {} queued for retry: {}",
                     source_owned, ep.name, err_msg
@@ -441,6 +441,7 @@ pub fn gen_event_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
+#[cfg(test)]
 /// Build the canonical envelope from `(source, payload)` (schema_version=1).
 /// `tags` defaults to empty; Phase 51 routes may put extra tags there, but dispatch() does not read them yet.
 /// severity follows the Phase 53 chain (stored hint → hardcoded default → Info), ensuring the plugin manifest takes effect.

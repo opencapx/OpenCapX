@@ -46,7 +46,7 @@ pub(crate) fn read_line_capped<R: std::io::BufRead>(r: &mut R, cap: usize) -> Li
     let mut over = false;
     loop {
         let n = match r.fill_buf() {
-            Ok(chunk) if chunk.is_empty() => {
+            Ok([]) => {
                 return match (over, buf.is_empty()) {
                     (true, _) => LineOutcome::Dropped,
                     (false, true) => LineOutcome::Eof,
@@ -97,7 +97,10 @@ pub(crate) fn log_line(plugin_id: &str, line: &str) {
     {
         let _ = writeln!(f, "{}", line);
     }
-    if LOG_LINES.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % LOG_ROTATE_EVERY == 0 {
+    if LOG_LINES
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        .is_multiple_of(LOG_ROTATE_EVERY)
+    {
         let _ = crate::core::retention::rotate_logs();
     }
 }

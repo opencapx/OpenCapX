@@ -508,7 +508,7 @@ mod tests {
             &json!({"action": "say", "text": "All done"}),
         )
         .unwrap();
-        save_to(&path, &[rule.clone()]).unwrap();
+        save_to(&path, std::slice::from_ref(&rule)).unwrap();
         let back = load_from(&path);
         assert_eq!(back.len(), 1);
         assert_eq!(back[0]["id"], rule["id"]);

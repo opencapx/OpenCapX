@@ -9,6 +9,7 @@ pub fn download_target(id: &str, target: &PluginMarketVersion) -> Result<PathBuf
     download_bytes(id, &target.version, &target.download_url, &target.sha256)
 }
 
+#[cfg(test)]
 /// Legacy entry point: the whole entry's flat fields (pre-M1 format).
 pub fn download(entry: &PluginMarketEntry) -> Result<PathBuf, String> {
     download_bytes(
@@ -134,6 +135,7 @@ pub fn sha256_hex(data: &[u8]) -> String {
     format!("{:x}", h.finalize())
 }
 
+#[cfg(test)]
 /// Raw 32-byte SHA-256 (for internal/consistency verification).
 pub fn sha256_raw(data: &[u8]) -> [u8; 32] {
     let mut h = Sha256::new();
@@ -141,6 +143,7 @@ pub fn sha256_raw(data: &[u8]) -> [u8; 32] {
     h.finalize().into()
 }
 
+#[cfg(test)]
 /// Kept for compatibility: legacy entry point (tests and existing callers), returns hex.
 pub fn sha256(data: &[u8]) -> String {
     sha256_hex(data)

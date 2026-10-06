@@ -330,6 +330,7 @@ pub fn capture(input: &Value) -> Result<Value, String> {
 /// error; negative/out-of-bounds origins clamp to [0, bound], keeping crop_imm in bounds.
 /// Compiles on all three platforms (unit tests must run on mac too); only the Windows path
 /// calls it.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn clamp_region(
     iw: i64,
     ih: i64,

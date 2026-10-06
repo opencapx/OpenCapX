@@ -17,21 +17,7 @@ pub const EVENT_RETENTION_DAYS: u64 = 14;
 pub fn with_store<R>(f: impl FnOnce(&mut StoreEnum) -> R) -> Option<R> {
     let store = crate::core::shared_store()?;
     let mut guard = store.lock().ok()?;
-    Some(f(&mut *guard))
-}
-
-pub fn open_default() -> StoreEnum {
-    let path = data_dir().join("opencapx.db");
-    match Storage::open(&path) {
-        Ok(s) => StoreEnum::Db(s),
-        Err(e) => {
-            eprintln!(
-                "[storage] sqlite unavailable ({}), falling back to memory",
-                e
-            );
-            StoreEnum::Mem(crate::core::agent::SessionStore::new())
-        }
-    }
+    Some(f(&mut guard))
 }
 
 pub fn data_dir() -> std::path::PathBuf {

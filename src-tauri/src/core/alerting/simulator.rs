@@ -102,17 +102,6 @@ pub struct DispatchGateSimulation {
     pub would_be_dropped: bool,
 }
 
-impl DispatchGateSimulation {
-    fn empty() -> Self {
-        DispatchGateSimulation {
-            silenced: None,
-            acked: None,
-            dedup_blocked: None,
-            would_be_dropped: false,
-        }
-    }
-}
-
 /// Phase 76 — Silence simulation: replicates the `is_silenced` decision and returns the first hit silence's details.
 pub fn simulate_silence(source: &str, now_ts: u64) -> Option<SilenceHitDto> {
     let store = crate::core::shared_store()?;
@@ -173,7 +162,7 @@ pub fn simulate_ack(source: &str, now_ts: u64) -> Option<AckHitDto> {
 pub fn simulate_dedup(
     source: &str,
     payload: &serde_json::Value,
-    now_secs: u64,
+    _now_secs: u64,
 ) -> Option<DedupHitDto> {
     let cfg = load_config();
     let min_interval = cfg.min_interval_secs as u64;

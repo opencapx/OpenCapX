@@ -33,6 +33,20 @@ pub struct FailedDeliveryRow {
     pub endpoint_id: Option<String>,
 }
 
+/// Phase 49 — the fields of one dead-letter insert (id excluded: the caller generates it). Grouped so
+/// `Storage::insert_failed_delivery` stays under clippy's argument-count limit.
+pub struct NewFailedDelivery<'a> {
+    pub source: &'a str,
+    pub url: &'a str,
+    pub payload_json: &'a str,
+    pub now_ts: u64,
+    pub max_attempts: u32,
+    pub next_retry_ts: u64,
+    pub last_error: &'a str,
+    /// Phase 49: owning endpoint; None = the Phase 47 single-endpoint compatibility path.
+    pub endpoint_id: Option<&'a str>,
+}
+
 /// Phase 67 — alert recipient config (webhook / log:stderr / log:file / email:smtp).
 /// `config` is a `serde_json::Value`; the schema differs per kind (jointly constrained by the UI form + import bundle).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

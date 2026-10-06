@@ -12,7 +12,6 @@
 //! - EventBus / kill_switch / settings.json are all process-level shared and do not switch with the profile.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -63,14 +62,6 @@ pub fn workspace_dir(name: &str) -> PathBuf {
 /// profile name → full DB path.
 pub fn db_path_for(name: &str) -> PathBuf {
     workspace_dir(name).join("store.sqlite")
-}
-
-/// `~/.opencapx/workspaces/`.
-pub fn profiles_root() -> PathBuf {
-    if let Some(home) = crate::core::home_dir() {
-        return home.join(".opencapx").join("workspaces");
-    }
-    std::env::temp_dir().join("opencapx-workspaces")
 }
 
 /// Current ~/.opencapx/data/opencapx.db (the old flat path, migration source).
@@ -168,6 +159,7 @@ fn read_profiles_file() -> ProfilesFile {
     }
 }
 
+#[cfg(test)]
 pub fn set_active_profile(name: &str) -> Result<(), String> {
     let mut pf = read_profiles_file();
     if !pf.profiles.iter().any(|p| p.name == name) {
@@ -314,7 +306,7 @@ pub fn list_profiles() -> Vec<ProfileInfo> {
 }
 
 /// For main.rs startup: open a profile's store (using Storage::open's default behavior).
-/// On failure, fall back to an in-memory store, the same policy as open_default().
+/// On failure, fall back to an in-memory store (the same policy the startup path uses).
 /// Corrupt-db quarantine record: original file → quarantined file + reason (for logs and the Settings page notice).
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -392,7 +384,7 @@ fn quarantine_db(path: &Path, reason: &str) -> Option<Quarantine> {
 pub fn open_profile_store(name: &str) -> (super::storage::StoreEnum, Option<Quarantine>) {
     let path = db_path_for(name);
     match try_open_checked(&path) {
-        Ok(store) => return (super::storage::StoreEnum::Db(store), None),
+        Ok(store) => (super::storage::StoreEnum::Db(store), None),
         Err(reason) => {
             let q = quarantine_db(&path, &reason);
             match try_open_checked(&path) {
@@ -453,6 +445,7 @@ pub fn write_db_recovery_notice(q: &Quarantine) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
 

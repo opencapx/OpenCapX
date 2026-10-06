@@ -102,6 +102,7 @@ pub(crate) fn payload_host(payload: &str) -> Option<&'static str> {
     }
 }
 
+#[cfg(test)]
 /// Whether this hook should write back to the host (pure function, no IO).
 ///
 /// Returns `Some` only when the agent supports PreToolUse's `updatedInput`, the event is PreToolUse, and the command matches

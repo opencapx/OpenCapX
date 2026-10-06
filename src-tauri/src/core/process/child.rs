@@ -19,6 +19,8 @@ pub struct PluginProcess {
 /// running any Python. Plugin manifests declare `"command": "python3"` (the portable unix
 /// name), so when the literal command cannot actually run, fall back to `python` before
 /// giving up. Unix keeps the exact command the manifest declared.
+// The only caller is the `not(target_os = "macos")` spawn arm; macOS spawns the declared command directly.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn resolve_command(cmd: &str) -> String {
     if cmd != "python3" || cfg!(not(target_os = "windows")) {
         return cmd.to_string();
@@ -135,11 +137,11 @@ impl PluginProcess {
         let stdin = child
             .stdin
             .take()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no stdin"))?;
+            .ok_or_else(|| std::io::Error::other("no stdin"))?;
         let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "no stdout"))?;
+            .ok_or_else(|| std::io::Error::other("no stdout"))?;
         let stdin: Arc<Mutex<ChildStdin>> = Arc::new(Mutex::new(stdin));
 
         // stderr → plugin log file + EventBus (consumed live by SSE/admin/settings audit)
@@ -154,7 +156,7 @@ impl PluginProcess {
                             let n = DROPPED_FRAMES
                                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                                 + 1;
-                            if n == 1 || n % 100 == 0 {
+                            if n == 1 || n.is_multiple_of(100) {
                                 log_line(
                                     &pid,
                                     &format!("[core] dropped oversized stderr line (#{})", n),
@@ -193,7 +195,7 @@ impl PluginProcess {
                     LineOutcome::Dropped => {
                         let n =
                             DROPPED_FRAMES.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-                        if n == 1 || n % 100 == 0 {
+                        if n == 1 || n.is_multiple_of(100) {
                             log_line(
                                 &trace_pid,
                                 &format!("[core] dropped oversized plugin frame (#{})", n),

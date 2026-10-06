@@ -61,14 +61,6 @@ impl SessionSink for StoreEnum {
 }
 
 impl StoreEnum {
-    /// Session history (descending). The Mem variant has no archive, returns empty.
-    pub fn list_session_archive(&self, limit: usize) -> Vec<crate::core::agent::ArchivedSession> {
-        match self {
-            StoreEnum::Db(s) => s.list_session_archive(limit),
-            StoreEnum::Mem(_) => Vec::new(),
-        }
-    }
-
     /// Clean up archives past the retention period (the Mem variant is a no-op).
     pub fn prune_session_archive(&self, now: u64) -> usize {
         match self {

@@ -5,6 +5,7 @@
 //!
 //! - dark_mode / wallpaper: AppleScript System Events (triggers "Automation" TCC)
 //! - volume: osascript `set volume` (no TCC needed)
+//!
 //! Non-macOS reports an honest error; plugins can override.
 
 use serde_json::{json, Value};

@@ -5,10 +5,7 @@ use super::*;
 
 pub(crate) fn install(kind: &str) -> std::io::Result<()> {
     let (Some(path), Some(s)) = (config_path(kind), spec(kind)) else {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "unknown agent",
-        ));
+        return Err(std::io::Error::other("unknown agent"));
     };
     let cmd = full_command(kind);
 
@@ -52,7 +49,7 @@ pub(crate) fn install(kind: &str) -> std::io::Result<()> {
         obj.insert("name".to_string(), json!(name));
     }
     let key = container_key(s.style);
-    if !obj.get(key).map_or(false, |h| h.is_object()) {
+    if !obj.get(key).is_some_and(|h| h.is_object()) {
         obj.insert(key.to_string(), json!({}));
     }
     let map = obj.get_mut(key).and_then(|h| h.as_object_mut()).unwrap();

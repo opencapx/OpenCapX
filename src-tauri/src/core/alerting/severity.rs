@@ -72,35 +72,36 @@ pub fn severity_inheritance_chain(source: &str) -> Vec<SeverityLink> {
             .flatten();
     let manifest_hit = manifest_row.is_some() && !user_hit;
     let default_hit = manifest_row.is_none() && !user_hit;
-    let mut chain = Vec::with_capacity(4);
-    chain.push(SeverityLink {
-        policy: SeverityPolicy::Manifest,
-        severity: severity_hint_lookup(source, "manifest"),
-        source: source.to_string(),
-        plugin_id: manifest_row.and_then(|r| r.plugin_id),
-        hit: manifest_hit,
-    });
-    chain.push(SeverityLink {
-        policy: SeverityPolicy::PluginDefault,
-        severity: Some(severity_for_source(source)),
-        source: source.to_string(),
-        plugin_id: None,
-        hit: default_hit,
-    });
-    chain.push(SeverityLink {
-        policy: SeverityPolicy::UserOverride,
-        severity: severity_hint_lookup(source, "user"),
-        source: source.to_string(),
-        plugin_id: None,
-        hit: user_hit,
-    });
-    chain.push(SeverityLink {
-        policy: SeverityPolicy::Disabled,
-        severity: None,
-        source: source.to_string(),
-        plugin_id: None,
-        hit: false, // Phase 69 does not implement set yet
-    });
+    let chain = vec![
+        SeverityLink {
+            policy: SeverityPolicy::Manifest,
+            severity: severity_hint_lookup(source, "manifest"),
+            source: source.to_string(),
+            plugin_id: manifest_row.and_then(|r| r.plugin_id),
+            hit: manifest_hit,
+        },
+        SeverityLink {
+            policy: SeverityPolicy::PluginDefault,
+            severity: Some(severity_for_source(source)),
+            source: source.to_string(),
+            plugin_id: None,
+            hit: default_hit,
+        },
+        SeverityLink {
+            policy: SeverityPolicy::UserOverride,
+            severity: severity_hint_lookup(source, "user"),
+            source: source.to_string(),
+            plugin_id: None,
+            hit: user_hit,
+        },
+        SeverityLink {
+            policy: SeverityPolicy::Disabled,
+            severity: None,
+            source: source.to_string(),
+            plugin_id: None,
+            hit: false, // Phase 69 does not implement set yet
+        },
+    ];
     chain
 }
 
@@ -159,6 +160,7 @@ pub fn severity_resolved(source: &str) -> Severity {
     effective_severity_with_reason(source).0
 }
 
+#[cfg(test)]
 /// Phase 70 — Route chain takes severity (equivalent to `severity_resolved`)
 pub fn route_dispatch_severity(source: &str) -> Severity {
     severity_resolved(source)
@@ -174,6 +176,7 @@ pub fn aggregation_action_severity(source: &str) -> Severity {
     severity_resolved(source)
 }
 
+#[cfg(test)]
 /// Phase 70 — Escalation chain takes severity (equivalent to `severity_resolved`)
 pub fn escalation_target_severity(source: &str) -> Severity {
     severity_resolved(source)

@@ -47,7 +47,7 @@ impl Storage {
     /// Aggregate the latest N calls per (capability, plugin_id) pair: count + avg + p50 + p95 + last_used + fail_count + errors.
     /// Computes percentiles in memory (N≤500 to prevent blowup), not via SQLite math functions. p50/p95 use only result='ok' samples; failed times are excluded from the latency distribution.
     pub fn capability_stats_summary(&self, samples_per_pair: usize) -> Vec<CapabilityStat> {
-        let n = samples_per_pair.max(10).min(500);
+        let n = samples_per_pair.clamp(10, 500);
         // take the latest n per pair: use a subquery to find the n newest ts for each (cap, plugin), then aggregate.
         // SQLite has no LATERAL, so use the window function ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ts DESC).
         let Ok(mut stmt) = self.conn.prepare(
@@ -76,8 +76,9 @@ impl Storage {
             .unwrap_or_default();
         // group by (cap, plugin)
         use std::collections::BTreeMap;
-        let mut groups: BTreeMap<(String, String), Vec<(i64, i64, String, Option<String>)>> =
-            BTreeMap::new();
+        type GroupKey = (String, String);
+        type GroupRow = (i64, i64, String, Option<String>);
+        let mut groups: BTreeMap<GroupKey, Vec<GroupRow>> = BTreeMap::new();
         let mut last_used: std::collections::HashMap<(String, String), u64> = Default::default();
         for (cap, plugin, elapsed, ts, result, error_kind) in rows {
             groups
@@ -92,7 +93,7 @@ impl Storage {
         }
         let mut out: Vec<CapabilityStat> = groups
             .into_iter()
-            .map(|((capability, plugin_id), mut samples)| {
+            .map(|((capability, plugin_id), samples)| {
                 let last_used_at = last_used
                     .remove(&(capability.clone(), plugin_id.clone()))
                     .unwrap_or(0);

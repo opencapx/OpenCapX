@@ -301,7 +301,9 @@ pub(crate) fn unguarded_exit(require: bool) -> Option<i32> {
 /// to assert the fence was actually up.
 static UNGUARDED_RUNS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Cumulative count of fail-open downgrades since process start.
+#[cfg(all(test, windows))]
+/// Cumulative count of fail-open downgrades since process start. Read by the Windows AppContainer
+/// backend tests only (the macOS fence tests assert the profile instead).
 pub(crate) fn unguarded_runs() -> u64 {
     UNGUARDED_RUNS.load(std::sync::atomic::Ordering::Relaxed)
 }

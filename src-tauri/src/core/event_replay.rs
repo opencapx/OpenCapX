@@ -9,7 +9,6 @@
 //! - `read_session(sid, limit)` reads in reverse + truncates
 //! - `replay_to_bus(sid, filter_kind, bus)` reads NDJSON in order and, after filtering, re-publishes via `bus.publish`
 //!   (SSE emit + SQLite rewrite; the rewrite is side-effect-free because log_event uses a uuid id primary key)
-//! - `export(sid, dst_path)` copies the whole NDJSON to a target path (for frontend download via file URL)
 
 use super::event::{EventBus, OpencapxEvent};
 use serde::Serialize;
@@ -136,7 +135,7 @@ pub fn list_sessions() -> Vec<ReplaySession> {
             })
         })
         .collect();
-    out.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+    out.sort_by_key(|e| std::cmp::Reverse(e.started_at));
     out
 }
 
@@ -183,15 +182,7 @@ pub fn replay_to_bus(session_id: &str, filter_kind: Option<&str>, bus: &EventBus
     count
 }
 
-/// Copy the whole NDJSON to the target path, returning bytes written (0 on failure).
-pub fn export(session_id: &str, dst: &std::path::Path) -> u64 {
-    let src = replay_dir().join(format!("{}.ndjson", session_id));
-    let Ok(bytes) = std::fs::copy(&src, dst) else {
-        return 0;
-    };
-    bytes
-}
-
+#[cfg(test)]
 /// For tests: clear the entire replay directory.
 pub fn clear_for_test() {
     let dir = replay_dir();

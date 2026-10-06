@@ -165,7 +165,7 @@ pub fn load_trusted_keys_from(path: &std::path::Path) -> BTreeMap<String, Truste
 /// Simple hex decoding (we trust trusted-keys.json since we generate it ourselves).
 fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
     let s = s.trim();
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err("odd length".into());
     }
     let mut out = Vec::with_capacity(s.len() / 2);
@@ -288,11 +288,11 @@ pub fn verify_with(
             Ok(e) => e,
             Err(_) => continue,
         };
-        if entry.name() == "opencapx-plugin.json" {
-            if entry.read_to_string(&mut manifest_text).is_ok() {
-                found = true;
-                break;
-            }
+        if entry.name() == "opencapx-plugin.json"
+            && entry.read_to_string(&mut manifest_text).is_ok()
+        {
+            found = true;
+            break;
         }
     }
     if !found {

@@ -118,7 +118,7 @@ pub fn search_logs(store: &SharedStore, filter: LogFilter) -> Vec<LogEntryDto> {
     if filter.since_ts.is_some() {
         out.sort_by_key(|e| e.timestamp);
     } else {
-        out.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        out.sort_by_key(|e| std::cmp::Reverse(e.timestamp));
     }
     if out.len() > limit {
         out.truncate(limit);
@@ -126,6 +126,7 @@ pub fn search_logs(store: &SharedStore, filter: LogFilter) -> Vec<LogEntryDto> {
     out
 }
 
+#[cfg(test)]
 /// For the frontend tail mode: compute the max timestamp among search results (0 means empty).
 pub fn max_timestamp(entries: &[LogEntryDto]) -> u64 {
     entries.iter().map(|e| e.timestamp).max().unwrap_or(0)

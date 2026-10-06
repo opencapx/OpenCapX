@@ -4,26 +4,25 @@
 use super::*;
 
 impl Storage {
-    fn parse_endpoint_row(
-        &self,
-        id: String,
-        name: String,
-        url: String,
-        enabled: i64,
-        headers_json: String,
-        secret: String,
-        source_filter_json: String,
-        created_at: i64,
-        schema_version: i64,
-        template: Option<String>,
-        template_sample: Option<String>,
-        severity_overrides: Option<String>,
-    ) -> AlertingEndpointRow {
+    /// Build one endpoint row from a SELECT of the 12 columns the endpoint queries share (same order).
+    fn parse_endpoint_row(r: &rusqlite::Row) -> rusqlite::Result<AlertingEndpointRow> {
+        let id: String = r.get(0)?;
+        let name: String = r.get(1)?;
+        let url: String = r.get(2)?;
+        let enabled: i64 = r.get(3)?;
+        let headers_json: String = r.get(4)?;
+        let secret: String = r.get(5)?;
+        let source_filter_json: String = r.get(6)?;
+        let created_at: i64 = r.get(7)?;
+        let schema_version: i64 = r.get(8)?;
+        let template: Option<String> = r.get(9)?;
+        let template_sample: Option<String> = r.get(10)?;
+        let severity_overrides: Option<String> = r.get(11)?;
         let headers: Vec<(String, String)> =
             serde_json::from_str(&headers_json).unwrap_or_default();
         let source_filter: Vec<String> =
             serde_json::from_str(&source_filter_json).unwrap_or_default();
-        AlertingEndpointRow {
+        Ok(AlertingEndpointRow {
             id,
             name,
             url,
@@ -36,7 +35,7 @@ impl Storage {
             template,
             template_sample,
             severity_overrides,
-        }
+        })
     }
 
     /// List all endpoints, by created_at ascending.
@@ -47,35 +46,10 @@ impl Storage {
         ) else {
             return Vec::new();
         };
-        stmt.query_map([], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, String>(2)?,
-                r.get::<_, i64>(3)?,
-                r.get::<_, String>(4)?,
-                r.get::<_, String>(5)?,
-                r.get::<_, String>(6)?,
-                r.get::<_, i64>(7)?,
-                r.get::<_, i64>(8)?,
-                r.get::<_, Option<String>>(9)?,
-                r.get::<_, Option<String>>(10)?,
-                r.get::<_, Option<String>>(11)?,
-            ))
-        })
-        .ok()
-        .map(|i| {
-            i.filter_map(|x| x.ok())
-                .map(
-                    |(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)| {
-                        self.parse_endpoint_row(
-                            id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so,
-                        )
-                    },
-                )
-                .collect()
-        })
-        .unwrap_or_default()
+        stmt.query_map([], Self::parse_endpoint_row)
+            .ok()
+            .map(|i| i.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
     }
 
     /// List all enabled endpoints — used during dispatcher fanout.
@@ -86,35 +60,10 @@ impl Storage {
         ) else {
             return Vec::new();
         };
-        stmt.query_map([], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, String>(2)?,
-                r.get::<_, i64>(3)?,
-                r.get::<_, String>(4)?,
-                r.get::<_, String>(5)?,
-                r.get::<_, String>(6)?,
-                r.get::<_, i64>(7)?,
-                r.get::<_, i64>(8)?,
-                r.get::<_, Option<String>>(9)?,
-                r.get::<_, Option<String>>(10)?,
-                r.get::<_, Option<String>>(11)?,
-            ))
-        })
-        .ok()
-        .map(|i| {
-            i.filter_map(|x| x.ok())
-                .map(
-                    |(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)| {
-                        self.parse_endpoint_row(
-                            id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so,
-                        )
-                    },
-                )
-                .collect()
-        })
-        .unwrap_or_default()
+        stmt.query_map([], Self::parse_endpoint_row)
+            .ok()
+            .map(|i| i.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
     }
 
     /// Get a single endpoint by id.
@@ -126,28 +75,8 @@ impl Storage {
                    FROM alerting_endpoints WHERE id = ?1",
             )
             .ok()?;
-        stmt.query_row(rusqlite::params![id], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, String>(2)?,
-                r.get::<_, i64>(3)?,
-                r.get::<_, String>(4)?,
-                r.get::<_, String>(5)?,
-                r.get::<_, String>(6)?,
-                r.get::<_, i64>(7)?,
-                r.get::<_, i64>(8)?,
-                r.get::<_, Option<String>>(9)?,
-                r.get::<_, Option<String>>(10)?,
-                r.get::<_, Option<String>>(11)?,
-            ))
-        })
-        .ok()
-        .map(
-            |(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)| {
-                self.parse_endpoint_row(id, name, url, en, hj, sec, sfj, ca, sv, tpl, tpl_s, so)
-            },
-        )
+        stmt.query_row(rusqlite::params![id], Self::parse_endpoint_row)
+            .ok()
     }
 
     /// Upsert: update when there is an id, otherwise use the passed-in id (generated by the caller).

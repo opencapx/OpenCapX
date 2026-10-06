@@ -29,7 +29,7 @@ impl PluginManager {
     /// **dev/test only (not exposed in the settings page)**: install from an already-unpacked directory — for test fixtures and local
     /// development; the distribution path is `install_ocplugin` (.ocplugin ZIP) and the marketplace.
     /// §4.4: confirm item by item first (pure collection, zero writes), then commit (single transaction + events + hints).
-    pub fn install_from_dir(&self, dir: &PathBuf) -> Result<String, String> {
+    pub fn install_from_dir(&self, dir: &Path) -> Result<String, String> {
         let _install_guard = INSTALL_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let m = Self::read_manifest(dir)?;
         // F4/F5 — install gate: core version and dependency cycles are caught before confirmation/DB write (zero side effects).

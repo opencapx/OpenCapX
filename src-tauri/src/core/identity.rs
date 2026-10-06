@@ -349,6 +349,7 @@ pub fn list(store: &SharedStore) -> Vec<AgentDto> {
 ///   2. agent_permissions override → that decision (per-agent still beats global granted/ask)
 ///   3. global granted / ask     → that decision (acts only as the new default)
 ///   4. otherwise                → built-in default table
+///
 /// Lock discipline: take the lock, read the row, release the guard as the `let` ends,
 /// then call global_override / default_decision_for which lock on their own
 /// (re-entering on the same thread would deadlock).
@@ -452,7 +453,7 @@ pub fn set_agent_decision(store: &SharedStore, agent_id: &str, perm: &str, decis
 /// `~/.opencapx/agent-tokens/<kind>.token`, contents JSON {agent_id, token}.
 pub fn token_file(kind: &str) -> std::path::PathBuf {
     let base = crate::core::home_dir()
-        .unwrap_or_else(|| std::env::temp_dir())
+        .unwrap_or_else(std::env::temp_dir)
         .join(".opencapx")
         .join("agent-tokens");
     token_file_in(&base, kind)
@@ -590,7 +591,7 @@ pub fn ensure_registered(kind: &str, via: &str) -> Option<Credentials> {
             );
             None
         }
-        Err(crate::http::RegisterError::Rejected { code, .. }) if code == 40102 => {
+        Err(crate::http::RegisterError::Rejected { code: 40102, .. }) => {
             eprintln!(
                 "OpenCapX: this agent ({}) is revoked. To recover:\n  \
                  1. Open OpenCapX Settings -> Agents -> find this agent -> Reauthorize\n     \

@@ -357,6 +357,7 @@ pub fn delete_for_plugin(store: &SharedStore, plugin_id: &str) -> Result<(), Str
     }
 }
 
+#[cfg(test)]
 /// Domain registry snapshot (settings page / audit: shows "unverified domains").
 pub fn domains(store: &SharedStore) -> Vec<(String, Option<String>, String)> {
     store

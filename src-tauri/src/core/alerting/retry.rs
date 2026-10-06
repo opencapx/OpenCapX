@@ -92,34 +92,15 @@ fn gen_delivery_id() -> String {
     format!("dl-{}-{}", nanos, n)
 }
 
-/// Enqueue into the dead-letter queue — called when a POST fails. `endpoint_id` records ownership in multi-endpoint mode; None takes the legacy single-endpoint compatibility path.
-pub fn enqueue_failed_delivery(
-    source: &str,
-    url: &str,
-    payload_json: &str,
-    now_ts: u64,
-    max_attempts: u32,
-    next_retry_ts: u64,
-    last_error: &str,
-    endpoint_id: Option<&str>,
-) {
+/// Enqueue into the dead-letter queue — called when a POST fails. `rec.endpoint_id` records ownership in multi-endpoint mode; None takes the legacy single-endpoint compatibility path.
+pub fn enqueue_failed_delivery(rec: &NewFailedDelivery) {
     let Some(store) = crate::core::shared_store() else {
         return;
     };
     let Ok(mut s) = store.lock() else { return };
     let id = gen_delivery_id();
     if let StoreEnum::Db(db) = &mut *s {
-        db.insert_failed_delivery(
-            &id,
-            source,
-            url,
-            payload_json,
-            now_ts,
-            max_attempts,
-            next_retry_ts,
-            last_error,
-            endpoint_id,
-        );
+        db.insert_failed_delivery(&id, rec);
     }
 }
 
@@ -132,7 +113,7 @@ pub fn list_failed_deliveries(state: Option<&str>, limit: usize) -> Vec<FailedDe
         return Vec::new();
     };
     if let StoreEnum::Db(db) = &*s {
-        db.list_failed_deliveries(state, limit.max(1).min(1000))
+        db.list_failed_deliveries(state, limit.clamp(1, 1000))
     } else {
         Vec::new()
     }

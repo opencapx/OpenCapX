@@ -815,7 +815,7 @@ mod tests {
 
         for id in BUILTIN_IDS {
             assert!(known(id), "{} not in CAPABILITY_IDS", id);
-            if SIDE_EFFECT_IDS.contains(&id) {
+            if SIDE_EFFECT_IDS.contains(id) {
                 continue;
             }
             assert!(

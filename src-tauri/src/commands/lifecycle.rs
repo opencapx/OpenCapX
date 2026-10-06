@@ -129,7 +129,7 @@ pub(crate) fn list_workspace_profiles() -> Vec<crate::core::profile::ProfileInfo
 /// Phase 46 — create a profile.
 #[tauri::command]
 pub(crate) fn create_workspace_profile(name: String) -> crate::core::profile::ProfileInfo {
-    crate::core::profile::create_profile(&name).unwrap_or_else(|e| {
+    crate::core::profile::create_profile(&name).unwrap_or({
         crate::core::profile::ProfileInfo {
             name,
             is_active: false,

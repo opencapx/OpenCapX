@@ -226,7 +226,7 @@ pub fn read(input: &Value) -> Result<Value, String> {
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|e| format!("client build: {}", e))?;
-    let mut resp = client
+    let resp = client
         .get(url)
         .header("User-Agent", "OpenCapX/0.2 browser.read builtin")
         .send()

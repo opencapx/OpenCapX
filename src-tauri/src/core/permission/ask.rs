@@ -149,6 +149,7 @@ pub(crate) fn session_has(principal: &str, permission: &str) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(test)]
 /// Revoke all session grants (settings page entry / test isolation).
 pub fn session_revoke_all() {
     if let Ok(mut g) = session_grants().lock() {

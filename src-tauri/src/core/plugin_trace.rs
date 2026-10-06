@@ -175,7 +175,7 @@ pub fn list_sessions(plugin_id: &str) -> Vec<TraceSummary> {
                     f.seek(SeekFrom::Start(off)).ok()?;
                     f.read_to_end(&mut buf).ok()?;
                     let txt = String::from_utf8_lossy(&buf);
-                    let last = txt.lines().filter(|s| !s.is_empty()).last()?;
+                    let last = txt.lines().rfind(|s| !s.is_empty())?;
                     serde_json::from_str::<TraceLine>(last).ok().map(|l| l.ts)
                 })
         } else {
@@ -189,7 +189,7 @@ pub fn list_sessions(plugin_id: &str) -> Vec<TraceSummary> {
             line_count,
         });
     }
-    out.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+    out.sort_by_key(|s| std::cmp::Reverse(s.started_at));
     out
 }
 
@@ -197,10 +197,7 @@ fn count_lines(p: &Path) -> u64 {
     std::fs::File::open(p)
         .map(|f| {
             use std::io::BufRead;
-            std::io::BufReader::new(f)
-                .lines()
-                .filter_map(|l| l.ok())
-                .count() as u64
+            std::io::BufReader::new(f).lines().count() as u64
         })
         .unwrap_or(0)
 }

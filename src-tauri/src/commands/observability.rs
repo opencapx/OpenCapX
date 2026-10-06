@@ -409,7 +409,7 @@ pub(crate) fn list_plugin_lifecycle(id: String, limit: usize) -> Vec<LifecycleEn
     let events = store
         .lock()
         .ok()
-        .map(|s| s.list_events("plugin.", limit.max(50).min(500)))
+        .map(|s| s.list_events("plugin.", limit.clamp(50, 500)))
         .unwrap_or_default();
     let mut out: Vec<LifecycleEntry> = events
         .into_iter()
@@ -429,7 +429,7 @@ pub(crate) fn list_plugin_lifecycle(id: String, limit: usize) -> Vec<LifecycleEn
             timestamp: e.timestamp,
         })
         .collect();
-    out.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    out.sort_by_key(|e| std::cmp::Reverse(e.timestamp));
     out.truncate(limit);
     out
 }
@@ -445,7 +445,7 @@ pub(crate) fn get_plugin_trace(
     session_id: String,
     limit: usize,
 ) -> Vec<crate::core::plugin_trace::TraceLine> {
-    crate::core::plugin_trace::read_session(&id, &session_id, limit.max(50).min(2000))
+    crate::core::plugin_trace::read_session(&id, &session_id, limit.clamp(50, 2000))
 }
 
 /// Raw lines of a single request chain (descending = newest first).
@@ -455,7 +455,7 @@ pub(crate) fn get_rpc_trace(
     trace_id: String,
     limit: usize,
 ) -> Vec<crate::core::req_trace::RpcTraceLine> {
-    crate::core::req_trace::read_trace(&agent_id, &trace_id, limit.max(50).min(2000))
+    crate::core::req_trace::read_trace(&agent_id, &trace_id, limit.clamp(50, 2000))
 }
 
 /// Raw lines of a single hook session (descending = newest first).
@@ -465,7 +465,7 @@ pub(crate) fn get_hook_trace(
     session_id: String,
     limit: usize,
 ) -> Vec<crate::core::req_trace::RpcTraceLine> {
-    crate::core::req_trace::read_hook_trace(&agent_id, &session_id, limit.max(50).min(2000))
+    crate::core::req_trace::read_hook_trace(&agent_id, &session_id, limit.clamp(50, 2000))
 }
 
 /// All /rpc request chains (all agents, newest first), with project so the viewer can group by project.

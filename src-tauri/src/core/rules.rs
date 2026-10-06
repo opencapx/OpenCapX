@@ -104,10 +104,15 @@ pub struct Then {
     #[serde(default)]
     pub env: Option<BTreeMap<String, String>>,
     // ---- P1+ placeholders (parsed, no engine action yet) ----
+    // Kept so `deny_unknown_fields` still accepts them (docs/rules.md → stage/then placeholders; the
+    // parser contract is pinned by `accepts_disabled_and_p1_placeholder`). Nothing reads them yet.
+    #[allow(dead_code)]
     #[serde(default)]
     pub source: Option<String>,
+    #[allow(dead_code)]
     #[serde(default)]
     pub on: Option<String>,
+    #[allow(dead_code)]
     #[serde(default)]
     pub inject_back: Option<bool>,
 }
@@ -314,6 +319,7 @@ fn set_trust_in(registry: &Path, dir: &Path, on: bool) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
 /// Build a `RuleSet` directly from a rules JSON blob (the caller has decided the source; the trust registry is not consulted).
 pub fn ruleset_from_json(s: &str) -> Result<RuleSet, String> {
     let f = RulesFile::parse(s)?;

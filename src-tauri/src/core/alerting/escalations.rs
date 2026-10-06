@@ -40,16 +40,6 @@ pub struct EscalationRule {
     pub enabled: bool,
 }
 
-/// Phase 56 — escalation decision.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EscalationDecision {
-    Pass,
-    Escalate {
-        severity: Severity,
-        endpoint_ids: Vec<String>,
-    },
-}
-
 /// In-memory state: the most recent successful dispatch timestamp for each source.
 #[derive(Debug, Default)]
 pub(crate) struct EscalationState {

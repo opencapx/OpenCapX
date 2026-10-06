@@ -250,9 +250,7 @@ pub fn get_template_preset(kind: &str) -> Option<TemplatePreset> {
     if let Some(b) = builtin_presets().iter().find(|p| p.kind == kind).cloned() {
         return Some(b);
     }
-    let Some(store) = crate::core::shared_store() else {
-        return None;
-    };
+    let store = crate::core::shared_store()?;
     let Ok(s) = store.lock() else { return None };
     let StoreEnum::Db(db) = &*s else { return None };
     db.list_user_template_presets()

@@ -61,7 +61,7 @@ pub fn digest_v2_from_parts(canonical: &str, entries: &[(String, u64, Vec<u8>)])
     sorted.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
     let mut acc: Vec<u8> = Vec::new();
     acc.extend_from_slice(b"opencapx-canon-v2\n");
-    acc.extend_from_slice(canonical.as_bytes().len().to_string().as_bytes());
+    acc.extend_from_slice(canonical.len().to_string().as_bytes());
     acc.push(b'\n');
     acc.extend_from_slice(canonical.as_bytes());
     for (name, size, bytes) in sorted {

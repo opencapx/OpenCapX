@@ -37,6 +37,8 @@ fn nanos() -> u128 {
 }
 
 /// PowerShell single-quote escaping: ' doubles inside a single-quoted string. Pure function, testable on all three platforms.
+// Read only in the Windows build; macOS/Linux use `say`.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 fn escape_ps_single_quoted(s: &str) -> String {
     s.replace('\'', "''")
 }
