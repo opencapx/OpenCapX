@@ -127,6 +127,7 @@
   "agentsHint": "One-click hook install per coding agent",
   "install": "Install",
   "remove": "Remove",
+  "removeAll": "Remove all",
   "petSheet": "Pet spritesheet",
   "petSheetHint": "Sheet URL (rows/columns detected from transparent gaps). For a local image use Upload — it installs as a pet pack and single images render whole",
   "petUpload": "Upload",

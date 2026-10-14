@@ -59,6 +59,21 @@ fn hooks_toggle_roundtrip_in_temp_home() {
 }
 
 #[test]
+fn hooks_uninstall_all_removes_every_installed_hook() {
+    with_temp_home("uninstall-all", || {
+        assert_eq!(uninstall_all(), Ok(0));
+        assert_eq!(toggle("claude"), Ok(true));
+        assert_eq!(toggle("cursor"), Ok(true));
+        assert!(is_installed("claude"));
+        assert!(is_installed("cursor"));
+        assert_eq!(uninstall_all(), Ok(2));
+        assert!(!is_installed("claude"));
+        assert!(!is_installed("cursor"));
+        assert_eq!(uninstall_all(), Ok(0));
+    });
+}
+
+#[test]
 fn hooks_plugin_files_roundtrip_in_temp_home() {
     with_temp_home("plugin", || {
         assert_eq!(toggle("opencode"), Ok(true));

@@ -86,6 +86,11 @@ pub(crate) fn toggle_agent(kind: String) -> Result<bool, String> {
     hooks::toggle(&kind)
 }
 
+#[tauri::command]
+pub(crate) fn remove_all_agents() -> Result<usize, String> {
+    hooks::uninstall_all()
+}
+
 /// Pet window mouse passthrough strategy: once a window ignores cursor events it receives no mousemove at all,
 /// and the frontend cannot switch itself back (it would stay click-through, unclickable and undraggable). So poll the global cursor
 /// position here, convert to in-window logical coordinates, and send to the frontend, which decides passthrough by actual layout (pet canvas / bubbles).

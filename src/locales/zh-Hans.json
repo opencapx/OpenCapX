@@ -127,6 +127,7 @@
   "agentsHint": "一键安装各编程助手的 hook",
   "install": "安装",
   "remove": "移除",
+  "removeAll": "全部移除",
   "petSheet": "宠物 spritesheet",
   "petSheetHint": "图集 URL（行列按透明空隙自动识别）。本地图片请点「上传」——会作为宠物包安装，单张图整图显示",
   "petUpload": "上传",
