@@ -23,7 +23,7 @@ export function renderGeneral(body: HTMLElement): void {
   }
   body.innerHTML =
     `<div class="settings-list"><div class="about-card"><div class="logo">${ICON_PET}</div><div><b>OpenCapX</b></div><div class="ver">${esc(t("version"))} ${esc(getAppVersion())}</div><p>${esc(t("aboutText"))}</p></div></div>` +
-    group("agents", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("agentsHint"))}</span><div id="agent-list"></div></div>`) +
+    group("agents", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("agentsHint"))}</span><div id="agent-list"></div><div><button class="btn ghost" id="agents-remove-all" type="button">${esc(t("removeAll"))}</button></div></div>`) +
     group("sessions", `<div class="setting-row vertical"><span class="setting-hint">${esc(t("sessionsHint"))}</span><div id="session-list"></div><div><button class="btn ghost" id="clear" type="button">${esc(t("clearAll"))}</button></div></div>`) +
     group("sounds",
       row("soundDone", "soundDoneHint", toggle("soundDone", isSoundEnabled("done"))) +
@@ -154,6 +154,18 @@ async function refreshAgents(): Promise<void> {
       await refreshAgents();
     });
   });
+  const removeAll = document.getElementById("agents-remove-all") as HTMLButtonElement | null;
+  if (removeAll) {
+    removeAll.disabled = !agents.some((a) => a.installed);
+    removeAll.onclick = async () => {
+      removeAll.disabled = true;
+      try {
+        await invoke("remove_all_agents");
+      } finally {
+        await refreshAgents();
+      }
+    };
+  }
 }
 
 // Phase 44 — Kill switch global disable toggle.

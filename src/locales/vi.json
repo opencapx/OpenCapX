@@ -127,6 +127,7 @@
   "agentsHint": "Cài hook một chạm cho từng agent",
   "install": "Cài",
   "remove": "Gỡ",
+  "removeAll": "Gỡ tất cả",
   "petSheet": "Spritesheet pet",
   "petSheetHint": "URL spritesheet (tự nhận hàng/cột theo khoảng trong suốt). Ảnh cục bộ hãy bấm Tải lên — sẽ cài thành gói thú cưng, ảnh đơn hiển thị nguyên ảnh",
   "petUpload": "Tải lên",

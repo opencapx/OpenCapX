@@ -176,3 +176,18 @@ pub fn toggle(kind: &str) -> Result<bool, String> {
         Ok(true)
     }
 }
+
+/// Settings → General → Remove all: uninstall every installed hook entry.
+/// `uninstall` is idempotent and only touches our own entries, so this is safe
+/// to run when nothing is installed (returns 0). Fails fast on the first IO
+/// error; earlier removals are kept (caller refreshes the catalog anyway).
+pub fn uninstall_all() -> Result<usize, String> {
+    let mut removed = 0;
+    for (kind, _, _) in AGENTS {
+        if is_installed(kind) {
+            uninstall(kind).map_err(|e| e.to_string())?;
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}

@@ -367,6 +367,7 @@ fn main() {
             settings_file::ui_clipboard_write,
             settings_file::get_agents,
             settings_file::toggle_agent,
+            settings_file::remove_all_agents,
             settings_file::open_settings,
             hook_entry::ui_ping,
             commands::petpacks::answer_ask,
